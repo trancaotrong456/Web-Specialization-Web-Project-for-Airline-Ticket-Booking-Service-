@@ -1,0 +1,10 @@
+{
+  "dependencies": {
+    "mysql2": "^3.24.4",
+    "sequelize": "^6.37.8"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^10.6.0",
+    "sequelize-cli": "^6.6.5"
+  }
+}
