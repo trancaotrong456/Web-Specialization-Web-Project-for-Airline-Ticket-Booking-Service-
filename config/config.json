@@ -1,23 +1,35 @@
 {
   "development": {
     "username": "root",
-    "password": null,
-    "database": "database_development",
+    "password": "",
+    "database": "airline_booking_db",
     "host": "127.0.0.1",
-    "dialect": "mysql"
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": false,
+    "define": {
+      "timestamps": true,
+      "underscored": true,
+      "charset": "utf8mb4",
+      "collate": "utf8mb4_unicode_ci"
+    }
   },
   "test": {
     "username": "root",
-    "password": null,
-    "database": "database_test",
+    "password": "",
+    "database": "airline_booking_test_db",
     "host": "127.0.0.1",
-    "dialect": "mysql"
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": false
   },
   "production": {
     "username": "root",
-    "password": null,
-    "database": "database_production",
+    "password": "",
+    "database": "airline_booking_prod_db",
     "host": "127.0.0.1",
-    "dialect": "mysql"
+    "port": 3306,
+    "dialect": "mysql",
+    "logging": false
   }
 }

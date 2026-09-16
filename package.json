@@ -5,6 +5,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^10.6.0",
+    "mammoth": "^1.12.3",
     "sequelize-cli": "^6.6.5"
   }
 }
