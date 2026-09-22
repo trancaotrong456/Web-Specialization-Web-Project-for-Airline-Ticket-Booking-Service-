@@ -77,17 +77,17 @@ class EmailService {
     }
 
     const transporter = createTransporter();
-    console.log(`[EMAIL] Attempting booking confirmation: booking_id=${bookingId}, to=${recipientEmail}`);
+    console.log(`[EMAIL] Attempting to send confirmation to ${recipientEmail} for booking ${bookingId}...`);
     try {
-      const result = await transporter.sendMail({
+      const info = await transporter.sendMail({
         from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
         to: recipientEmail,
-      subject: `[Airline Booking] Xác nhận đặt vé - Mã: ${booking.booking_code}`,
+        subject: `[Airline Booking] Xác nhận đặt vé - Mã: ${booking.booking_code}`,
         html: htmlContent,
       });
-      console.log(`[EMAIL] SUCCESS booking_id=${bookingId}, message_id=${result.messageId || 'n/a'}`);
+      console.log(`[EMAIL] SUCCESS - messageId: ${info.messageId}`);
     } catch (error) {
-      console.error(`[EMAIL] FAILED booking_id=${bookingId}: ${error.message}`);
+      console.error(`[EMAIL] FAILED: ${error.message}`);
       throw error;
     }
   }
