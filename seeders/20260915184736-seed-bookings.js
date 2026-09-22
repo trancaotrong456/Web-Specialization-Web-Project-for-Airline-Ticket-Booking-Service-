@@ -4,12 +4,14 @@ const { faker } = require('@faker-js/faker');
 const TOTAL_BOOKINGS = 100_000;
 const BATCH_SIZE = 5_000;
 
-function makeBookingsBatch(startId, size) {
+function makeBookingsBatch(startId, size, userIds) {
   const rows = [];
   for (let i = 0; i < size; i++) {
     const id = startId + i;
     const isGuest = id % 10 === 0;
-    const user_id = isGuest ? null : ((id % 100_000) + 1);
+    // TiDB may allocate AUTO_INCREMENT values with gaps, so do not assume
+    // users.id is a contiguous 1..100000 range.
+    const user_id = isGuest ? null : userIds[id % userIds.length];
     const flight_id = ((id % 100_000) + 1);
     const fare_class_id = flight_id; // Khớp với fare_class_id đã tạo ở seeder trước
     const hasPromo = id % 3 === 0;
@@ -50,9 +52,15 @@ function makeBookingsBatch(startId, size) {
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface) {
+    const [users] = await queryInterface.sequelize.query('SELECT id FROM users ORDER BY id ASC');
+    const userIds = users.map((user) => user.id);
+    if (userIds.length === 0) {
+      throw new Error('Cannot seed bookings: no users are available.');
+    }
+
     for (let start = 0; start < TOTAL_BOOKINGS; start += BATCH_SIZE) {
       const size = Math.min(BATCH_SIZE, TOTAL_BOOKINGS - start);
-      await queryInterface.bulkInsert('bookings', makeBookingsBatch(start + 1, size), {});
+      await queryInterface.bulkInsert('bookings', makeBookingsBatch(start + 1, size, userIds), {});
     }
   },
 
