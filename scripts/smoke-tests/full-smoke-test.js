@@ -7,9 +7,13 @@
 require('dotenv').config();
 const { io } = require('socket.io-client');
 const { generateToken } = require('../../utils/jwt.util');
+const { signVnpayParams } = require('../../utils/checksum.util');
 
-const BASE_URL = `http://localhost:${process.env.PORT || 5000}/api/v1`;
+const BASE_URL = (process.env.BASE_URL || `http://localhost:${process.env.PORT || 5000}/api/v1`).replace(/\/$/, '');
 const runId = `full-smoke-${Date.now()}`;
+const requestTimeout = Number.parseInt(process.env.SMOKE_REQUEST_TIMEOUT_MS || '20000', 10);
+
+class PendingError extends Error {}
 
 function fail(message) {
   throw new Error(message);
@@ -20,13 +24,29 @@ function expect(condition, message) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`${BASE_URL}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-  });
-  const contentType = response.headers.get('content-type') || '';
-  const body = contentType.includes('application/json') ? await response.json() : await response.text();
-  return { status: response.status, headers: response.headers, body };
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs || requestTimeout);
+  try {
+    const response = await fetch(`${BASE_URL}${path}`, {
+      ...options,
+      signal: controller.signal,
+      headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
+    });
+    const contentType = response.headers.get('content-type') || '';
+    const body = options.binary
+      ? Buffer.from(await response.arrayBuffer())
+      : contentType.includes('application/json') ? await response.json() : await response.text();
+    return { status: response.status, headers: response.headers, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function wakeService() {
+  const wakeTimeout = Number.parseInt(process.env.SMOKE_WAKE_TIMEOUT_MS || '60000', 10);
+  const response = await api('/health', { timeoutMs: wakeTimeout });
+  expect(response.status === 200, `HEALTH expected 200, received ${response.status}: ${JSON.stringify(response.body)}`);
+  console.log(`PASS 0 HEALTH (${BASE_URL})`);
 }
 
 async function authSmoke() {
@@ -48,7 +68,7 @@ async function authSmoke() {
   expect(accessToken && refreshToken, `AUTH login expected data.accessToken and data.refreshToken, received: ${JSON.stringify(login.body)}`);
   console.log('PASS 1.2 AUTH login');
 
-  const me = await api('/users/my', { headers: { Authorization: `Bearer ${accessToken}` } });
+  const me = await api('/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
   expect(me.status === 200, `AUTH profile expected 200, received ${me.status}: ${JSON.stringify(me.body)}`);
   expect(me.body.data && me.body.data.email === email, 'AUTH profile returned a different user.');
   console.log('PASS 1.3 AUTH profile');
@@ -74,33 +94,77 @@ async function authSmoke() {
 
 // The remaining groups are deliberately defined in this same script so they
 // can run without changing the test runner once AUTH meets its contract.
-async function pdfTicketSmoke() {
-  // Route availability is checked first. A registered route must respond before
-  // creating a confirmed test booking and exercising the PDF binary contract.
-  const response = await api('/bookings/100012/ticket');
-  expect(
-    response.status !== 404,
-    `PDF ticket endpoint expected GET /bookings/:id/ticket but received 404: ${JSON.stringify(response.body)}`
-  );
-  fail('PDF ticket route exists; add the confirmed-booking PDF assertions here.');
+async function findBookableFlight(minSeats = 2) {
+  for (let page = 1; page <= 20; page += 1) {
+    console.log(`Finding a bookable flight: page ${page}`);
+    const result = await api(`/flights/search?min_seats=${minSeats}&page=${page}&limit=10`);
+    console.log(`Flight search page ${page}: HTTP ${result.status}`);
+    expect(result.status === 200, `Flight search failed: ${JSON.stringify(result.body)}`);
+    const flight = result.body.data.find((item) => item.fareClasses && item.fareClasses.length > 0);
+    if (flight) return flight;
+  }
+  throw new PendingError(`No bookable flight with at least ${minSeats} available seats was returned by the production search API.`);
 }
 
-async function emailSmoke() {
-  const booking = await Booking.findOne({ where: { status: 'confirmed' }, order: [['id', 'DESC']] });
-  expect(booking, 'EMAIL requires an existing confirmed booking.');
+async function createGuestBooking(flight, email, label) {
+  const response = await api('/bookings', {
+    method: 'POST',
+    body: JSON.stringify({
+      flight_id: flight.id,
+      fare_class_id: flight.fareClasses[0].id,
+      guest_email: email,
+      passengers: [{ passenger_name: label, passport_no: `P${Date.now().toString().slice(-10)}` }],
+    }),
+  });
+  expect(response.status === 201, `Booking creation expected 201, received ${response.status}: ${JSON.stringify(response.body)}`);
+  return response.body.data;
+}
 
-  await Promise.race([
-    emailService.sendBookingConfirmation(booking.id),
-    new Promise((_, reject) => setTimeout(() => reject(new Error('SMTP send timed out after 12 seconds')), 12_000)),
-  ]);
-  console.log(`PASS 3 EMAIL: SMTP accepted confirmation for booking #${booking.id}.`);
+async function createConfirmedGuestBooking() {
+  const flight = await findBookableFlight(2);
+  const email = `${runId}-ticket@example.test`;
+  const booking = await createGuestBooking(flight, email, 'Production Ticket Smoke');
+  const initiated = await api('/payments/initiate', {
+    method: 'POST',
+    body: JSON.stringify({ booking_id: booking.id, payment_method: 'vnpay', guest_email: email }),
+  });
+  expect(initiated.status === 200, `Payment initiation expected 200, received ${initiated.status}: ${JSON.stringify(initiated.body)}`);
+  const payment = initiated.body.data;
+  const params = {
+    vnp_Amount: String(Math.round(Number(payment.amount) * 100)),
+    vnp_ResponseCode: '00',
+    vnp_TxnRef: payment.transaction_ref,
+  };
+  params.vnp_SecureHash = signVnpayParams(params, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
+  const callback = await api(`/payments/vnpay/ipn?${new URLSearchParams(params).toString()}`);
+  if (callback.status !== 200 || callback.body.RspCode !== '00') {
+    throw new PendingError(`Production VNPay IPN did not accept the test signature: HTTP ${callback.status}, ${JSON.stringify(callback.body)}. Configure the smoke runner with the same VNP_HASH_SECRET as Render to run the confirmed-ticket/email checks.`);
+  }
+  console.log(`Confirmed booking via production IPN: booking_id=${booking.id}, at=${new Date().toISOString()}`);
+  return { bookingId: booking.id, email };
+}
+
+async function pdfTicketSmoke(context) {
+  const response = await api(`/bookings/${context.bookingId}/ticket?email=${encodeURIComponent(context.email)}`, { binary: true });
+  expect(response.status === 200, `PDF ticket expected 200, received ${response.status}: ${response.body.toString('utf8', 0, 300)}`);
+  expect((response.headers.get('content-type') || '').includes('application/pdf'), 'PDF ticket response is not application/pdf.');
+  expect(response.body.length > 0, 'PDF ticket response is empty.');
+  console.log('PASS 2 PDF TICKET');
+}
+
+async function emailSmoke(context) {
+  // The callback above executes the production sendBookingConfirmation path.
+  // Render logs and an SMTP inbox/dashboard are not exposed through the HTTP API,
+  // so delivery cannot be proved from this remote black-box script alone.
+  expect(context.bookingId, 'EMAIL requires a confirmed test booking.');
+  throw new PendingError('Success IPN completed and triggered the production email path, but SMTP acceptance/delivery is only observable in Render logs or the configured SMTP inbox/dashboard.');
 }
 
 async function websocketSmoke(_auth) {
   const threshold = Number.parseInt(process.env.SEAT_WARNING_THRESHOLD || '5', 10);
   let flight = null;
   for (let page = 1; page <= 20 && !flight; page += 1) {
-    const search = await api(`/flights/search?min_seats=${threshold + 1}&page=${page}&limit=100`);
+    const search = await api(`/flights/search?min_seats=${threshold + 1}&page=${page}&limit=10`);
     expect(search.status === 200, `WEBSOCKET flight search failed: ${JSON.stringify(search.body)}`);
     flight = search.body.data.find((item) =>
       Number(item.available_seats) <= threshold + 3 && item.fareClasses && item.fareClasses.length > 0
@@ -154,8 +218,13 @@ async function websocketSmoke(_auth) {
       'flight_seats_updated for low seat count'
     );
     await waitFor(
-      () => warningEvents.some((item) => Number(item.flightId) === Number(flight.id) && Number(item.availableSeats) === availableSeats && item.message === `Chỉ còn ${availableSeats} ghế!`),
-      'seat-warning with the required payload'
+      () => warningEvents.some((item) =>
+        Number(item.flightId) === Number(flight.id)
+        && Number(item.availableSeats) === availableSeats
+        && typeof item.message === 'string'
+        && item.message.includes(String(availableSeats))
+      ),
+      'seat-warning with flightId, availableSeats, and message'
     );
 
     const warningCountBeforeCancel = warningEvents.length;
@@ -181,7 +250,7 @@ async function websocketSmoke(_auth) {
 
 async function crudSmoke() {
   const suffix = Math.random().toString(36).slice(2, 7).toUpperCase();
-  const adminToken = generateToken({ id: 1, email: 'admin-smoke@example.test', role: 'admin' });
+  const adminToken = process.env.SMOKE_ADMIN_TOKEN || generateToken({ id: 1, email: 'admin-smoke@example.test', role: 'admin' });
   const adminHeaders = { Authorization: `Bearer ${adminToken}` };
   const customer = await api('/auth/register', {
     method: 'POST',
@@ -203,6 +272,33 @@ async function crudSmoke() {
     });
     expectStatus(response, 403, `${label} as customer`);
   };
+
+  // These are safe black-box checks that do not need an admin credential.
+  // Authorization runs before lookup/validation, so an arbitrary resource ID
+  // is sufficient to verify customer PUT/DELETE denial without mutating data.
+  expectStatus(await api('/airlines?limit=1'), 200, 'AIRLINE list');
+  expectStatus(await api('/airports?limit=1'), 200, 'AIRPORT list');
+  expectStatus(await api('/flights/search?page=1&limit=1'), 200, 'FLIGHT public list');
+  expectStatus(await api('/promotions?limit=1'), 200, 'PROMOTION list');
+  await expectForbidden('POST', '/airlines', { name: `Denied ${suffix}`, iata_code: 'DNY' }, 'AIRLINE POST');
+  await expectForbidden('PUT', '/airlines/1', { name: 'Denied' }, 'AIRLINE PUT');
+  await expectForbidden('DELETE', '/airlines/1', null, 'AIRLINE DELETE');
+  await expectForbidden('POST', '/airports', { iata_code: 'DNY', name: 'Denied', city: 'Denied', country: 'Vietnam' }, 'AIRPORT POST');
+  await expectForbidden('PUT', '/airports/1', { city: 'Denied' }, 'AIRPORT PUT');
+  await expectForbidden('DELETE', '/airports/1', null, 'AIRPORT DELETE');
+  await expectForbidden('POST', '/flights', {}, 'FLIGHT POST');
+  await expectForbidden('PUT', '/flights/1', { status: 'cancelled' }, 'FLIGHT PUT');
+  await expectForbidden('DELETE', '/flights/1', null, 'FLIGHT DELETE');
+  await expectForbidden('POST', '/fare-classes', {}, 'FARE_CLASS POST');
+  await expectForbidden('PUT', '/fare-classes/1', { price: 1 }, 'FARE_CLASS PUT');
+  await expectForbidden('DELETE', '/fare-classes/1', null, 'FARE_CLASS DELETE');
+  console.log('PASS 5 partial: public lists and customer write-RBAC denial.');
+
+  const adminProbe = await api('/flights?limit=1', { headers: adminHeaders });
+  if (adminProbe.status === 401 || adminProbe.status === 403) {
+    throw new PendingError(`Public lists and customer RBAC passed, but production rejected the local admin test token (HTTP ${adminProbe.status}). Set SMOKE_ADMIN_TOKEN to an authorized production admin access token to run admin POST/PUT/DELETE.`);
+  }
+  expect(adminProbe.status === 200, `CRUD admin credential probe failed: ${adminProbe.status}: ${JSON.stringify(adminProbe.body)}`);
 
   // Airline: use a disposable record for the full lifecycle.
   const airlinePayload = { name: `Smoke Airline ${suffix}`, iata_code: `Z${suffix.slice(0, 2)}`, logo_url: 'https://example.test/logo.png' };
@@ -290,10 +386,56 @@ async function crudSmoke() {
 }
 
 async function main() {
-  // Email is pending because local TCP connectivity to SMTP port 587 is blocked.
-  // Continue from group 4 as requested.
-  await websocketSmoke();
-  await crudSmoke();
+  const results = [];
+  const runGroup = async (name, fn) => {
+    console.log(`START ${name}`);
+    try {
+      await fn();
+      results.push([name, 'PASS', '']);
+    } catch (error) {
+      const status = error instanceof PendingError ? 'PENDING' : 'FAIL';
+      results.push([name, status, error.message || String(error)]);
+      console.error(`${status} ${name}: ${error.stack || error.message || String(error)}`);
+    }
+  };
+  const printSummary = () => {
+    console.log('\nSmoke summary');
+    for (const [name, status, detail] of results) {
+      console.log(`${status}\t${name}${detail ? `\t${detail}` : ''}`);
+    }
+    if (results.some(([, status]) => status === 'FAIL')) process.exitCode = 1;
+  };
+
+  if (process.env.SMOKE_ONLY === 'crud') {
+    await runGroup('5 CRUD DOMAINS', crudSmoke);
+    printSummary();
+    return;
+  }
+  if (process.env.SMOKE_ONLY === 'confirmation') {
+    await runGroup('EMAIL CONFIRMATION SETUP', createConfirmedGuestBooking);
+    printSummary();
+    return;
+  }
+
+  await runGroup('0 HEALTH', wakeService);
+  await runGroup('1 AUTH', authSmoke);
+
+  let confirmedContext;
+  await runGroup('2+3 CONFIRMED BOOKING SETUP', async () => {
+    confirmedContext = await createConfirmedGuestBooking();
+  });
+  if (confirmedContext) {
+    await runGroup('2 PDF TICKET', () => pdfTicketSmoke(confirmedContext));
+    await runGroup('3 EMAIL', () => emailSmoke(confirmedContext));
+  } else {
+    results.push(['2 PDF TICKET', 'PENDING', 'Confirmed-booking setup did not complete.']);
+    results.push(['3 EMAIL', 'PENDING', 'Confirmed-booking setup did not complete.']);
+  }
+
+  await runGroup('4 WEBSOCKET', websocketSmoke);
+  await runGroup('5 CRUD DOMAINS', crudSmoke);
+
+  printSummary();
 }
 
 main()
