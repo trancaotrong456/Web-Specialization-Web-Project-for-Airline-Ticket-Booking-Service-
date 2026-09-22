@@ -122,7 +122,7 @@ async function createGuestBooking(flight, email, label) {
 
 async function createConfirmedGuestBooking() {
   const flight = await findBookableFlight(2);
-  const email = `${runId}-ticket@example.test`;
+  const email = process.env.SMOKE_GUEST_EMAIL || `${runId}-ticket@example.test`;
   const booking = await createGuestBooking(flight, email, 'Production Ticket Smoke');
   const initiated = await api('/payments/initiate', {
     method: 'POST',
