@@ -18,7 +18,9 @@ function makeBatch(startId, size) {
       full_name:   faker.person.fullName(),
       email:       faker.internet.email({ firstName: faker.string.alphanumeric(6), lastName: String(id) }),
       password_hash: '$2b$10$placeholderHashForSeeding12345678901234567890123456789',
-      phone:       faker.phone.number('09########'),
+      // Faker v10 no longer applies the old numeric pattern and may return
+      // formatted international numbers longer than users.phone (VARCHAR(20)).
+      phone:       `09${String(id).padStart(8, '0')}`,
       status:      faker.helpers.weightedArrayElement([
         { weight: 95, value: 'active' },
         { weight: 5,  value: 'locked' },
