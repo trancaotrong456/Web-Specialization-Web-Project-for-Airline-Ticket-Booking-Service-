@@ -1,28 +1,15 @@
-const nodemailer = require('nodemailer');
+const { Resend } = require('resend');
 const path = require('path');
 const ejs = require('ejs');
 const { Booking, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment } = require('../models');
 
-// Create transporter (configured via .env)
-const createTransporter = () => {
-  return nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-    port: Number(process.env.SMTP_PORT || 587),
-    secure: false,
-    connectionTimeout: 10000,
-    socketTimeout: 10000,
-    auth: {
-      user: process.env.SMTP_USER || '',
-      pass: process.env.SMTP_PASS || '',
-    },
-  });
-};
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 class EmailService {
   /**
    * Send booking confirmation email after payment success
    */
-  async sendBookingConfirmation(bookingId) {
+  async sendBookingConfirmation(bookingId, pdfBuffer = null) {
     const booking = await Booking.findByPk(bookingId, {
       include: [
         {
@@ -76,16 +63,22 @@ class EmailService {
       `;
     }
 
-    const transporter = createTransporter();
     console.log(`[EMAIL] Attempting to send confirmation to ${recipientEmail} for booking ${bookingId}...`);
     try {
-      const info = await transporter.sendMail({
+      if (!process.env.RESEND_API_KEY) {
+        throw new Error('RESEND_API_KEY is not configured.');
+      }
+      const email = {
         from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
         to: recipientEmail,
         subject: `[Airline Booking] Xác nhận đặt vé - Mã: ${booking.booking_code}`,
         html: htmlContent,
-      });
-      console.log(`[EMAIL] SUCCESS - messageId: ${info.messageId}`);
+      };
+      if (pdfBuffer) email.attachments = [{ filename: 'ticket.pdf', content: pdfBuffer }];
+
+      const { data, error } = await resend.emails.send(email);
+      if (error) throw new Error(error.message || 'Resend rejected the email request.');
+      console.log(`[EMAIL] SUCCESS - messageId: ${data && data.id}`);
     } catch (error) {
       console.error(`[EMAIL] FAILED: ${error.message}`);
       throw error;
@@ -96,14 +89,15 @@ class EmailService {
    * Send general email
    */
   async sendMail({ to, subject, html }) {
-    const transporter = createTransporter();
-    const result = await transporter.sendMail({
+    if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
+    const { data, error } = await resend.emails.send({
       from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
       to,
       subject,
       html,
     });
-    return result;
+    if (error) throw new Error(error.message || 'Resend rejected the email request.');
+    return data;
   }
 }
 
