@@ -2,12 +2,10 @@
 
 require('dotenv').config();
 
-const fs = require('fs');
-
 const sslEnabled = process.env.DB_SSL === 'true';
 const ssl = sslEnabled
   ? {
-      ca: fs.readFileSync(process.env.DB_SSL_CA_PATH),
+      ca: process.env.DB_SSL_CA ? process.env.DB_SSL_CA.replace(/\\n/g, '\n') : undefined,
       rejectUnauthorized: true,
     }
   : undefined;
