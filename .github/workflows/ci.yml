@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -11,6 +11,7 @@ permissions:
 
 jobs:
   syntax-and-build:
+    name: CI - Validate and Docker Build
     runs-on: ubuntu-latest
     steps:
       - name: Checkout source
@@ -34,3 +35,25 @@ jobs:
 
       - name: Build Docker image
         run: docker build --tag airline-booking-api:${{ github.sha }} .
+
+  deploy-render:
+    name: CD - Deploy to Render
+    needs: syntax-and-build
+    # Deploy only an accepted main-branch push. Pull requests and develop pushes
+    # run CI only, so they cannot affect production.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: production
+    concurrency:
+      group: render-production-deploy
+      cancel-in-progress: false
+    steps:
+      - name: Trigger Render deploy hook
+        env:
+          RENDER_DEPLOY_HOOK_URL: ${{ secrets.RENDER_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$RENDER_DEPLOY_HOOK_URL" ]; then
+            echo "RENDER_DEPLOY_HOOK_URL is not configured as a GitHub Actions secret."
+            exit 1
+          fi
+          curl --fail --silent --show-error --request POST "$RENDER_DEPLOY_HOOK_URL"
