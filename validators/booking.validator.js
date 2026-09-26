@@ -1,4 +1,4 @@
-const { body, query } = require('express-validator');
+const { body, query, param } = require('express-validator');
 
 const createBookingValidator = [
   body('flight_id')
@@ -59,6 +59,21 @@ const bookingAccessEmailValidator = [
   query('email').optional().trim().isEmail().withMessage('email must be a valid email if provided'),
 ];
 
+// Public lookup is intentionally limited to guest bookings and must include
+// the guest email as proof of access.
+const lookupBookingValidator = [
+  param('code')
+    .trim()
+    .notEmpty()
+    .withMessage('booking code is required'),
+  query('email')
+    .trim()
+    .notEmpty()
+    .withMessage('email is required for guest booking lookup')
+    .isEmail()
+    .withMessage('email must be a valid email'),
+];
+
 const cancelBookingValidator = [
   body('guest_email').optional({ nullable: true }).trim().isEmail().withMessage('guest_email must be a valid email if provided'),
 ];
@@ -67,5 +82,6 @@ module.exports = {
   createBookingValidator,
   listBookingValidator,
   bookingAccessEmailValidator,
+  lookupBookingValidator,
   cancelBookingValidator,
 };

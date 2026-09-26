@@ -235,7 +235,8 @@ class BookingService {
   }
 
   /**
-   * Lookup booking by code (for guests or customers)
+   * Public lookup is restricted to guest bookings and requires the guest email.
+   * Registered users must access their bookings through authenticated endpoints.
    */
   async getBookingByCode(bookingCode, email = null) {
     const where = { booking_code: bookingCode };
@@ -265,9 +266,16 @@ class BookingService {
       throw error;
     }
 
-    // If guest email verification required
-    if (email && booking.guest_email && booking.guest_email.toLowerCase() !== email.toLowerCase()) {
-      const error = new Error('Booking email does not match');
+    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const normalizedGuestEmail = booking.guest_email ? booking.guest_email.trim().toLowerCase() : '';
+
+    if (
+      booking.user_id !== null ||
+      !normalizedGuestEmail ||
+      !normalizedEmail ||
+      normalizedGuestEmail !== normalizedEmail
+    ) {
+      const error = new Error('Booking access denied');
       error.statusCode = 403;
       throw error;
     }
