@@ -39,11 +39,14 @@ services:
       JWT_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
       VNP_HASH_SECRET: docker_demo_vnpay_secret
+      PAYOS_MODE: ${PAYOS_MODE:-demo}
+      PAYOS_DEMO_SECRET: ${PAYOS_DEMO_SECRET:-docker_demo_payos_secret}
       PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
       PAYOS_API_KEY: ${PAYOS_API_KEY:-}
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
       PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:5000/api/v1/payments/payos/return}
       PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5000/api/v1/payments/payos/return}
+      DISABLE_CRON: ${DISABLE_CRON:-false}
       RESEND_API_KEY: ""
       EMAIL_FROM: "Airline Booking <onboarding@resend.dev>"
     ports:

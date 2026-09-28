@@ -10,13 +10,16 @@ console.log('[payment-flow-smoke] secret presence:', {
   PAYOS_CHECKSUM_KEY: Boolean(process.env.PAYOS_CHECKSUM_KEY),
 });
 
-const { Booking, Flight, FareClass, Role, User, sequelize } = require('../../models');
+const { Op } = require('sequelize');
+const { Booking, BookingPassenger, Payment, Flight, FareClass, Role, User, sequelize } = require('../../models');
 const { signVnpayParams } = require('../../utils/checksum.util');
 const { generateToken } = require('../../utils/jwt.util');
 const bcrypt = require('bcryptjs');
 
 const BASE_URL = `http://localhost:${process.env.PORT || 5000}/api/v1`;
 const runId = `pay-smoke-${Date.now()}`;
+const createdBookingIds = [];
+let customerEmailToDelete = null;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -42,7 +45,10 @@ async function createBooking(flight) {
       passengers: [{ passenger_name: `Smoke ${runId}`, passport_no: runId }],
     }),
   });
-  if (response.status === 201) return response.body.data;
+  if (response.status === 201) {
+    createdBookingIds.push(response.body.data.id);
+    return response.body.data;
+  }
 
   // The database transaction succeeds before the response serialization currently
   // fails on this environment because airlines.code is absent from the schema.
@@ -50,6 +56,7 @@ async function createBooking(flight) {
   // payment/IPN checks can still run.
   const persisted = await Booking.findOne({ where: { guest_email: guestEmail } });
   assert(persisted, `Create booking failed: ${JSON.stringify(response.body)}`);
+  createdBookingIds.push(persisted.id);
   console.warn(`WARN booking endpoint returned ${response.status} after creation: ${response.body.message}`);
   return persisted;
 }
@@ -149,6 +156,7 @@ async function main() {
 
   // Case 5: authenticated customer must not pass the admin-only middleware.
   const customerEmail = `${runId}-customer@example.test`;
+  customerEmailToDelete = customerEmail;
   const register = await request('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email: customerEmail, password: 'SmokePass123!', full_name: 'Smoke Customer' }),
@@ -163,6 +171,48 @@ async function main() {
   console.log(`PASS case 5: customer refund attempt returned HTTP 403.`);
 }
 
+async function cleanup() {
+  if (!createdBookingIds.length) return;
+
+  await sequelize.transaction(async (transaction) => {
+    const bookings = await Booking.findAll({
+      where: { id: { [Op.in]: createdBookingIds } },
+      include: [{ model: BookingPassenger, as: 'passengers' }],
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
+
+    for (const booking of bookings) {
+      if (!booking.guest_email || !booking.guest_email.startsWith(runId)) {
+        throw new Error(`Refusing to clean non-smoke booking ${booking.id}`);
+      }
+      if (['holding', 'pending_payment', 'confirmed'].includes(booking.status)) {
+        const flight = await Flight.findByPk(booking.flight_id, {
+          lock: transaction.LOCK.UPDATE,
+          transaction,
+        });
+        if (flight) {
+          flight.available_seats += booking.passengers.length || 1;
+          await flight.save({ transaction });
+        }
+      }
+    }
+
+    await Payment.destroy({ where: { booking_id: { [Op.in]: createdBookingIds } }, transaction });
+    await BookingPassenger.destroy({ where: { booking_id: { [Op.in]: createdBookingIds } }, transaction });
+    await Booking.destroy({ where: { id: { [Op.in]: createdBookingIds } }, transaction });
+    if (customerEmailToDelete) {
+      await User.destroy({ where: { email: customerEmailToDelete }, transaction });
+    }
+  });
+}
+
 main()
   .catch((error) => { console.error(`FAIL: ${error.message}`); process.exitCode = 1; })
-  .finally(async () => { await sequelize.close(); });
+  .finally(async () => {
+    try {
+      await cleanup();
+    } finally {
+      await sequelize.close();
+    }
+  });

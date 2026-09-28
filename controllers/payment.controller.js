@@ -48,6 +48,16 @@ class PaymentController {
     }
   }
 
+  // Local academic demo only; the service rejects this action in production.
+  async payosDemoWebhook(req, res, next) {
+    try {
+      const result = await paymentService.handlePayosDemoWebhook(req.body);
+      return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
   // The browser redirect never confirms success. Cancellation is re-checked
   // against payOS before the booking is returned to a payable state.
   async payosReturn(req, res, next) {

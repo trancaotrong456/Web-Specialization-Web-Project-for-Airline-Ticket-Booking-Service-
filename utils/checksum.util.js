@@ -69,8 +69,33 @@ const verifyVnpayChecksum = (params, secretKey) => {
   return calculatedHash.toLowerCase() === secureHash.toLowerCase();
 };
 
+const canonicalizeDemoPayload = (payload) => Object.keys(payload)
+  .filter((key) => key !== 'signature' && payload[key] !== undefined && payload[key] !== null)
+  .sort()
+  .map((key) => `${key}=${String(payload[key])}`)
+  .join('&');
+
+/**
+ * Sign the local payOS demo webhook payload. This is intentionally separate
+ * from the real payOS signature algorithm and must never be used in live mode.
+ */
+const signPayosDemoPayload = (payload, secretKey) => crypto
+  .createHmac('sha256', secretKey)
+  .update(canonicalizeDemoPayload(payload), 'utf8')
+  .digest('hex');
+
+const verifyPayosDemoSignature = (payload, secretKey) => {
+  if (!payload || typeof payload.signature !== 'string') return false;
+  const expected = signPayosDemoPayload(payload, secretKey);
+  const received = payload.signature.toLowerCase();
+  if (received.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected));
+};
+
 module.exports = {
   sortObject,
   signVnpayParams,
   verifyVnpayChecksum,
+  signPayosDemoPayload,
+  verifyPayosDemoSignature,
 };

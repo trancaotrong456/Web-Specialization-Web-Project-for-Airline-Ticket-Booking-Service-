@@ -14,8 +14,11 @@ const {
 const {
   signVnpayParams,
   verifyVnpayChecksum,
+  signPayosDemoPayload,
+  verifyPayosDemoSignature,
 } = require('../utils/checksum.util');
 const { PayOS } = require('@payos/node');
+const QRCode = require('qrcode');
 const { getIO } = require('../sockets');
 const flightService = require('./flight.service');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
@@ -33,7 +36,35 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
+  _getPayOSMode() {
+    const mode = (process.env.PAYOS_MODE || 'disabled').toLowerCase();
+    if (!['disabled', 'demo', 'live'].includes(mode)) {
+      const error = new Error(`Invalid PAYOS_MODE '${mode}'.`);
+      error.statusCode = 500;
+      throw error;
+    }
+    return mode;
+  }
+
+  _getPayOSDemoSecret() {
+    return process.env.PAYOS_DEMO_SECRET || 'local-academic-demo-only';
+  }
+
+  _assertPayOSDemoAllowed() {
+    if (this._getPayOSMode() !== 'demo' || process.env.NODE_ENV === 'production') {
+      const error = new Error('payOS demo webhook is available only in local demo mode.');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
   _getPayOSClient() {
+    if (this._getPayOSMode() !== 'live') {
+      const error = new Error('payOS live integration is not enabled. Set PAYOS_MODE=live after configuring a Payment Channel.');
+      error.statusCode = 503;
+      throw error;
+    }
+
     const required = ['PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY'];
     const missing = required.filter((key) => !process.env[key] || !process.env[key].trim());
 
@@ -179,7 +210,22 @@ class PaymentService {
       ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
       : `TXN_${booking_id}_${Date.now()}`;
     let bookingData = null;
-    const payOS = payment_method === 'payos' ? this._getPayOSClient() : null;
+    const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
+
+    if (payment_method === 'payos' && payosMode === 'disabled') {
+      const error = new Error('payOS/VietQR is currently disabled. Use VNPay or enable local demo mode.');
+      error.statusCode = 503;
+      throw error;
+    }
+    if (payment_method === 'payos' && payosMode === 'demo' && process.env.NODE_ENV === 'production') {
+      const error = new Error('payOS demo mode is forbidden in production.');
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const payOS = payment_method === 'payos' && payosMode === 'live'
+      ? this._getPayOSClient()
+      : null;
 
     // STEP 1: Update status to pending_payment in transaction with row-lock
     await sequelize.transaction(async (t) => {
@@ -268,6 +314,50 @@ class PaymentService {
 
       paymentUrl = `${vnpUrl}?${queryStringParts.join('&')}`;
     } else if (payment_method === 'payos') {
+      if (payosMode === 'demo') {
+        const amount = Math.round(Number(bookingData.total_amount));
+        const demoData = {
+          orderCode: Number(txnRef),
+          amount,
+          status: 'success',
+          timestamp: Date.now(),
+        };
+        const signature = signPayosDemoPayload(demoData, this._getPayOSDemoSecret());
+        const qrPayload = JSON.stringify({
+          type: 'VIETQR_ACADEMIC_DEMO',
+          provider: 'payOS-demo-adapter',
+          bookingCode: bookingData.booking_code,
+          orderCode: demoData.orderCode,
+          amount,
+          currency: 'VND',
+          transferContent: `DATVE ${bookingData.booking_code}`,
+          warning: 'MO PHONG - KHONG CHUYEN TIEN THAT',
+        });
+        const qrCode = await QRCode.toDataURL(qrPayload, {
+          errorCorrectionLevel: 'M',
+          margin: 2,
+          width: 320,
+        });
+
+        return {
+          payment_url: null,
+          qr_code: qrCode,
+          qr_payload: qrPayload,
+          payment_link_id: `demo_${txnRef}`,
+          transaction_ref: txnRef,
+          booking_id: bookingData.id,
+          amount: bookingData.total_amount,
+          status: 'pending_payment',
+          mode: 'demo',
+          demo_notice: 'Academic simulation only. No real bank transfer is performed.',
+          demo_webhook: {
+            method: 'POST',
+            url: '/api/v1/payments/payos/demo-webhook',
+            body: { ...demoData, signature },
+          },
+        };
+      }
+
       const returnUrl = return_url || process.env.PAYOS_RETURN_URL;
       const cancelUrl = process.env.PAYOS_CANCEL_URL;
 
@@ -525,7 +615,40 @@ class PaymentService {
       throw error;
     }
 
-    const { orderCode, amount, code } = webhookData;
+    return this._processVerifiedPayosWebhook({
+      orderCode: webhookData.orderCode,
+      amount: webhookData.amount,
+      isSuccess: body.success === true && body.code === '00' && webhookData.code === '00',
+    });
+  }
+
+  async handlePayosDemoWebhook(body) {
+    this._assertPayOSDemoAllowed();
+    if (!Number.isSafeInteger(Number(body.orderCode)) || Number(body.amount) <= 0) {
+      const error = new Error('Invalid payOS demo webhook payload');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!verifyPayosDemoSignature(body, this._getPayOSDemoSecret())) {
+      const error = new Error('Invalid payOS demo webhook signature');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!['success', 'failed'].includes(body.status)) {
+      const error = new Error('Demo webhook status must be success or failed');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return this._processVerifiedPayosWebhook({
+      orderCode: body.orderCode,
+      amount: body.amount,
+      isSuccess: body.status === 'success',
+    });
+  }
+
+  async _processVerifiedPayosWebhook({ orderCode, amount, isSuccess }) {
 
     const payment = await Payment.findOne({
       where: { transaction_ref: String(orderCode) },
@@ -573,7 +696,12 @@ class PaymentService {
         include: [{ model: BookingPassenger, as: 'passengers' }],
       });
 
-      if (body.success === true && body.code === '00' && code === '00') {
+      // Repeat idempotency/state checks under row locks to prevent two webhook
+      // requests from confirming and emailing the same booking concurrently.
+      if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') return;
+      if (lockedBooking.status !== 'pending_payment') return;
+
+      if (isSuccess) {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = new Date();
         await lockedPayment.save({ transaction: t });
@@ -647,6 +775,10 @@ class PaymentService {
 
     if (!orderCode || !isCancellation) {
       return { orderCode: orderCode || null, status: queryParams.status || null, processed: false };
+    }
+
+    if (this._getPayOSMode() === 'demo') {
+      return { orderCode, status: 'DEMO', processed: false };
     }
 
     const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(orderCode));
