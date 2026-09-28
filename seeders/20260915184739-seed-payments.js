@@ -35,7 +35,7 @@ function makePayment(booking, paymentId) {
     id: paymentId,
     booking_id: booking.id,
     amount: faker.number.int({ min: 800_000, max: 6_000_000 }),
-    payment_method: faker.helpers.arrayElement(['vnpay', 'momo']),
+    payment_method: faker.helpers.arrayElement(['vnpay', 'payos']),
     status,
     transaction_ref: `TXN${String(booking.id).padStart(9, '0')}`,
     paid_at: paidAt,

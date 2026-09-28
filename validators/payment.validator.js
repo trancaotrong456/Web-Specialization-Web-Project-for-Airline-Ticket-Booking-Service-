@@ -9,8 +9,8 @@ const initiatePaymentValidator = [
   body('payment_method')
     .notEmpty()
     .withMessage('payment_method is required')
-    .isIn(['vnpay', 'momo'])
-    .withMessage('payment_method must be either vnpay or momo'),
+    .isIn(['vnpay', 'payos'])
+    .withMessage('payment_method must be either vnpay or payos'),
   body('return_url')
     .optional()
     .isURL()

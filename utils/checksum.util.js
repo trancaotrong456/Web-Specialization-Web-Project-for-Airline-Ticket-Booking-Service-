@@ -69,51 +69,8 @@ const verifyVnpayChecksum = (params, secretKey) => {
   return calculatedHash.toLowerCase() === secureHash.toLowerCase();
 };
 
-/**
- * Sign MoMo payload string with HMAC-SHA256
- * @param {string} rawString
- * @param {string} secretKey
- * @returns {string}
- */
-const signMomoString = (rawString, secretKey) => {
-  return crypto.createHmac('sha256', secretKey).update(rawString).digest('hex');
-};
-
-/**
- * Verify MoMo IPN signature
- * @param {object} payload - MoMo IPN body
- * @param {string} secretKey
- * @returns {boolean}
- */
-const verifyMomoChecksum = (payload, secretKey) => {
-  const {
-    partnerCode = '',
-    orderId = '',
-    requestId = '',
-    amount = '',
-    orderInfo = '',
-    orderType = '',
-    transId = '',
-    resultCode = '',
-    message = '',
-    payType = '',
-    responseTime = '',
-    extraData = '',
-    signature = '',
-  } = payload;
-
-  if (!signature) return false;
-
-  const rawSignature = `accessKey=${process.env.MOMO_ACCESS_KEY || ''}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
-  const calculatedSignature = signMomoString(rawSignature, secretKey);
-
-  return calculatedSignature.toLowerCase() === signature.toLowerCase();
-};
-
 module.exports = {
   sortObject,
   signVnpayParams,
   verifyVnpayChecksum,
-  signMomoString,
-  verifyMomoChecksum,
 };

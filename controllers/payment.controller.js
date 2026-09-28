@@ -38,11 +38,22 @@ class PaymentController {
     }
   }
 
-  // MoMo IPN Callback
-  async momoCallback(req, res, next) {
+  // payOS VietQR webhook (server-to-server)
+  async payosWebhook(req, res, next) {
     try {
-      const result = await paymentService.handleMomoCallback(req.body);
+      const result = await paymentService.handlePayosWebhook(req.body);
       return res.status(200).json(result);
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  // The browser redirect never confirms success. Cancellation is re-checked
+  // against payOS before the booking is returned to a payable state.
+  async payosReturn(req, res, next) {
+    try {
+      const result = await paymentService.handlePayosReturn(req.query);
+      return ApiResponse.success(res, result, 'payOS return processed');
     } catch (error) {
       next(error);
     }

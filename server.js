@@ -3,7 +3,7 @@ require('dotenv').config();
 const validateProductionSecrets = () => {
   if (process.env.NODE_ENV !== 'production') return;
 
-  const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'VNP_HASH_SECRET', 'MOMO_SECRET_KEY'];
+  const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'VNP_HASH_SECRET', 'PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY'];
   const missingSecrets = requiredSecrets.filter((name) => !process.env[name] || !process.env[name].trim());
 
   if (missingSecrets.length > 0) {

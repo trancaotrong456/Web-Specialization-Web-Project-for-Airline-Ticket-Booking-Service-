@@ -5,7 +5,9 @@ console.log('[payment-flow-smoke] secret presence:', {
   JWT_SECRET: Boolean(process.env.JWT_SECRET),
   JWT_REFRESH_SECRET: Boolean(process.env.JWT_REFRESH_SECRET),
   VNP_HASH_SECRET: Boolean(process.env.VNP_HASH_SECRET),
-  MOMO_SECRET_KEY: Boolean(process.env.MOMO_SECRET_KEY),
+  PAYOS_CLIENT_ID: Boolean(process.env.PAYOS_CLIENT_ID),
+  PAYOS_API_KEY: Boolean(process.env.PAYOS_API_KEY),
+  PAYOS_CHECKSUM_KEY: Boolean(process.env.PAYOS_CHECKSUM_KEY),
 });
 
 const { Booking, Flight, FareClass, Role, User, sequelize } = require('../../models');

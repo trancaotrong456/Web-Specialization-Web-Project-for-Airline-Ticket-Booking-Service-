@@ -39,7 +39,11 @@ services:
       JWT_EXPIRES_IN: 15m
       JWT_REFRESH_EXPIRES_IN: 7d
       VNP_HASH_SECRET: docker_demo_vnpay_secret
-      MOMO_SECRET_KEY: docker_demo_momo_secret
+      PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
+      PAYOS_API_KEY: ${PAYOS_API_KEY:-}
+      PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:5000/api/v1/payments/payos/return}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5000/api/v1/payments/payos/return}
       RESEND_API_KEY: ""
       EMAIL_FROM: "Airline Booking <onboarding@resend.dev>"
     ports:
