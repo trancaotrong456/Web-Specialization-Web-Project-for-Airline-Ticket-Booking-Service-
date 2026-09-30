@@ -154,10 +154,10 @@ async function pdfTicketSmoke(context) {
 
 async function emailSmoke(context) {
   // The callback above executes the production sendBookingConfirmation path.
-  // Render logs and an SMTP inbox/dashboard are not exposed through the HTTP API,
+  // Render logs and the Resend dashboard are not exposed through the HTTP API,
   // so delivery cannot be proved from this remote black-box script alone.
   expect(context.bookingId, 'EMAIL requires a confirmed test booking.');
-  throw new PendingError('Success IPN completed and triggered the production email path, but SMTP acceptance/delivery is only observable in Render logs or the configured SMTP inbox/dashboard.');
+  throw new PendingError('Success IPN completed and triggered the production email path, but Resend acceptance/delivery is only observable in Render logs or the Resend dashboard.');
 }
 
 async function websocketSmoke(_auth) {
@@ -292,6 +292,9 @@ async function crudSmoke() {
   await expectForbidden('POST', '/fare-classes', {}, 'FARE_CLASS POST');
   await expectForbidden('PUT', '/fare-classes/1', { price: 1 }, 'FARE_CLASS PUT');
   await expectForbidden('DELETE', '/fare-classes/1', null, 'FARE_CLASS DELETE');
+  await expectForbidden('POST', '/promotions', {}, 'PROMOTION POST');
+  await expectForbidden('PUT', '/promotions/1', { discount_value: 1 }, 'PROMOTION PUT');
+  await expectForbidden('DELETE', '/promotions/1', null, 'PROMOTION DELETE');
   console.log('PASS 5 partial: public lists and customer write-RBAC denial.');
 
   const adminProbe = await api('/flights?limit=1', { headers: adminHeaders });
@@ -379,10 +382,38 @@ async function crudSmoke() {
   expectStatus(await api(`/flights/${flightId}`, { method: 'DELETE', headers: adminHeaders }), 200, 'FLIGHT DELETE');
   console.log('PASS 5.3b FLIGHT DELETE and customer RBAC.');
 
-  // Per requested scope, promotion is public-read only. Its source currently
-  // exposes Admin CRUD routes, but those routes are intentionally not exercised.
+  // Promotion: full Admin CRUD plus public list/detail/validation contract.
   expectStatus(await api('/promotions?limit=1'), 200, 'PROMOTION list');
-  console.log('PASS 5.5 PROMOTION public list; Admin CRUD intentionally skipped by requested scope.');
+  const promotionPayload = {
+    code: `SMOKE${suffix}`,
+    discount_type: 'percent',
+    discount_value: 10,
+    valid_from: new Date(Date.now() - 3_600_000).toISOString(),
+    valid_to: new Date(Date.now() + 86_400_000).toISOString(),
+    max_uses: 10,
+  };
+  await expectForbidden('POST', '/promotions', promotionPayload, 'PROMOTION POST');
+  response = await api('/promotions', {
+    method: 'POST',
+    headers: adminHeaders,
+    body: JSON.stringify(promotionPayload),
+  });
+  expectStatus(response, 201, 'PROMOTION POST');
+  const promotionId = response.body.data.id;
+  expectStatus(await api(`/promotions/${promotionId}`), 200, 'PROMOTION detail');
+  expectStatus(await api(`/promotions/validate/${promotionPayload.code}`), 200, 'PROMOTION validate');
+  await expectForbidden('PUT', `/promotions/${promotionId}`, { discount_value: 5 }, 'PROMOTION PUT');
+  expectStatus(await api(`/promotions/${promotionId}`, {
+    method: 'PUT',
+    headers: adminHeaders,
+    body: JSON.stringify({ discount_value: 5 }),
+  }), 200, 'PROMOTION PUT');
+  await expectForbidden('DELETE', `/promotions/${promotionId}`, null, 'PROMOTION DELETE');
+  expectStatus(await api(`/promotions/${promotionId}`, {
+    method: 'DELETE',
+    headers: adminHeaders,
+  }), 200, 'PROMOTION DELETE');
+  console.log('PASS 5.5 PROMOTION CRUD, public validation, and customer RBAC.');
 }
 
 async function main() {

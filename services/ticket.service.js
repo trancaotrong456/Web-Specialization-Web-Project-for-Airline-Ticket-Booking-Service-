@@ -1,6 +1,12 @@
 const PDFDocument = require('pdfkit');
+const path = require('path');
 const { Booking, Flight, Airline, Airport, FareClass, BookingPassenger, User } = require('../models');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
+
+const UNICODE_FONT_PATH = path.join(
+  __dirname,
+  '../node_modules/dejavu-fonts-ttf/ttf/DejaVuSans.ttf'
+);
 
 class TicketService {
   /**
@@ -46,6 +52,12 @@ class TicketService {
         doc.on('data', (chunk) => buffers.push(chunk));
         doc.on('end', () => resolve(Buffer.concat(buffers)));
         doc.on('error', (err) => reject(err));
+
+        // PDFKit's built-in fonts do not cover Vietnamese glyphs. Register an
+        // application-bundled Unicode font so tickets render consistently on
+        // both Windows development machines and Linux production containers.
+        doc.registerFont('DejaVuSans', UNICODE_FONT_PATH);
+        doc.font('DejaVuSans');
 
         const flight = booking.flight;
         const airline = flight ? flight.airline : null;

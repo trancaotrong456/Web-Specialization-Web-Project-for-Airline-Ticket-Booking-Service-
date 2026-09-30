@@ -22,6 +22,7 @@ const QRCode = require('qrcode');
 const { getIO } = require('../sockets');
 const flightService = require('./flight.service');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
+const { resolvePaymentReturnUrl } = require('../utils/paymentReturnUrl.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -227,6 +228,27 @@ class PaymentService {
       ? this._getPayOSClient()
       : null;
 
+    // Validate redirect destinations before changing booking/payment state.
+    // This avoids leaving a booking in pending_payment when a client submits
+    // an invalid or untrusted return URL.
+    let resolvedReturnUrl = null;
+    let resolvedCancelUrl = null;
+    if (payment_method === 'vnpay') {
+      resolvedReturnUrl = resolvePaymentReturnUrl(
+        return_url,
+        process.env.VNP_RETURN_URL,
+        'http://localhost:3000/payment/vnpay-return'
+      );
+    } else if (payment_method === 'payos' && payosMode === 'live') {
+      resolvedReturnUrl = resolvePaymentReturnUrl(return_url, process.env.PAYOS_RETURN_URL);
+      resolvedCancelUrl = resolvePaymentReturnUrl(null, process.env.PAYOS_CANCEL_URL);
+      if (!resolvedReturnUrl || !resolvedCancelUrl) {
+        const error = new Error('payOS return and cancel URLs must be configured.');
+        error.statusCode = 503;
+        throw error;
+      }
+    }
+
     // STEP 1: Update status to pending_payment in transaction with row-lock
     await sequelize.transaction(async (t) => {
       const booking = await Booking.findOne({
@@ -283,7 +305,7 @@ class PaymentService {
       const tmnCode = process.env.VNP_TMN_CODE || 'SANDBOX01';
       const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
       const vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-      const finalReturnUrl = return_url || process.env.VNP_RETURN_URL || 'http://localhost:3000/payment/vnpay-return';
+      const finalReturnUrl = resolvedReturnUrl;
 
       const createDate = formatDateVnpay(new Date());
       const amountInVnd = Math.round(Number(bookingData.total_amount) * 100);
@@ -358,15 +380,8 @@ class PaymentService {
         };
       }
 
-      const returnUrl = return_url || process.env.PAYOS_RETURN_URL;
-      const cancelUrl = process.env.PAYOS_CANCEL_URL;
-
-      if (!returnUrl || !cancelUrl) {
-        await this._restoreHoldingAfterGatewayFailure(bookingData.id, txnRef);
-        const error = new Error('payOS return and cancel URLs must be configured.');
-        error.statusCode = 503;
-        throw error;
-      }
+      const returnUrl = resolvedReturnUrl;
+      const cancelUrl = resolvedCancelUrl;
 
       try {
         const paymentLink = await payOS.paymentRequests.create({
@@ -511,6 +526,7 @@ class PaymentService {
     let bookingIdToEmail = null;
     let flightIdToEmit = null;
     let newSeatsCount = null;
+    let transactionOutcome = 'processed';
 
     // BƯỚC 6: Cập nhật CSDL trong Transaction có Row-Level Lock
     await sequelize.transaction(async (t) => {
@@ -526,6 +542,18 @@ class PaymentService {
         transaction: t,
         include: [{ model: BookingPassenger, as: 'passengers' }],
       });
+
+      // Repeat the early idempotency checks while both rows are locked. This
+      // prevents concurrent IPN calls from confirming and emailing one booking
+      // more than once.
+      if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') {
+        transactionOutcome = 'already_confirmed';
+        return;
+      }
+      if (lockedBooking.status !== 'pending_payment') {
+        transactionOutcome = 'invalid_state';
+        return;
+      }
 
       if (vnpResponseCode === '00') {
         // Payment Success -> Confirm Booking
@@ -586,6 +614,15 @@ class PaymentService {
         }
       }
     });
+
+    if (transactionOutcome !== 'processed') {
+      return {
+        RspCode: '02',
+        Message: transactionOutcome === 'already_confirmed'
+          ? 'Order already confirmed'
+          : 'Order already updated or invalid state',
+      };
+    }
 
     if (flightIdToEmit) {
       await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
@@ -807,7 +844,7 @@ class PaymentService {
   }
 
   /**
-   * 5. Refund Module (Admin / Staff only)
+   * 5. Refund Module (Admin only)
    */
   async processRefund(bookingId, reason = 'Customer refund request', adminUser) {
     let flightIdToEmit = null;
@@ -874,7 +911,7 @@ class PaymentService {
         newSeatsCount = flight.available_seats;
       }
 
-      console.log(`[Refund] Admin/Staff ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
+      console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
 
       return {
         bookingId: booking.id,

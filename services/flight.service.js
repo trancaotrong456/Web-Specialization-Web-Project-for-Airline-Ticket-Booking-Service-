@@ -144,8 +144,8 @@ class FlightService {
   }
 
   /**
-   * Cancel flight and release all seats to confirmed bookings? 
-   * (Simple version: mark as cancelled via updateFlight)
+   * Cancel a flight by changing its status. Existing bookings and seat history
+   * are preserved; customer notification/rescheduling is a separate workflow.
    */
   async cancelFlight(flightId) {
     return this.updateFlight(flightId, { status: 'cancelled' });

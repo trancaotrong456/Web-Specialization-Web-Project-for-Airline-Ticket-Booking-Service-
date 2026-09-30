@@ -41,6 +41,19 @@ class EmailService {
       return;
     }
 
+    // Payment callbacks call this method without a pre-built attachment. Build
+    // the confirmed ticket using the same owner/guest access rules as the
+    // download endpoint, then attach it to the confirmation email.
+    if (!pdfBuffer) {
+      const ticketService = require('./ticket.service');
+      const bookingOwner = booking.user_id ? { id: booking.user_id } : null;
+      pdfBuffer = await ticketService.generateTicketPDF(
+        booking.id,
+        bookingOwner,
+        booking.guest_email
+      );
+    }
+
     // Render email template
     const templatePath = path.join(__dirname, '../templates/emails/booking_confirmation.ejs');
     let htmlContent;
@@ -74,7 +87,10 @@ class EmailService {
         subject: `[Airline Booking] Xác nhận đặt vé - Mã: ${booking.booking_code}`,
         html: htmlContent,
       };
-      if (pdfBuffer) email.attachments = [{ filename: 'ticket.pdf', content: pdfBuffer }];
+      email.attachments = [{
+        filename: `ticket-${booking.booking_code}.pdf`,
+        content: pdfBuffer.toString('base64'),
+      }];
 
       const { data, error } = await resend.emails.send(email);
       if (error) throw new Error(error.message || 'Resend rejected the email request.');

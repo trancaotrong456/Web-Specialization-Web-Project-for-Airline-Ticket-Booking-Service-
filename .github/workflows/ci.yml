@@ -33,6 +33,9 @@ jobs:
           node --check config/config.js
           find controllers services middlewares routes utils jobs sockets validators models -name '*.js' -print0 | xargs -0 -n1 node --check
 
+      - name: Run automated tests
+        run: npm test
+
       - name: Build Docker image
         run: docker build --tag airline-booking-api:${{ github.sha }} .
 

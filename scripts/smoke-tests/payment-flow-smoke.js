@@ -14,6 +14,7 @@ const { Op } = require('sequelize');
 const { Booking, BookingPassenger, Payment, Flight, FareClass, Role, User, sequelize } = require('../../models');
 const { signVnpayParams } = require('../../utils/checksum.util');
 const { generateToken } = require('../../utils/jwt.util');
+const bookingService = require('../../services/booking.service');
 const bcrypt = require('bcryptjs');
 
 const BASE_URL = `http://localhost:${process.env.PORT || 5000}/api/v1`;
@@ -71,6 +72,11 @@ async function initiate(bookingId, guestEmail) {
 }
 
 async function sendIpn(transactionRef, amount, responseCode) {
+  const response = await sendIpnRaw(transactionRef, amount, responseCode);
+  assert(response.status === 200 && response.body.RspCode === '00', `IPN failed: ${JSON.stringify(response.body)}`);
+}
+
+async function sendIpnRaw(transactionRef, amount, responseCode) {
   const params = {
     vnp_Amount: String(Math.round(Number(amount) * 100)),
     vnp_ResponseCode: responseCode,
@@ -78,8 +84,7 @@ async function sendIpn(transactionRef, amount, responseCode) {
   };
   params.vnp_SecureHash = signVnpayParams(params, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
   const query = new URLSearchParams(params).toString();
-  const response = await request(`/payments/vnpay/ipn?${query}`);
-  assert(response.status === 200 && response.body.RspCode === '00', `IPN failed: ${JSON.stringify(response.body)}`);
+  return request(`/payments/vnpay/ipn?${query}`);
 }
 
 async function state(bookingId) {
@@ -118,10 +123,32 @@ async function main() {
   assert(Number(current.seats) === Number(seatsBeforeLateIpn) + 1, 'Case 3: seat was not restored.');
   console.log(`PASS case 3: booking ${second.id} expired after late failed IPN and its seat was restored.`);
 
+  // Case 3b: a pending payment with no callback is reconciled after the grace period.
+  const stale = await createBooking(flight);
+  const stalePayment = await initiate(stale.id, stale.guest_email);
+  const seatsBeforeReconciliation = (await state(stale.id)).seats;
+  await Booking.update({ hold_expires_at: new Date(Date.now() - 10 * 60_000) }, { where: { id: stale.id } });
+  const reconciliation = await bookingService.reconcileStalePendingPayments();
+  current = await state(stale.id);
+  const failedStalePayment = await Payment.findOne({ where: { transaction_ref: stalePayment.transaction_ref } });
+  assert(reconciliation.reconciledCount >= 1, 'Case 3b: stale pending payment was not reconciled.');
+  assert(current.booking.status === 'expired', `Case 3b: expected expired, got ${current.booking.status}`);
+  assert(failedStalePayment.status === 'failed', `Case 3b: expected failed payment, got ${failedStalePayment.status}`);
+  assert(Number(current.seats) === Number(seatsBeforeReconciliation) + 1, 'Case 3b: seat was not restored.');
+  console.log(`PASS case 3b: stale pending booking ${stale.id} expired after the callback grace period.`);
+
   // Case 4: success IPN then admin refund; confirm payment/booking states and restored seat.
   const third = await createBooking(flight);
   const thirdPayment = await initiate(third.id, third.guest_email);
-  await sendIpn(thirdPayment.transaction_ref, thirdPayment.amount, '00');
+  const concurrentIpnResults = await Promise.all([
+    sendIpnRaw(thirdPayment.transaction_ref, thirdPayment.amount, '00'),
+    sendIpnRaw(thirdPayment.transaction_ref, thirdPayment.amount, '00'),
+  ]);
+  const ipnCodes = concurrentIpnResults.map((result) => result.body.RspCode).sort();
+  assert(
+    ipnCodes.join(',') === '00,02',
+    `Case 4: expected one processed and one idempotent IPN, got ${ipnCodes.join(',')}`
+  );
   const seatsBeforeRefund = (await state(third.id)).seats;
   let admin = await User.findOne({
     include: [{ model: Role, as: 'role', where: { name: 'admin' } }],

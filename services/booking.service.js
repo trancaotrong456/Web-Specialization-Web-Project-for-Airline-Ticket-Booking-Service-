@@ -469,6 +469,99 @@ class BookingService {
   }
 
   /**
+   * Reconcile payment attempts that never receive a gateway callback.
+   * This remains separate from expireHoldingBookings(): pending payments get
+   * a callback grace period and are never expired by the holding-only query.
+   */
+  async reconcileStalePendingPayments() {
+    const configuredGrace = Number.parseFloat(process.env.PAYMENT_PENDING_GRACE_MINUTES || '5');
+    const graceMinutes = Number.isFinite(configuredGrace) && configuredGrace >= 0 ? configuredGrace : 5;
+    const cutoff = new Date(Date.now() - graceMinutes * 60 * 1000);
+
+    const candidates = await Booking.findAll({
+      where: {
+        status: 'pending_payment',
+        hold_expires_at: { [Op.lt]: cutoff },
+      },
+      attributes: ['id'],
+    });
+
+    let reconciledCount = 0;
+
+    for (const candidate of candidates) {
+      try {
+        let flightIdToEmit = null;
+        let newAvailableSeats = null;
+
+        await sequelize.transaction(async (t) => {
+          // Match the webhook lock order (Payment -> Booking) when a pending
+          // payment exists, reducing deadlock risk during callback races.
+          const payment = await Payment.findOne({
+            where: { booking_id: candidate.id, status: 'pending' },
+            order: [['created_at', 'DESC']],
+            lock: t.LOCK.UPDATE,
+            transaction: t,
+          });
+
+          const booking = await Booking.findOne({
+            where: { id: candidate.id },
+            include: [{ model: BookingPassenger, as: 'passengers' }],
+            lock: t.LOCK.UPDATE,
+            transaction: t,
+          });
+
+          if (!booking || booking.status !== 'pending_payment') return;
+          // A pending_payment booking is expected to have one pending Payment.
+          // If that invariant is broken, leave the booking untouched for manual
+          // investigation instead of risking expiry after a successful charge.
+          if (!payment) return;
+          if (!booking.hold_expires_at || new Date(booking.hold_expires_at) >= cutoff) return;
+
+          payment.status = 'failed';
+          await payment.save({ transaction: t });
+
+          const flight = await Flight.findOne({
+            where: { id: booking.flight_id },
+            lock: t.LOCK.UPDATE,
+            transaction: t,
+          });
+
+          if (flight) {
+            const seats = booking.passengers ? booking.passengers.length : 1;
+            flight.available_seats += seats;
+            await flight.save({ transaction: t });
+            flightIdToEmit = flight.id;
+            newAvailableSeats = flight.available_seats;
+          }
+
+          if (booking.promotion_id) {
+            const promo = await Promotion.findOne({
+              where: { id: booking.promotion_id },
+              lock: t.LOCK.UPDATE,
+              transaction: t,
+            });
+            if (promo && promo.used_count > 0) {
+              await promo.decrement('used_count', { by: 1, transaction: t });
+            }
+          }
+
+          booking.status = 'expired';
+          await booking.save({ transaction: t });
+          reconciledCount++;
+        });
+
+        if (flightIdToEmit) {
+          await this._emitSocketSeatUpdate(flightIdToEmit, newAvailableSeats);
+        }
+      } catch (error) {
+        console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, error.message);
+      }
+    }
+
+    return { reconciledCount };
+  }
+
+  /**
    * Admin/Staff: Get all bookings
    */
   async getAllBookings({ page = 1, limit = 10, status, search }) {
