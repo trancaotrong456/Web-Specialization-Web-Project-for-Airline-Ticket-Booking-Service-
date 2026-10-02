@@ -14,7 +14,7 @@ const authenticate = async (req, res, next) => {
 
     const user = await User.findByPk(decoded.id, {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
-      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token'] },
+      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token', 'reset_token_expires_at'] },
     });
 
     if (!user) {

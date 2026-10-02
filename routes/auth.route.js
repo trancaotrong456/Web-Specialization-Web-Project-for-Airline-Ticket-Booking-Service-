@@ -8,12 +8,13 @@ const {
   loginValidator,
   updateProfileValidator,
   changePasswordValidator,
+  refreshTokenValidator,
 } = require('../validators/auth.validator');
 
 // Public routes
 router.post('/register', registerValidator, validate, authController.register);
 router.post('/login', loginValidator, validate, authController.login);
-router.post('/refresh-token', authController.refreshToken);
+router.post('/refresh-token', refreshTokenValidator, validate, authController.refreshToken);
 router.post('/logout', authenticate, authController.logout);
 
 // Protected routes (Customer, Staff, Admin)

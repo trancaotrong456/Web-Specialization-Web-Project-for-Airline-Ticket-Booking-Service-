@@ -3,6 +3,7 @@ const { body } = require('express-validator');
 const registerValidator = [
   body('email')
     .trim()
+    .normalizeEmail()
     .notEmpty()
     .withMessage('Email is required')
     .isEmail()
@@ -28,11 +29,21 @@ const registerValidator = [
 const loginValidator = [
   body('email')
     .trim()
+    .normalizeEmail()
     .notEmpty()
     .withMessage('Email is required')
     .isEmail()
     .withMessage('Must be a valid email address'),
   body('password').notEmpty().withMessage('Password is required'),
+];
+
+const refreshTokenValidator = [
+  body('refreshToken')
+    .isString()
+    .withMessage('Refresh token must be a string')
+    .trim()
+    .notEmpty()
+    .withMessage('Refresh token is required'),
 ];
 
 const updateProfileValidator = [
@@ -62,4 +73,5 @@ module.exports = {
   loginValidator,
   updateProfileValidator,
   changePasswordValidator,
+  refreshTokenValidator,
 };
