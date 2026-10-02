@@ -232,6 +232,12 @@ class AuthService {
       throw error;
     }
 
+    if (current_password === new_password) {
+      const error = new Error('New password must be different from the current password');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const salt = await bcrypt.genSalt(10);
     user.password_hash = await bcrypt.hash(new_password, salt);
     // A password change is a security boundary: revoke the long-lived session
