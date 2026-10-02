@@ -4,12 +4,17 @@ const roleController = require('../controllers/role.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/rbac.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { roleIdValidator } = require('../validators/role.validator');
+const {
+  roleIdValidator,
+  createRoleValidator,
+  updateRoleValidator,
+} = require('../validators/role.validator');
 
-// The report commits to role list/detail only.  Role mutation is deliberately
-// out of scope and therefore has no POST, PUT, or DELETE route.
 router.use(authenticate, authorize('admin'));
+router.post('/', createRoleValidator, validate, roleController.createRole);
 router.get('/', roleController.getAllRoles);
 router.get('/:id', roleIdValidator, validate, roleController.getRoleById);
+router.put('/:id', updateRoleValidator, validate, roleController.updateRole);
+router.delete('/:id', roleIdValidator, validate, roleController.deleteRole);
 
 module.exports = router;
