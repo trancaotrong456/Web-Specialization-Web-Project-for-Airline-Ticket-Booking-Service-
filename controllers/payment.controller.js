@@ -2,6 +2,24 @@ const paymentService = require('../services/payment.service');
 const ApiResponse = require('../utils/apiResponse');
 
 class PaymentController {
+  async getAllPayments(req, res, next) {
+    try {
+      const result = await paymentService.getAllPayments(req.query);
+      return ApiResponse.paginated(res, result, 'Payments retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getPaymentById(req, res, next) {
+    try {
+      const payment = await paymentService.getPaymentById(req.params.id);
+      return ApiResponse.success(res, payment, 'Payment retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async initiatePayment(req, res, next) {
     try {
       const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
