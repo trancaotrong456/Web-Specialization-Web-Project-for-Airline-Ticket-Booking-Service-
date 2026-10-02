@@ -18,21 +18,21 @@ class UserController {
 
   async updateStatus(req, res, next) {
     try {
-      const result = await userService.updateUserStatus(req.params.id, req.body.status);
+      const result = await userService.updateUserStatus(req.params.id, req.body.status, req.user.id);
       return ApiResponse.success(res, result, 'User status updated');
     } catch (error) { next(error); }
   }
 
   async updateRole(req, res, next) {
     try {
-      const result = await userService.updateUserRole(req.params.id, req.body.role_id);
+      const result = await userService.updateUserRole(req.params.id, req.body.role_id, req.user.id);
       return ApiResponse.success(res, result, 'User role updated');
     } catch (error) { next(error); }
   }
 
   async deleteUser(req, res, next) {
     try {
-      const result = await userService.deleteUser(req.params.id);
+      const result = await userService.deleteUser(req.params.id, req.user.id);
       return ApiResponse.success(res, result, 'User deleted');
     } catch (error) { next(error); }
   }
