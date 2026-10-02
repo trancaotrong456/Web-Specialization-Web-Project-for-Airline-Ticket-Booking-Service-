@@ -4,8 +4,17 @@ const express = require('express');
 const bcrypt = require('bcryptjs');
 const authService = require('../services/auth.service');
 const { User } = require('../models');
-const { generateRefreshToken } = require('../utils/jwt.util');
-const { refreshTokenValidator } = require('../validators/auth.validator');
+const {
+  generateAccessToken,
+  generateRefreshToken,
+  verifyAccessToken,
+  verifyRefreshToken,
+} = require('../utils/jwt.util');
+const {
+  refreshTokenValidator,
+  updateProfileValidator,
+  registerValidator,
+} = require('../validators/auth.validator');
 const validate = require('../middlewares/validate.middleware');
 
 test('refresh-token endpoint requires a non-empty token', async () => {
@@ -21,6 +30,61 @@ test('refresh-token endpoint requires a non-empty token', async () => {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 422);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('access and refresh tokens are explicitly typed and cannot be interchanged', () => {
+  const payload = { id: 5, email: 'typed@example.com', role: 'customer' };
+  const accessToken = generateAccessToken(payload);
+  const refreshToken = generateRefreshToken(payload);
+
+  assert.equal(verifyAccessToken(accessToken).token_type, 'access');
+  assert.equal(verifyRefreshToken(refreshToken).token_type, 'refresh');
+  assert.throws(() => verifyAccessToken(refreshToken));
+  assert.throws(() => verifyRefreshToken(accessToken));
+});
+
+test('profile update rejects an empty request body', async () => {
+  const app = express();
+  app.use(express.json());
+  app.put('/me', updateProfileValidator, validate, (_req, res) => res.json({ reached: true }));
+  const server = await new Promise((resolve) => {
+    const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/me`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    assert.equal(response.status, 422);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
+  }
+});
+
+test('registration rejects passwords that bcrypt would silently truncate', async () => {
+  const app = express();
+  app.use(express.json());
+  app.post('/register', registerValidator, validate, (_req, res) => res.json({ reached: true }));
+  const server = await new Promise((resolve) => {
+    const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: 'long-password@example.com',
+        password: 'a'.repeat(73),
+        full_name: 'Long Password',
+      }),
     });
     assert.equal(response.status, 422);
   } finally {
@@ -66,6 +130,31 @@ test('changing a password revokes the existing refresh token', async () => {
     });
     assert.equal(user.refresh_token, null);
     assert.equal(await bcrypt.compare('NewPassword456', user.password_hash), true);
+  } finally {
+    User.findByPk = originalFindByPk;
+  }
+});
+
+test('changing a password rejects reusing the current password', async () => {
+  const originalFindByPk = User.findByPk;
+  const currentHash = await bcrypt.hash('SamePassword123', 4);
+  const user = {
+    id: 17,
+    password_hash: currentHash,
+    refresh_token: 'active-refresh-token',
+    async save() { throw new Error('save must not be called'); },
+  };
+  User.findByPk = async () => user;
+
+  try {
+    await assert.rejects(
+      authService.changePassword(17, {
+        current_password: 'SamePassword123',
+        new_password: 'SamePassword123',
+      }),
+      (error) => error.statusCode === 400 && error.message.includes('different'),
+    );
+    assert.equal(user.refresh_token, 'active-refresh-token');
   } finally {
     User.findByPk = originalFindByPk;
   }
