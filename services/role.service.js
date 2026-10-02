@@ -16,7 +16,19 @@ class RoleService {
       error.statusCode = 409;
       throw error;
     }
-    return Role.create(values);
+
+    try {
+      return await Role.create(values);
+    } catch (error) {
+      // The unique index is authoritative when concurrent requests pass the
+      // friendly pre-check at the same time.
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const conflict = new Error('Role name already exists');
+        conflict.statusCode = 409;
+        throw conflict;
+      }
+      throw error;
+    }
   }
 
   async getAllRoles() {

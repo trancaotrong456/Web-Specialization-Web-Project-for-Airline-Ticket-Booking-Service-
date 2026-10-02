@@ -96,6 +96,27 @@ test('role creation normalizes its name and rejects duplicates', async () => {
   }
 });
 
+test('role creation maps a concurrent unique constraint violation to HTTP 409', async () => {
+  const originalFindOne = Role.findOne;
+  const originalCreate = Role.create;
+  Role.findOne = async () => null;
+  Role.create = async () => {
+    const error = new Error('Duplicate entry');
+    error.name = 'SequelizeUniqueConstraintError';
+    throw error;
+  };
+
+  try {
+    await assert.rejects(
+      roleService.createRole({ name: 'support' }),
+      (error) => error.statusCode === 409 && error.message === 'Role name already exists',
+    );
+  } finally {
+    Role.findOne = originalFindOne;
+    Role.create = originalCreate;
+  }
+});
+
 test('role update changes allowed fields and rejects a duplicate name', async () => {
   const originalFindByPk = Role.findByPk;
   const originalFindOne = Role.findOne;
