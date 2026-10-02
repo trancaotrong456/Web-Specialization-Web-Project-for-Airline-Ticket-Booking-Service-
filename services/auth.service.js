@@ -11,7 +11,8 @@ class AuthService {
    * Register a new user
    */
   async register({ email, password, full_name, phone }) {
-    const existingUser = await User.findOne({ where: { email } });
+    const normalizedEmail = email.trim().toLowerCase();
+    const existingUser = await User.findOne({ where: { email: normalizedEmail } });
     if (existingUser) {
       const error = new Error('Email is already registered');
       error.statusCode = 409;
@@ -19,25 +20,37 @@ class AuthService {
     }
 
     // Find default customer role
-    let customerRole = await Role.findOne({ where: { name: 'customer' } });
-    if (!customerRole) {
-      customerRole = await Role.create({
+    const [customerRole] = await Role.findOrCreate({
+      where: { name: 'customer' },
+      defaults: {
         name: 'customer',
         description: 'Default passenger customer role',
-      });
-    }
+      },
+    });
 
     const salt = await bcrypt.genSalt(10);
     const password_hash = await bcrypt.hash(password, salt);
 
-    const newUser = await User.create({
-      email,
-      password_hash,
-      full_name,
-      phone: phone || null,
-      role_id: customerRole.id,
-      status: 'active',
-    });
+    let newUser;
+    try {
+      newUser = await User.create({
+        email: normalizedEmail,
+        password_hash,
+        full_name,
+        phone: phone || null,
+        role_id: customerRole.id,
+        status: 'active',
+      });
+    } catch (error) {
+      // The pre-check above improves the common response, while the database
+      // unique constraint remains authoritative for concurrent registrations.
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const conflict = new Error('Email is already registered');
+        conflict.statusCode = 409;
+        throw conflict;
+      }
+      throw error;
+    }
 
     const tokenPayload = {
       id: newUser.id,
@@ -65,8 +78,9 @@ class AuthService {
    * Login user
    */
   async login({ email, password }) {
+    const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({
-      where: { email },
+      where: { email: normalizedEmail },
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
@@ -135,6 +149,12 @@ class AuthService {
       throw error;
     }
 
+    if (user.status === 'locked') {
+      const error = new Error('Account has been locked. Please contact support.');
+      error.statusCode = 403;
+      throw error;
+    }
+
     const roleName = user.role ? user.role.name : 'customer';
     return {
       accessToken: generateAccessToken({
@@ -159,7 +179,7 @@ class AuthService {
   async getProfile(userId) {
     const user = await User.findByPk(userId, {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
-      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token'] },
+      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token', 'reset_token_expires_at'] },
     });
 
     if (!user) {
@@ -214,6 +234,9 @@ class AuthService {
 
     const salt = await bcrypt.genSalt(10);
     user.password_hash = await bcrypt.hash(new_password, salt);
+    // A password change is a security boundary: revoke the long-lived session
+    // so any previously copied refresh token can no longer mint access tokens.
+    user.refresh_token = null;
     await user.save();
 
     return { message: 'Password changed successfully' };

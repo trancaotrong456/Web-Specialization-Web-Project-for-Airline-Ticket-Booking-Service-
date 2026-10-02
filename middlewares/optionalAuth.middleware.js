@@ -14,7 +14,7 @@ const optionalAuth = async (req, res, next) => {
       const decoded = verifyToken(token);
       const user = await User.findByPk(decoded.id, {
         include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
-        attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token'] },
+        attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token', 'reset_token_expires_at'] },
       });
       if (user && user.status !== 'locked') {
         req.user = user;
