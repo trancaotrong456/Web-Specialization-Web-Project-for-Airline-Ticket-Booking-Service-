@@ -80,6 +80,12 @@ class RoleService {
       throw error;
     }
 
+    if (SYSTEM_ROLE_NAMES.has(role.name)) {
+      const error = new Error(`The system role '${role.name}' cannot be deleted`);
+      error.statusCode = 409;
+      throw error;
+    }
+
     const assignedUsers = await User.count({ where: { role_id: role.id } });
     if (assignedUsers > 0) {
       const error = new Error('Cannot delete a role that is assigned to users');
