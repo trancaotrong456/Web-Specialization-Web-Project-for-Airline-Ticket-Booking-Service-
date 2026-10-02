@@ -1,5 +1,12 @@
 const { body } = require('express-validator');
 
+const validateBcryptPasswordLength = (value) => {
+  if (Buffer.byteLength(value, 'utf8') > 72) {
+    throw new Error('Password must not exceed 72 bytes');
+  }
+  return true;
+};
+
 const registerValidator = [
   body('email')
     .trim()
@@ -12,7 +19,8 @@ const registerValidator = [
     .notEmpty()
     .withMessage('Password is required')
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+    .withMessage('Password must be at least 6 characters long')
+    .custom(validateBcryptPasswordLength),
   body('full_name')
     .trim()
     .notEmpty()
@@ -47,6 +55,12 @@ const refreshTokenValidator = [
 ];
 
 const updateProfileValidator = [
+  body().custom((_value, { req }) => {
+    if (req.body.full_name === undefined && req.body.phone === undefined) {
+      throw new Error('At least one of full_name or phone is required');
+    }
+    return true;
+  }),
   body('full_name')
     .optional()
     .trim()
@@ -65,7 +79,8 @@ const changePasswordValidator = [
     .notEmpty()
     .withMessage('New password is required')
     .isLength({ min: 6 })
-    .withMessage('New password must be at least 6 characters long'),
+    .withMessage('New password must be at least 6 characters long')
+    .custom(validateBcryptPasswordLength),
 ];
 
 module.exports = {

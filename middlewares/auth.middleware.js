@@ -1,4 +1,4 @@
-const { verifyToken } = require('../utils/jwt.util');
+const { verifyAccessToken } = require('../utils/jwt.util');
 const ApiResponse = require('../utils/apiResponse');
 const { User, Role } = require('../models');
 
@@ -10,7 +10,7 @@ const authenticate = async (req, res, next) => {
     }
 
     const token = authHeader.split(' ')[1];
-    const decoded = verifyToken(token);
+    const decoded = verifyAccessToken(token);
 
     const user = await User.findByPk(decoded.id, {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
