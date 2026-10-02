@@ -69,51 +69,33 @@ const verifyVnpayChecksum = (params, secretKey) => {
   return calculatedHash.toLowerCase() === secureHash.toLowerCase();
 };
 
-/**
- * Sign MoMo payload string with HMAC-SHA256
- * @param {string} rawString
- * @param {string} secretKey
- * @returns {string}
- */
-const signMomoString = (rawString, secretKey) => {
-  return crypto.createHmac('sha256', secretKey).update(rawString).digest('hex');
-};
+const canonicalizeDemoPayload = (payload) => Object.keys(payload)
+  .filter((key) => key !== 'signature' && payload[key] !== undefined && payload[key] !== null)
+  .sort()
+  .map((key) => `${key}=${String(payload[key])}`)
+  .join('&');
 
 /**
- * Verify MoMo IPN signature
- * @param {object} payload - MoMo IPN body
- * @param {string} secretKey
- * @returns {boolean}
+ * Sign the local payOS demo webhook payload. This is intentionally separate
+ * from the real payOS signature algorithm and must never be used in live mode.
  */
-const verifyMomoChecksum = (payload, secretKey) => {
-  const {
-    partnerCode = '',
-    orderId = '',
-    requestId = '',
-    amount = '',
-    orderInfo = '',
-    orderType = '',
-    transId = '',
-    resultCode = '',
-    message = '',
-    payType = '',
-    responseTime = '',
-    extraData = '',
-    signature = '',
-  } = payload;
+const signPayosDemoPayload = (payload, secretKey) => crypto
+  .createHmac('sha256', secretKey)
+  .update(canonicalizeDemoPayload(payload), 'utf8')
+  .digest('hex');
 
-  if (!signature) return false;
-
-  const rawSignature = `accessKey=${process.env.MOMO_ACCESS_KEY || ''}&amount=${amount}&extraData=${extraData}&message=${message}&orderId=${orderId}&orderInfo=${orderInfo}&orderType=${orderType}&partnerCode=${partnerCode}&payType=${payType}&requestId=${requestId}&responseTime=${responseTime}&resultCode=${resultCode}&transId=${transId}`;
-  const calculatedSignature = signMomoString(rawSignature, secretKey);
-
-  return calculatedSignature.toLowerCase() === signature.toLowerCase();
+const verifyPayosDemoSignature = (payload, secretKey) => {
+  if (!payload || typeof payload.signature !== 'string') return false;
+  const expected = signPayosDemoPayload(payload, secretKey);
+  const received = payload.signature.toLowerCase();
+  if (received.length !== expected.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(received), Buffer.from(expected));
 };
 
 module.exports = {
   sortObject,
   signVnpayParams,
   verifyVnpayChecksum,
-  signMomoString,
-  verifyMomoChecksum,
+  signPayosDemoPayload,
+  verifyPayosDemoSignature,
 };

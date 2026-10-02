@@ -1,10 +1,12 @@
 'use strict';
 const { faker } = require('@faker-js/faker');
+const bcrypt = require('bcryptjs');
 
 const TOTAL = 100_000;
 const BATCH  = 5_000;
+const ADMIN_EMAIL = process.env.SEED_ADMIN_EMAIL || 'admin@airline-booking.local';
 
-function makeBatch(startId, size) {
+function makeBatch(startId, size, adminPasswordHash, seededUserPasswordHash) {
   const rows = [];
   for (let i = 0; i < size; i++) {
     const id = startId + i;
@@ -16,8 +18,8 @@ function makeBatch(startId, size) {
     rows.push({
       role_id,
       full_name:   faker.person.fullName(),
-      email:       faker.internet.email({ firstName: faker.string.alphanumeric(6), lastName: String(id) }),
-      password_hash: '$2b$10$placeholderHashForSeeding12345678901234567890123456789',
+      email:       id === 1 ? ADMIN_EMAIL : faker.internet.email({ firstName: faker.string.alphanumeric(6), lastName: String(id) }),
+      password_hash: id === 1 ? adminPasswordHash : seededUserPasswordHash,
       // Faker v10 no longer applies the old numeric pattern and may return
       // formatted international numbers longer than users.phone (VARCHAR(20)).
       phone:       `09${String(id).padStart(8, '0')}`,
@@ -38,9 +40,20 @@ function makeBatch(startId, size) {
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface) {
+    const missingPasswords = ['SEED_ADMIN_PASSWORD', 'SEED_USER_PASSWORD']
+      .filter((name) => !process.env[name]);
+    if (missingPasswords.length > 0) {
+      throw new Error(`${missingPasswords.join(', ')} must be set before seeding users.`);
+    }
+    const adminPasswordHash = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD, 10);
+    const seededUserPasswordHash = await bcrypt.hash(process.env.SEED_USER_PASSWORD, 10);
     for (let start = 0; start < TOTAL; start += BATCH) {
       const size = Math.min(BATCH, TOTAL - start);
-      await queryInterface.bulkInsert('users', makeBatch(start + 1, size), {});
+      await queryInterface.bulkInsert(
+        'users',
+        makeBatch(start + 1, size, adminPasswordHash, seededUserPasswordHash),
+        {}
+      );
     }
   },
 

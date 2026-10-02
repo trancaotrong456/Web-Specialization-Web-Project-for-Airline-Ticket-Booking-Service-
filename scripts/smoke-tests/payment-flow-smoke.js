@@ -5,16 +5,22 @@ console.log('[payment-flow-smoke] secret presence:', {
   JWT_SECRET: Boolean(process.env.JWT_SECRET),
   JWT_REFRESH_SECRET: Boolean(process.env.JWT_REFRESH_SECRET),
   VNP_HASH_SECRET: Boolean(process.env.VNP_HASH_SECRET),
-  MOMO_SECRET_KEY: Boolean(process.env.MOMO_SECRET_KEY),
+  PAYOS_CLIENT_ID: Boolean(process.env.PAYOS_CLIENT_ID),
+  PAYOS_API_KEY: Boolean(process.env.PAYOS_API_KEY),
+  PAYOS_CHECKSUM_KEY: Boolean(process.env.PAYOS_CHECKSUM_KEY),
 });
 
-const { Booking, Flight, FareClass, Role, User, sequelize } = require('../../models');
+const { Op } = require('sequelize');
+const { Booking, BookingPassenger, Payment, Flight, FareClass, Role, User, sequelize } = require('../../models');
 const { signVnpayParams } = require('../../utils/checksum.util');
 const { generateToken } = require('../../utils/jwt.util');
+const bookingService = require('../../services/booking.service');
 const bcrypt = require('bcryptjs');
 
 const BASE_URL = `http://localhost:${process.env.PORT || 5000}/api/v1`;
 const runId = `pay-smoke-${Date.now()}`;
+const createdBookingIds = [];
+let customerEmailToDelete = null;
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -40,7 +46,10 @@ async function createBooking(flight) {
       passengers: [{ passenger_name: `Smoke ${runId}`, passport_no: runId }],
     }),
   });
-  if (response.status === 201) return response.body.data;
+  if (response.status === 201) {
+    createdBookingIds.push(response.body.data.id);
+    return response.body.data;
+  }
 
   // The database transaction succeeds before the response serialization currently
   // fails on this environment because airlines.code is absent from the schema.
@@ -48,6 +57,7 @@ async function createBooking(flight) {
   // payment/IPN checks can still run.
   const persisted = await Booking.findOne({ where: { guest_email: guestEmail } });
   assert(persisted, `Create booking failed: ${JSON.stringify(response.body)}`);
+  createdBookingIds.push(persisted.id);
   console.warn(`WARN booking endpoint returned ${response.status} after creation: ${response.body.message}`);
   return persisted;
 }
@@ -62,6 +72,11 @@ async function initiate(bookingId, guestEmail) {
 }
 
 async function sendIpn(transactionRef, amount, responseCode) {
+  const response = await sendIpnRaw(transactionRef, amount, responseCode);
+  assert(response.status === 200 && response.body.RspCode === '00', `IPN failed: ${JSON.stringify(response.body)}`);
+}
+
+async function sendIpnRaw(transactionRef, amount, responseCode) {
   const params = {
     vnp_Amount: String(Math.round(Number(amount) * 100)),
     vnp_ResponseCode: responseCode,
@@ -69,8 +84,7 @@ async function sendIpn(transactionRef, amount, responseCode) {
   };
   params.vnp_SecureHash = signVnpayParams(params, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
   const query = new URLSearchParams(params).toString();
-  const response = await request(`/payments/vnpay/ipn?${query}`);
-  assert(response.status === 200 && response.body.RspCode === '00', `IPN failed: ${JSON.stringify(response.body)}`);
+  return request(`/payments/vnpay/ipn?${query}`);
 }
 
 async function state(bookingId) {
@@ -109,10 +123,32 @@ async function main() {
   assert(Number(current.seats) === Number(seatsBeforeLateIpn) + 1, 'Case 3: seat was not restored.');
   console.log(`PASS case 3: booking ${second.id} expired after late failed IPN and its seat was restored.`);
 
+  // Case 3b: a pending payment with no callback is reconciled after the grace period.
+  const stale = await createBooking(flight);
+  const stalePayment = await initiate(stale.id, stale.guest_email);
+  const seatsBeforeReconciliation = (await state(stale.id)).seats;
+  await Booking.update({ hold_expires_at: new Date(Date.now() - 10 * 60_000) }, { where: { id: stale.id } });
+  const reconciliation = await bookingService.reconcileStalePendingPayments();
+  current = await state(stale.id);
+  const failedStalePayment = await Payment.findOne({ where: { transaction_ref: stalePayment.transaction_ref } });
+  assert(reconciliation.reconciledCount >= 1, 'Case 3b: stale pending payment was not reconciled.');
+  assert(current.booking.status === 'expired', `Case 3b: expected expired, got ${current.booking.status}`);
+  assert(failedStalePayment.status === 'failed', `Case 3b: expected failed payment, got ${failedStalePayment.status}`);
+  assert(Number(current.seats) === Number(seatsBeforeReconciliation) + 1, 'Case 3b: seat was not restored.');
+  console.log(`PASS case 3b: stale pending booking ${stale.id} expired after the callback grace period.`);
+
   // Case 4: success IPN then admin refund; confirm payment/booking states and restored seat.
   const third = await createBooking(flight);
   const thirdPayment = await initiate(third.id, third.guest_email);
-  await sendIpn(thirdPayment.transaction_ref, thirdPayment.amount, '00');
+  const concurrentIpnResults = await Promise.all([
+    sendIpnRaw(thirdPayment.transaction_ref, thirdPayment.amount, '00'),
+    sendIpnRaw(thirdPayment.transaction_ref, thirdPayment.amount, '00'),
+  ]);
+  const ipnCodes = concurrentIpnResults.map((result) => result.body.RspCode).sort();
+  assert(
+    ipnCodes.join(',') === '00,02',
+    `Case 4: expected one processed and one idempotent IPN, got ${ipnCodes.join(',')}`
+  );
   const seatsBeforeRefund = (await state(third.id)).seats;
   let admin = await User.findOne({
     include: [{ model: Role, as: 'role', where: { name: 'admin' } }],
@@ -147,6 +183,7 @@ async function main() {
 
   // Case 5: authenticated customer must not pass the admin-only middleware.
   const customerEmail = `${runId}-customer@example.test`;
+  customerEmailToDelete = customerEmail;
   const register = await request('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ email: customerEmail, password: 'SmokePass123!', full_name: 'Smoke Customer' }),
@@ -161,6 +198,48 @@ async function main() {
   console.log(`PASS case 5: customer refund attempt returned HTTP 403.`);
 }
 
+async function cleanup() {
+  if (!createdBookingIds.length) return;
+
+  await sequelize.transaction(async (transaction) => {
+    const bookings = await Booking.findAll({
+      where: { id: { [Op.in]: createdBookingIds } },
+      include: [{ model: BookingPassenger, as: 'passengers' }],
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
+
+    for (const booking of bookings) {
+      if (!booking.guest_email || !booking.guest_email.startsWith(runId)) {
+        throw new Error(`Refusing to clean non-smoke booking ${booking.id}`);
+      }
+      if (['holding', 'pending_payment', 'confirmed'].includes(booking.status)) {
+        const flight = await Flight.findByPk(booking.flight_id, {
+          lock: transaction.LOCK.UPDATE,
+          transaction,
+        });
+        if (flight) {
+          flight.available_seats += booking.passengers.length || 1;
+          await flight.save({ transaction });
+        }
+      }
+    }
+
+    await Payment.destroy({ where: { booking_id: { [Op.in]: createdBookingIds } }, transaction });
+    await BookingPassenger.destroy({ where: { booking_id: { [Op.in]: createdBookingIds } }, transaction });
+    await Booking.destroy({ where: { id: { [Op.in]: createdBookingIds } }, transaction });
+    if (customerEmailToDelete) {
+      await User.destroy({ where: { email: customerEmailToDelete }, transaction });
+    }
+  });
+}
+
 main()
   .catch((error) => { console.error(`FAIL: ${error.message}`); process.exitCode = 1; })
-  .finally(async () => { await sequelize.close(); });
+  .finally(async () => {
+    try {
+      await cleanup();
+    } finally {
+      await sequelize.close();
+    }
+  });

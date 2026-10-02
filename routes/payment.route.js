@@ -16,9 +16,10 @@ router.get('/vnpay/return', paymentController.vnpayReturn);
 // VNPay IPN / Webhook (Server-to-server, VNPay calls this)
 router.get('/vnpay/ipn', paymentController.vnpayIpn);
 
-// MoMo Callback / IPN (Server-to-server webhook — hỗ trợ đồng thời cả /momo/ipn và /momo/callback)
-router.post('/momo/ipn', paymentController.momoCallback);
-router.post('/momo/callback', paymentController.momoCallback);
+// payOS VietQR: browser redirect is informational; the webhook changes payment state.
+router.get('/payos/return', paymentController.payosReturn);
+router.post('/payos/webhook', paymentController.payosWebhook);
+router.post('/payos/demo-webhook', paymentController.payosDemoWebhook);
 
 // Admin only: Refund a confirmed booking (Quy tắc nghiệp vụ 1, Chức năng 3)
 router.post('/bookings/:id/refund', authenticate, authorize('admin'), refundValidator, validate, paymentController.refund);

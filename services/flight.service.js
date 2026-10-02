@@ -112,6 +112,15 @@ class FlightService {
    * Update flight info (Admin/Staff)
    */
   async updateFlight(flightId, data) {
+    // Remaining seats are changed only by booking/payment workflows, each of
+    // which holds a transaction row lock. Do not permit an admin update to
+    // bypass that invariant through the generic flight update endpoint.
+    if (Object.prototype.hasOwnProperty.call(data, 'available_seats')) {
+      const error = new Error('available_seats is managed by booking and payment workflows');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const flight = await Flight.findByPk(flightId);
     if (!flight) {
       const error = new Error('Flight not found');
@@ -131,16 +140,12 @@ class FlightService {
       arrival_time: updated.arrival_time,
     });
 
-    if (Object.prototype.hasOwnProperty.call(data, 'available_seats')) {
-      await this.checkAndEmitSeatWarning(flightId);
-    }
-
     return updated;
   }
 
   /**
-   * Cancel flight and release all seats to confirmed bookings? 
-   * (Simple version: mark as cancelled via updateFlight)
+   * Cancel a flight by changing its status. Existing bookings and seat history
+   * are preserved; customer notification/rescheduling is a separate workflow.
    */
   async cancelFlight(flightId) {
     return this.updateFlight(flightId, { status: 'cancelled' });

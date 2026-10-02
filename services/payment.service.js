@@ -14,12 +14,15 @@ const {
 const {
   signVnpayParams,
   verifyVnpayChecksum,
-  signMomoString,
-  verifyMomoChecksum,
+  signPayosDemoPayload,
+  verifyPayosDemoSignature,
 } = require('../utils/checksum.util');
+const { PayOS } = require('@payos/node');
+const QRCode = require('qrcode');
 const { getIO } = require('../sockets');
 const flightService = require('./flight.service');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
+const { resolvePaymentReturnUrl } = require('../utils/paymentReturnUrl.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -34,6 +37,136 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
+  _getPayOSMode() {
+    const mode = (process.env.PAYOS_MODE || 'disabled').toLowerCase();
+    if (!['disabled', 'demo', 'live'].includes(mode)) {
+      const error = new Error(`Invalid PAYOS_MODE '${mode}'.`);
+      error.statusCode = 500;
+      throw error;
+    }
+    return mode;
+  }
+
+  _getPayOSDemoSecret() {
+    return process.env.PAYOS_DEMO_SECRET || 'local-academic-demo-only';
+  }
+
+  _assertPayOSDemoAllowed() {
+    if (this._getPayOSMode() !== 'demo' || process.env.NODE_ENV === 'production') {
+      const error = new Error('payOS demo webhook is available only in local demo mode.');
+      error.statusCode = 403;
+      throw error;
+    }
+  }
+
+  _getPayOSClient() {
+    if (this._getPayOSMode() !== 'live') {
+      const error = new Error('payOS live integration is not enabled. Set PAYOS_MODE=live after configuring a Payment Channel.');
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const required = ['PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY'];
+    const missing = required.filter((key) => !process.env[key] || !process.env[key].trim());
+
+    if (missing.length > 0) {
+      const error = new Error(`payOS is not configured. Missing: ${missing.join(', ')}`);
+      error.statusCode = 503;
+      throw error;
+    }
+
+    return new PayOS({
+      clientId: process.env.PAYOS_CLIENT_ID,
+      apiKey: process.env.PAYOS_API_KEY,
+      checksumKey: process.env.PAYOS_CHECKSUM_KEY,
+      baseURL: process.env.PAYOS_BASE_URL || undefined,
+    });
+  }
+
+  async _restoreHoldingAfterGatewayFailure(bookingId, transactionRef) {
+    await sequelize.transaction(async (t) => {
+      const booking = await Booking.findOne({
+        where: { id: bookingId },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+      const payment = await Payment.findOne({
+        where: { booking_id: bookingId, transaction_ref: transactionRef, status: 'pending' },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+
+      // Do not overwrite a webhook or another workflow that already changed state.
+      if (booking && payment && booking.status === 'pending_payment') {
+        await payment.destroy({ transaction: t });
+        booking.status = 'holding';
+        await booking.save({ transaction: t });
+      }
+    });
+  }
+
+  async _markPayosPaymentFailed(paymentId, bookingId) {
+    let flightIdToEmit = null;
+    let newSeatsCount = null;
+
+    await sequelize.transaction(async (t) => {
+      const payment = await Payment.findOne({
+        where: { id: paymentId },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+      const booking = await Booking.findOne({
+        where: { id: bookingId },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+        include: [{ model: BookingPassenger, as: 'passengers' }],
+      });
+
+      if (!payment || !booking || payment.status === 'success' || booking.status === 'confirmed') return;
+      if (booking.status !== 'pending_payment') return;
+
+      payment.status = 'failed';
+      await payment.save({ transaction: t });
+
+      const holdIsValid = booking.hold_expires_at && new Date() <= new Date(booking.hold_expires_at);
+      if (holdIsValid) {
+        booking.status = 'holding';
+        await booking.save({ transaction: t });
+        return;
+      }
+
+      booking.status = 'expired';
+      await booking.save({ transaction: t });
+
+      const flight = await Flight.findOne({
+        where: { id: booking.flight_id },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+      if (flight) {
+        flight.available_seats += booking.passengers ? booking.passengers.length : 1;
+        await flight.save({ transaction: t });
+        flightIdToEmit = flight.id;
+        newSeatsCount = flight.available_seats;
+      }
+
+      if (booking.promotion_id) {
+        const promo = await Promotion.findOne({
+          where: { id: booking.promotion_id },
+          lock: t.LOCK.UPDATE,
+          transaction: t,
+        });
+        if (promo && promo.used_count > 0) {
+          await promo.decrement('used_count', { by: 1, transaction: t });
+        }
+      }
+    });
+
+    if (flightIdToEmit) {
+      await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
+    }
+  }
+
   /**
    * Helper to safely emit socket event
    */
@@ -72,8 +205,49 @@ class PaymentService {
    * 1. Initiate Payment: holding -> pending_payment -> build gateway URL
    */
   async initiatePayment({ booking_id, payment_method, ip_addr = '127.0.0.1', return_url, currentUser = null, guest_email = null }) {
-    const txnRef = `TXN_${booking_id}_${Date.now()}`;
+    // payOS requires a numeric orderCode. Timestamp plus three random digits
+    // stays below Number.MAX_SAFE_INTEGER and avoids same-millisecond collisions.
+    const txnRef = payment_method === 'payos'
+      ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
+      : `TXN_${booking_id}_${Date.now()}`;
     let bookingData = null;
+    const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
+
+    if (payment_method === 'payos' && payosMode === 'disabled') {
+      const error = new Error('payOS/VietQR is currently disabled. Use VNPay or enable local demo mode.');
+      error.statusCode = 503;
+      throw error;
+    }
+    if (payment_method === 'payos' && payosMode === 'demo' && process.env.NODE_ENV === 'production') {
+      const error = new Error('payOS demo mode is forbidden in production.');
+      error.statusCode = 503;
+      throw error;
+    }
+
+    const payOS = payment_method === 'payos' && payosMode === 'live'
+      ? this._getPayOSClient()
+      : null;
+
+    // Validate redirect destinations before changing booking/payment state.
+    // This avoids leaving a booking in pending_payment when a client submits
+    // an invalid or untrusted return URL.
+    let resolvedReturnUrl = null;
+    let resolvedCancelUrl = null;
+    if (payment_method === 'vnpay') {
+      resolvedReturnUrl = resolvePaymentReturnUrl(
+        return_url,
+        process.env.VNP_RETURN_URL,
+        'http://localhost:3000/payment/vnpay-return'
+      );
+    } else if (payment_method === 'payos' && payosMode === 'live') {
+      resolvedReturnUrl = resolvePaymentReturnUrl(return_url, process.env.PAYOS_RETURN_URL);
+      resolvedCancelUrl = resolvePaymentReturnUrl(null, process.env.PAYOS_CANCEL_URL);
+      if (!resolvedReturnUrl || !resolvedCancelUrl) {
+        const error = new Error('payOS return and cancel URLs must be configured.');
+        error.statusCode = 503;
+        throw error;
+      }
+    }
 
     // STEP 1: Update status to pending_payment in transaction with row-lock
     await sequelize.transaction(async (t) => {
@@ -131,7 +305,7 @@ class PaymentService {
       const tmnCode = process.env.VNP_TMN_CODE || 'SANDBOX01';
       const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
       const vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-      const finalReturnUrl = return_url || process.env.VNP_RETURN_URL || 'http://localhost:3000/payment/vnpay-return';
+      const finalReturnUrl = resolvedReturnUrl;
 
       const createDate = formatDateVnpay(new Date());
       const amountInVnd = Math.round(Number(bookingData.total_amount) * 100);
@@ -161,21 +335,84 @@ class PaymentService {
       queryStringParts.push(`vnp_SecureHash=${secureHash}`);
 
       paymentUrl = `${vnpUrl}?${queryStringParts.join('&')}`;
-    } else if (payment_method === 'momo') {
-      const partnerCode = process.env.MOMO_PARTNER_CODE || 'MOMO_DEMO_PARTNER';
-      const secretKey = process.env.MOMO_SECRET_KEY || 'MOMO_DEMO_SECRET_KEY';
-      const redirectUrl = return_url || process.env.MOMO_REDIRECT_URL || 'http://localhost:3000/payment/momo-return';
-      const ipnUrl = process.env.MOMO_IPN_URL || 'http://localhost:5000/api/v1/payments/momo/ipn';
-      const amount = Math.round(Number(bookingData.total_amount));
-      const orderInfo = `Thanh toan ve may bay ${bookingData.booking_code}`;
-      const requestId = txnRef;
-      const orderId = txnRef;
-      const extraData = '';
+    } else if (payment_method === 'payos') {
+      if (payosMode === 'demo') {
+        const amount = Math.round(Number(bookingData.total_amount));
+        const demoData = {
+          orderCode: Number(txnRef),
+          amount,
+          status: 'success',
+          timestamp: Date.now(),
+        };
+        const signature = signPayosDemoPayload(demoData, this._getPayOSDemoSecret());
+        const qrPayload = JSON.stringify({
+          type: 'VIETQR_ACADEMIC_DEMO',
+          provider: 'payOS-demo-adapter',
+          bookingCode: bookingData.booking_code,
+          orderCode: demoData.orderCode,
+          amount,
+          currency: 'VND',
+          transferContent: `DATVE ${bookingData.booking_code}`,
+          warning: 'MO PHONG - KHONG CHUYEN TIEN THAT',
+        });
+        const qrCode = await QRCode.toDataURL(qrPayload, {
+          errorCorrectionLevel: 'M',
+          margin: 2,
+          width: 320,
+        });
 
-      const rawSignature = `accessKey=${process.env.MOMO_ACCESS_KEY || ''}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipnUrl}&orderId=${orderId}&orderInfo=${orderInfo}&partnerCode=${partnerCode}&redirectUrl=${redirectUrl}&requestId=${requestId}&requestType=captureWallet`;
-      const signature = signMomoString(rawSignature, secretKey);
+        return {
+          payment_url: null,
+          qr_code: qrCode,
+          qr_payload: qrPayload,
+          payment_link_id: `demo_${txnRef}`,
+          transaction_ref: txnRef,
+          booking_id: bookingData.id,
+          amount: bookingData.total_amount,
+          status: 'pending_payment',
+          mode: 'demo',
+          demo_notice: 'Academic simulation only. No real bank transfer is performed.',
+          demo_webhook: {
+            method: 'POST',
+            url: '/api/v1/payments/payos/demo-webhook',
+            body: { ...demoData, signature },
+          },
+        };
+      }
 
-      paymentUrl = `${process.env.MOMO_ENDPOINT || 'https://test-payment.momo.vn/v2/gateway/api/create'}?partnerCode=${partnerCode}&orderId=${orderId}&signature=${signature}`;
+      const returnUrl = resolvedReturnUrl;
+      const cancelUrl = resolvedCancelUrl;
+
+      try {
+        const paymentLink = await payOS.paymentRequests.create({
+          orderCode: Number(txnRef),
+          amount: Math.round(Number(bookingData.total_amount)),
+          description: `Ve may bay ${bookingData.booking_code}`.slice(0, 25),
+          returnUrl,
+          cancelUrl,
+          items: [{
+            name: `Ve bay ${bookingData.booking_code}`.slice(0, 25),
+            quantity: 1,
+            price: Math.round(Number(bookingData.total_amount)),
+          }],
+        });
+
+        paymentUrl = paymentLink.checkoutUrl;
+        return {
+          payment_url: paymentUrl,
+          qr_code: paymentLink.qrCode,
+          payment_link_id: paymentLink.paymentLinkId,
+          transaction_ref: txnRef,
+          booking_id: bookingData.id,
+          amount: bookingData.total_amount,
+          status: 'pending_payment',
+        };
+      } catch (gatewayError) {
+        await this._restoreHoldingAfterGatewayFailure(bookingData.id, txnRef);
+        const error = new Error(`Unable to create payOS payment link: ${gatewayError.message}`);
+        error.statusCode = 502;
+        throw error;
+      }
     }
 
     return {
@@ -289,6 +526,7 @@ class PaymentService {
     let bookingIdToEmail = null;
     let flightIdToEmit = null;
     let newSeatsCount = null;
+    let transactionOutcome = 'processed';
 
     // BƯỚC 6: Cập nhật CSDL trong Transaction có Row-Level Lock
     await sequelize.transaction(async (t) => {
@@ -304,6 +542,18 @@ class PaymentService {
         transaction: t,
         include: [{ model: BookingPassenger, as: 'passengers' }],
       });
+
+      // Repeat the early idempotency checks while both rows are locked. This
+      // prevents concurrent IPN calls from confirming and emailing one booking
+      // more than once.
+      if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') {
+        transactionOutcome = 'already_confirmed';
+        return;
+      }
+      if (lockedBooking.status !== 'pending_payment') {
+        transactionOutcome = 'invalid_state';
+        return;
+      }
 
       if (vnpResponseCode === '00') {
         // Payment Success -> Confirm Booking
@@ -365,6 +615,15 @@ class PaymentService {
       }
     });
 
+    if (transactionOutcome !== 'processed') {
+      return {
+        RspCode: '02',
+        Message: transactionOutcome === 'already_confirmed'
+          ? 'Order already confirmed'
+          : 'Order already updated or invalid state',
+      };
+    }
+
     if (flightIdToEmit) {
       await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
     }
@@ -377,34 +636,68 @@ class PaymentService {
   }
 
   /**
-   * 4. MoMo IPN Callback
+   * 4. payOS VietQR webhook callback
    */
-  async handleMomoCallback(body) {
-    const secretKey = process.env.MOMO_SECRET_KEY || 'MOMO_DEMO_SECRET_KEY';
-
-    const isChecksumValid = verifyMomoChecksum(body, secretKey);
-    if (!isChecksumValid) {
-      console.warn('[MoMo Callback] Invalid signature checksum:', {
-        orderId: body.orderId || null,
-        responseTime: body.responseTime || null,
+  async handlePayosWebhook(body) {
+    let webhookData;
+    try {
+      webhookData = await this._getPayOSClient().webhooks.verify(body);
+    } catch (verificationError) {
+      console.warn('[payOS Webhook] Invalid signature received:', {
+        orderCode: body?.data?.orderCode || null,
         receivedAt: new Date().toISOString(),
       });
-      const error = new Error('Invalid signature');
+      const error = new Error('Invalid payOS webhook signature');
       error.statusCode = 400;
       throw error;
     }
 
-    const { orderId, amount, resultCode } = body;
+    return this._processVerifiedPayosWebhook({
+      orderCode: webhookData.orderCode,
+      amount: webhookData.amount,
+      isSuccess: body.success === true && body.code === '00' && webhookData.code === '00',
+    });
+  }
+
+  async handlePayosDemoWebhook(body) {
+    this._assertPayOSDemoAllowed();
+    if (!Number.isSafeInteger(Number(body.orderCode)) || Number(body.amount) <= 0) {
+      const error = new Error('Invalid payOS demo webhook payload');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (!verifyPayosDemoSignature(body, this._getPayOSDemoSecret())) {
+      const error = new Error('Invalid payOS demo webhook signature');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!['success', 'failed'].includes(body.status)) {
+      const error = new Error('Demo webhook status must be success or failed');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    return this._processVerifiedPayosWebhook({
+      orderCode: body.orderCode,
+      amount: body.amount,
+      isSuccess: body.status === 'success',
+    });
+  }
+
+  async _processVerifiedPayosWebhook({ orderCode, amount, isSuccess }) {
 
     const payment = await Payment.findOne({
-      where: { transaction_ref: orderId },
+      where: { transaction_ref: String(orderCode) },
       include: [{ model: Booking, as: 'booking' }],
     });
 
     if (!payment || !payment.booking) {
-      const error = new Error('Payment or Booking not found');
-      error.statusCode = 404;
-      throw error;
+      // payOS validates a newly registered webhook with a signed sample payload.
+      // Acknowledge that sample (or an orphaned signed notification) with 2xx so
+      // the channel can be configured; no booking state is changed.
+      console.warn(`[payOS Webhook] No local payment found for orderCode ${orderCode}.`);
+      return { message: 'Webhook acknowledged; local order not found' };
     }
 
     if (Math.round(Number(payment.amount)) !== Math.round(Number(amount))) {
@@ -440,7 +733,12 @@ class PaymentService {
         include: [{ model: BookingPassenger, as: 'passengers' }],
       });
 
-      if (Number(resultCode) === 0) {
+      // Repeat idempotency/state checks under row locks to prevent two webhook
+      // requests from confirming and emailing the same booking concurrently.
+      if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') return;
+      if (lockedBooking.status !== 'pending_payment') return;
+
+      if (isSuccess) {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = new Date();
         await lockedPayment.save({ transaction: t });
@@ -450,7 +748,7 @@ class PaymentService {
 
         bookingIdToEmail = lockedBooking.id;
       } else {
-        // MoMo thanh toán thất bại / khách hủy
+        // payOS reports a non-success payment or cancellation.
         lockedPayment.status = 'failed';
         await lockedPayment.save({ transaction: t });
 
@@ -504,6 +802,41 @@ class PaymentService {
   }
 
   /**
+   * payOS sends the customer to cancelUrl when they cancel a payment link.
+   * Query parameters are not trusted: the payment-link status is re-read from
+   * payOS before returning the booking from pending_payment to holding/expired.
+   */
+  async handlePayosReturn(queryParams) {
+    const orderCode = queryParams.orderCode;
+    const isCancellation = queryParams.cancel === 'true' || queryParams.status === 'CANCELLED';
+
+    if (!orderCode || !isCancellation) {
+      return { orderCode: orderCode || null, status: queryParams.status || null, processed: false };
+    }
+
+    if (this._getPayOSMode() === 'demo') {
+      return { orderCode, status: 'DEMO', processed: false };
+    }
+
+    const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(orderCode));
+    if (paymentLink.status !== 'CANCELLED') {
+      return { orderCode, status: paymentLink.status, processed: false };
+    }
+
+    const payment = await Payment.findOne({
+      where: { transaction_ref: String(orderCode) },
+      include: [{ model: Booking, as: 'booking' }],
+    });
+
+    if (!payment || !payment.booking) {
+      return { orderCode, status: 'CANCELLED', processed: false };
+    }
+
+    await this._markPayosPaymentFailed(payment.id, payment.booking_id);
+    return { orderCode, status: 'CANCELLED', processed: true };
+  }
+
+  /**
    * Alias for processRefund
    */
   async refundPayment(bookingId, reason, adminUser) {
@@ -511,7 +844,7 @@ class PaymentService {
   }
 
   /**
-   * 5. Refund Module (Admin / Staff only)
+   * 5. Refund Module (Admin only)
    */
   async processRefund(bookingId, reason = 'Customer refund request', adminUser) {
     let flightIdToEmit = null;
@@ -578,7 +911,7 @@ class PaymentService {
         newSeatsCount = flight.available_seats;
       }
 
-      console.log(`[Refund] Admin/Staff ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
+      console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
 
       return {
         bookingId: booking.id,
