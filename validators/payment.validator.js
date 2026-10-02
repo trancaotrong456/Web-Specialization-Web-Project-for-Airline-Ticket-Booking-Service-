@@ -1,4 +1,4 @@
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 
 const initiatePaymentValidator = [
   body('booking_id')
@@ -35,7 +35,27 @@ const refundValidator = [
     .withMessage('Reason must be a string'),
 ];
 
+const paymentListValidator = [
+  query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
+  query('status')
+    .optional()
+    .isIn(['pending', 'success', 'failed', 'refunded'])
+    .withMessage('status filter is invalid'),
+  query('payment_method')
+    .optional()
+    .isIn(['vnpay', 'payos'])
+    .withMessage('payment_method filter must be vnpay or payos'),
+  query('booking_id').optional().isInt({ min: 1 }).withMessage('booking_id must be a valid ID'),
+];
+
+const paymentIdValidator = [
+  param('id').isInt({ min: 1 }).withMessage('Payment ID must be a positive integer'),
+];
+
 module.exports = {
   initiatePaymentValidator,
   refundValidator,
+  paymentListValidator,
+  paymentIdValidator,
 };
