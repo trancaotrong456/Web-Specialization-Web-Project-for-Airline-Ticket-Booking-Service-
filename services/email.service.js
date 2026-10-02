@@ -3,7 +3,15 @@ const path = require('path');
 const ejs = require('ejs');
 const { Booking, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment } = require('../models');
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+let resendClient = null;
+
+const getResendClient = () => {
+  if (!process.env.RESEND_API_KEY) {
+    throw new Error('RESEND_API_KEY is not configured.');
+  }
+  if (!resendClient) resendClient = new Resend(process.env.RESEND_API_KEY);
+  return resendClient;
+};
 
 class EmailService {
   /**
@@ -78,9 +86,6 @@ class EmailService {
 
     console.log(`[EMAIL] Attempting to send confirmation to ${recipientEmail} for booking ${bookingId}...`);
     try {
-      if (!process.env.RESEND_API_KEY) {
-        throw new Error('RESEND_API_KEY is not configured.');
-      }
       const email = {
         from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
         to: recipientEmail,
@@ -92,7 +97,7 @@ class EmailService {
         content: pdfBuffer.toString('base64'),
       }];
 
-      const { data, error } = await resend.emails.send(email);
+      const { data, error } = await getResendClient().emails.send(email);
       if (error) throw new Error(error.message || 'Resend rejected the email request.');
       console.log(`[EMAIL] SUCCESS - messageId: ${data && data.id}`);
     } catch (error) {
@@ -105,8 +110,7 @@ class EmailService {
    * Send general email
    */
   async sendMail({ to, subject, html }) {
-    if (!process.env.RESEND_API_KEY) throw new Error('RESEND_API_KEY is not configured.');
-    const { data, error } = await resend.emails.send({
+    const { data, error } = await getResendClient().emails.send({
       from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
       to,
       subject,
