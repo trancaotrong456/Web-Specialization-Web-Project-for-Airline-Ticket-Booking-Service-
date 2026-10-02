@@ -133,6 +133,29 @@ test('role update changes allowed fields and rejects a duplicate name', async ()
   }
 });
 
+test('system roles cannot be renamed because RBAC depends on their stable names', async () => {
+  const originalFindByPk = Role.findByPk;
+  const originalFindOne = Role.findOne;
+  let updateCalled = false;
+  Role.findByPk = async () => ({
+    id: 3,
+    name: 'admin',
+    async update() { updateCalled = true; },
+  });
+  Role.findOne = async () => null;
+
+  try {
+    await assert.rejects(
+      roleService.updateRole(3, { name: 'super_admin' }),
+      (error) => error.statusCode === 409 && error.message.includes('cannot be renamed'),
+    );
+    assert.equal(updateCalled, false);
+  } finally {
+    Role.findByPk = originalFindByPk;
+    Role.findOne = originalFindOne;
+  }
+});
+
 test('role deletion is blocked while users are assigned', async () => {
   const originalFindByPk = Role.findByPk;
   const originalCount = User.count;
