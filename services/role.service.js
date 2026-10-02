@@ -1,5 +1,7 @@
 const { Role, User } = require('../models');
 
+const SYSTEM_ROLE_NAMES = new Set(['customer', 'staff', 'admin']);
+
 const normalizeRolePayload = ({ name, description }) => ({
   ...(name !== undefined ? { name: name.trim().toLowerCase() } : {}),
   ...(description !== undefined ? { description: description || null } : {}),
@@ -14,7 +16,19 @@ class RoleService {
       error.statusCode = 409;
       throw error;
     }
-    return Role.create(values);
+
+    try {
+      return await Role.create(values);
+    } catch (error) {
+      // The unique index is authoritative when concurrent requests pass the
+      // friendly pre-check at the same time.
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        const conflict = new Error('Role name already exists');
+        conflict.statusCode = 409;
+        throw conflict;
+      }
+      throw error;
+    }
   }
 
   async getAllRoles() {
@@ -47,6 +61,16 @@ class RoleService {
     }
 
     const values = normalizeRolePayload(payload);
+    if (
+      values.name
+      && values.name !== role.name
+      && SYSTEM_ROLE_NAMES.has(role.name)
+    ) {
+      const error = new Error(`The system role '${role.name}' cannot be renamed`);
+      error.statusCode = 409;
+      throw error;
+    }
+
     if (values.name && values.name !== role.name) {
       const duplicate = await Role.findOne({ where: { name: values.name } });
       if (duplicate) {
@@ -65,6 +89,12 @@ class RoleService {
     if (!role) {
       const error = new Error('Role not found');
       error.statusCode = 404;
+      throw error;
+    }
+
+    if (SYSTEM_ROLE_NAMES.has(role.name)) {
+      const error = new Error(`The system role '${role.name}' cannot be deleted`);
+      error.statusCode = 409;
       throw error;
     }
 

@@ -96,6 +96,27 @@ test('role creation normalizes its name and rejects duplicates', async () => {
   }
 });
 
+test('role creation maps a concurrent unique constraint violation to HTTP 409', async () => {
+  const originalFindOne = Role.findOne;
+  const originalCreate = Role.create;
+  Role.findOne = async () => null;
+  Role.create = async () => {
+    const error = new Error('Duplicate entry');
+    error.name = 'SequelizeUniqueConstraintError';
+    throw error;
+  };
+
+  try {
+    await assert.rejects(
+      roleService.createRole({ name: 'support' }),
+      (error) => error.statusCode === 409 && error.message === 'Role name already exists',
+    );
+  } finally {
+    Role.findOne = originalFindOne;
+    Role.create = originalCreate;
+  }
+});
+
 test('role update changes allowed fields and rejects a duplicate name', async () => {
   const originalFindByPk = Role.findByPk;
   const originalFindOne = Role.findOne;
@@ -133,6 +154,29 @@ test('role update changes allowed fields and rejects a duplicate name', async ()
   }
 });
 
+test('system roles cannot be renamed because RBAC depends on their stable names', async () => {
+  const originalFindByPk = Role.findByPk;
+  const originalFindOne = Role.findOne;
+  let updateCalled = false;
+  Role.findByPk = async () => ({
+    id: 3,
+    name: 'admin',
+    async update() { updateCalled = true; },
+  });
+  Role.findOne = async () => null;
+
+  try {
+    await assert.rejects(
+      roleService.updateRole(3, { name: 'super_admin' }),
+      (error) => error.statusCode === 409 && error.message.includes('cannot be renamed'),
+    );
+    assert.equal(updateCalled, false);
+  } finally {
+    Role.findByPk = originalFindByPk;
+    Role.findOne = originalFindOne;
+  }
+});
+
 test('role deletion is blocked while users are assigned', async () => {
   const originalFindByPk = Role.findByPk;
   const originalCount = User.count;
@@ -148,6 +192,31 @@ test('role deletion is blocked while users are assigned', async () => {
       roleService.deleteRole(3),
       (error) => error.statusCode === 409 && error.message.includes('assigned'),
     );
+    assert.equal(destroyed, false);
+  } finally {
+    Role.findByPk = originalFindByPk;
+    User.count = originalCount;
+  }
+});
+
+test('system roles cannot be deleted even when they are temporarily unassigned', async () => {
+  const originalFindByPk = Role.findByPk;
+  const originalCount = User.count;
+  let countCalled = false;
+  let destroyed = false;
+  Role.findByPk = async () => ({
+    id: 2,
+    name: 'staff',
+    async destroy() { destroyed = true; },
+  });
+  User.count = async () => { countCalled = true; return 0; };
+
+  try {
+    await assert.rejects(
+      roleService.deleteRole(2),
+      (error) => error.statusCode === 409 && error.message.includes('cannot be deleted'),
+    );
+    assert.equal(countCalled, false);
     assert.equal(destroyed, false);
   } finally {
     Role.findByPk = originalFindByPk;
