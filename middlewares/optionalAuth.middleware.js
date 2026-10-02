@@ -1,4 +1,5 @@
 const { verifyAccessToken } = require('../utils/jwt.util');
+const { extractBearerToken } = require('../utils/authHeader.util');
 const { User, Role } = require('../models');
 
 /**
@@ -9,8 +10,8 @@ const { User, Role } = require('../models');
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.split(' ')[1];
+    const token = extractBearerToken(authHeader);
+    if (token) {
       const decoded = verifyAccessToken(token);
       const user = await User.findByPk(decoded.id, {
         include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
