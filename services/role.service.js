@@ -1,5 +1,7 @@
 const { Role, User } = require('../models');
 
+const SYSTEM_ROLE_NAMES = new Set(['customer', 'staff', 'admin']);
+
 const normalizeRolePayload = ({ name, description }) => ({
   ...(name !== undefined ? { name: name.trim().toLowerCase() } : {}),
   ...(description !== undefined ? { description: description || null } : {}),
@@ -47,6 +49,16 @@ class RoleService {
     }
 
     const values = normalizeRolePayload(payload);
+    if (
+      values.name
+      && values.name !== role.name
+      && SYSTEM_ROLE_NAMES.has(role.name)
+    ) {
+      const error = new Error(`The system role '${role.name}' cannot be renamed`);
+      error.statusCode = 409;
+      throw error;
+    }
+
     if (values.name && values.name !== role.name) {
       const duplicate = await Role.findOne({ where: { name: values.name } });
       if (duplicate) {
