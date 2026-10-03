@@ -1,5 +1,8 @@
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+const { Op } = require('sequelize');
 const { User, Role } = require('../models');
+const emailService = require('./email.service');
 const {
   generateAccessToken,
   generateRefreshToken,
@@ -7,6 +10,31 @@ const {
 } = require('../utils/jwt.util');
 
 class AuthService {
+  _passwordResetUrl(rawToken) {
+    const configuredUrl = process.env.PASSWORD_RESET_URL
+      || (process.env.CLIENT_URL
+        ? `${process.env.CLIENT_URL.replace(/\/$/, '')}/reset-password`
+        : 'http://localhost:3000/reset-password');
+
+    let resetUrl;
+    try {
+      resetUrl = new URL(configuredUrl);
+    } catch (_error) {
+      const error = new Error('PASSWORD_RESET_URL is not a valid URL');
+      error.statusCode = 500;
+      throw error;
+    }
+
+    if (process.env.NODE_ENV === 'production' && resetUrl.protocol !== 'https:') {
+      const error = new Error('PASSWORD_RESET_URL must use HTTPS in production');
+      error.statusCode = 500;
+      throw error;
+    }
+
+    resetUrl.searchParams.set('token', rawToken);
+    return resetUrl.toString();
+  }
+
   /**
    * Register a new user
    */
@@ -246,6 +274,75 @@ class AuthService {
     await user.save();
 
     return { message: 'Password changed successfully' };
+  }
+
+  async forgotPassword(email) {
+    const genericResult = {
+      message: 'If the email is registered, password reset instructions will be sent.',
+    };
+    const normalizedEmail = email.trim().toLowerCase();
+    const user = await User.findOne({ where: { email: normalizedEmail } });
+
+    if (!user || user.status === 'locked') return genericResult;
+
+    const rawToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const configuredMinutes = Number.parseInt(
+      process.env.PASSWORD_RESET_EXPIRES_MINUTES || '30',
+      10
+    );
+    const expiresMinutes = Number.isInteger(configuredMinutes) && configuredMinutes > 0
+      ? configuredMinutes
+      : 30;
+
+    user.reset_token = tokenHash;
+    user.reset_token_expires_at = new Date(Date.now() + expiresMinutes * 60 * 1000);
+    await user.save();
+
+    try {
+      const resetUrl = this._passwordResetUrl(rawToken);
+      await emailService.sendMail({
+        to: user.email,
+        subject: '[Airline Booking] Đặt lại mật khẩu',
+        html: `
+          <h2>Đặt lại mật khẩu</h2>
+          <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+          <p><a href="${resetUrl}">Đặt lại mật khẩu</a></p>
+          <p>Liên kết này hết hạn sau ${expiresMinutes} phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+        `,
+      });
+    } catch (error) {
+      user.reset_token = null;
+      user.reset_token_expires_at = null;
+      await user.save();
+      throw error;
+    }
+
+    return genericResult;
+  }
+
+  async resetPassword(rawToken, newPassword) {
+    const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
+    const user = await User.findOne({
+      where: {
+        reset_token: tokenHash,
+        reset_token_expires_at: { [Op.gt]: new Date() },
+      },
+    });
+
+    if (!user) {
+      const error = new Error('Reset token is invalid or has expired');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    user.password_hash = await bcrypt.hash(newPassword, 10);
+    user.reset_token = null;
+    user.reset_token_expires_at = null;
+    user.refresh_token = null;
+    await user.save();
+
+    return { message: 'Password reset successfully. Please log in again.' };
   }
 
 }

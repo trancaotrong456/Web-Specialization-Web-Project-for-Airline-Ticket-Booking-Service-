@@ -83,10 +83,37 @@ const changePasswordValidator = [
     .custom(validateBcryptPasswordLength),
 ];
 
+const forgotPasswordValidator = [
+  body('email')
+    .trim()
+    .normalizeEmail()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Must be a valid email address'),
+];
+
+const resetPasswordValidator = [
+  body('token')
+    .trim()
+    .isLength({ min: 64, max: 64 })
+    .withMessage('Reset token is invalid')
+    .isHexadecimal()
+    .withMessage('Reset token is invalid'),
+  body('new_password')
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters long')
+    .custom(validateBcryptPasswordLength),
+];
+
 module.exports = {
   registerValidator,
   loginValidator,
   updateProfileValidator,
   changePasswordValidator,
   refreshTokenValidator,
+  forgotPasswordValidator,
+  resetPasswordValidator,
 };
