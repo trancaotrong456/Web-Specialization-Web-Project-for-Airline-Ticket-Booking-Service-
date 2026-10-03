@@ -17,14 +17,14 @@ test('auth module exposes exactly the implemented report endpoints', () => {
     { path: '/register', methods: ['post'] },
     { path: '/login', methods: ['post'] },
     { path: '/refresh-token', methods: ['post'] },
-    { path: '/forgot-password', methods: ['post'] },
-    { path: '/reset-password', methods: ['post'] },
     { path: '/logout', methods: ['post'] },
     { path: '/me', methods: ['get'] },
     { path: '/me', methods: ['put'] },
     { path: '/change-password', methods: ['put'] },
   ]);
 
+  assert.equal(routes.some((route) => route.path === '/forgot-password'), false);
+  assert.equal(routes.some((route) => route.path === '/reset-password'), false);
 });
 
 test('profile, password, and logout endpoints require authentication', () => {
