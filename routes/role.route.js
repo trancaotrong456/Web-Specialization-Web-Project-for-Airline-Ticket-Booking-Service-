@@ -4,11 +4,17 @@ const roleController = require('../controllers/role.controller');
 const authenticate = require('../middlewares/auth.middleware');
 const authorize = require('../middlewares/rbac.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { roleIdValidator } = require('../validators/role.validator');
+const {
+  roleIdValidator,
+  createRoleValidator,
+  updateRoleValidator,
+} = require('../validators/role.validator');
 
-// Role metadata is read-only in the implemented project scope.
 router.use(authenticate, authorize('admin'));
+router.post('/', createRoleValidator, validate, roleController.createRole);
 router.get('/', roleController.getAllRoles);
 router.get('/:id', roleIdValidator, validate, roleController.getRoleById);
+router.put('/:id', updateRoleValidator, validate, roleController.updateRole);
+router.delete('/:id', roleIdValidator, validate, roleController.deleteRole);
 
 module.exports = router;
