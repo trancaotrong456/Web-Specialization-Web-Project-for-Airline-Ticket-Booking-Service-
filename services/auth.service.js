@@ -295,52 +295,57 @@ class AuthService {
       ? configuredMinutes
       : 30;
 
+    let resetUrl;
+    try {
+      resetUrl = this._passwordResetUrl(rawToken);
+    } catch (error) {
+      console.error(`[AUTH] Password reset URL configuration failed: ${error.message}`);
+      return genericResult;
+    }
+
     user.reset_token = tokenHash;
     user.reset_token_expires_at = new Date(Date.now() + expiresMinutes * 60 * 1000);
     await user.save();
 
-    try {
-      const resetUrl = this._passwordResetUrl(rawToken);
-      await emailService.sendMail({
-        to: user.email,
-        subject: '[Airline Booking] Đặt lại mật khẩu',
-        html: `
-          <h2>Đặt lại mật khẩu</h2>
-          <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
-          <p><a href="${resetUrl}">Đặt lại mật khẩu</a></p>
-          <p>Liên kết này hết hạn sau ${expiresMinutes} phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
-        `,
-      });
-    } catch (error) {
-      user.reset_token = null;
-      user.reset_token_expires_at = null;
-      await user.save();
-      throw error;
-    }
+    void emailService.sendMail({
+      to: user.email,
+      subject: '[Airline Booking] Đặt lại mật khẩu',
+      html: `
+        <h2>Đặt lại mật khẩu</h2>
+        <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+        <p><a href="${resetUrl}">Đặt lại mật khẩu</a></p>
+        <p>Liên kết này hết hạn sau ${expiresMinutes} phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+      `,
+    }).catch((error) => {
+      // Never expose provider availability only for registered accounts.
+      // Operational failures remain server-side while the public response is uniform.
+      console.error(`[AUTH] Password reset email failed: ${error.message}`);
+    });
 
     return genericResult;
   }
 
   async resetPassword(rawToken, newPassword) {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const user = await User.findOne({
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const [updatedRows] = await User.update({
+      password_hash: passwordHash,
+      reset_token: null,
+      reset_token_expires_at: null,
+      refresh_token: null,
+    }, {
       where: {
         reset_token: tokenHash,
         reset_token_expires_at: { [Op.gt]: new Date() },
+        status: 'active',
       },
     });
 
-    if (!user) {
+    if (updatedRows !== 1) {
       const error = new Error('Reset token is invalid or has expired');
       error.statusCode = 400;
       throw error;
     }
-
-    user.password_hash = await bcrypt.hash(newPassword, 10);
-    user.reset_token = null;
-    user.reset_token_expires_at = null;
-    user.refresh_token = null;
-    await user.save();
 
     return { message: 'Password reset successfully. Please log in again.' };
   }
