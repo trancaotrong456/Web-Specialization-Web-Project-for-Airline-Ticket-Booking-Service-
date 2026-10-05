@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const roleRouter = require('../routes/role.route');
 
-test('role module exposes the documented CRUD and read endpoints', () => {
+test('role module exposes the assigned CRUD and read endpoints', () => {
   const globalMiddleware = roleRouter.stack.filter((layer) => !layer.route);
   const routes = roleRouter.stack
     .filter((layer) => layer.route)
