@@ -1,0 +1,33 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
+
+:root {
+  color-scheme: light;
+  font-family: 'Plus Jakarta Sans', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --color-primary: #0f6b66;
+  --color-primary-dark: #0a4946;
+  --color-secondary: #f8a33d;
+  --color-neutral: #4b5563;
+  --color-background: #eef4ff;
+  --color-surface: #ffffff;
+  --color-text: #121c28;
+  --color-muted: #5f6b76;
+  --color-border: #d8e2ed;
+  --color-danger: #c62828;
+  --color-success: #0f6b66;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
+  --space-6: 2rem;
+  --space-7: 2.5rem;
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.5rem;
+  --shadow-card: 0 10px 30px -12px rgb(15 107 102 / 20%);
+  --focus-ring: 0 0 0 3px rgb(15 107 102 / 22%);
+  --content-width: 80rem;
+  --breakpoint-tablet: 48rem;
+  --breakpoint-desktop: 64rem;
+}
