@@ -5,7 +5,15 @@ const authenticate = require('../middlewares/auth.middleware');
 const optionalAuth = require('../middlewares/optionalAuth.middleware');
 const authorize = require('../middlewares/rbac.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { initiatePaymentValidator, refundValidator } = require('../validators/payment.validator');
+const {
+  initiatePaymentValidator,
+  refundValidator,
+  paymentListValidator,
+  paymentIdValidator,
+} = require('../validators/payment.validator');
+
+// Administrative payment history and detail (report Table 2.1).
+router.get('/', authenticate, authorize('admin'), paymentListValidator, validate, paymentController.getAllPayments);
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);
@@ -20,6 +28,10 @@ router.get('/vnpay/ipn', paymentController.vnpayIpn);
 router.get('/payos/return', paymentController.payosReturn);
 router.post('/payos/webhook', paymentController.payosWebhook);
 router.post('/payos/demo-webhook', paymentController.payosDemoWebhook);
+
+// Keep this parameter route after named gateway routes so, for example,
+// `/vnpay/return` is never interpreted as a payment id.
+router.get('/:id', authenticate, authorize('admin'), paymentIdValidator, validate, paymentController.getPaymentById);
 
 // Admin only: Refund a confirmed booking (Quy tắc nghiệp vụ 1, Chức năng 3)
 router.post('/bookings/:id/refund', authenticate, authorize('admin'), refundValidator, validate, paymentController.refund);
