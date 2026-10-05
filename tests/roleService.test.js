@@ -182,14 +182,15 @@ test('role deletion is blocked while users are assigned', async () => {
   const originalCount = User.count;
   let destroyed = false;
   Role.findByPk = async () => ({
-    id: 3,
+    id: 8,
+    name: 'support',
     async destroy() { destroyed = true; },
   });
   User.count = async () => 2;
 
   try {
     await assert.rejects(
-      roleService.deleteRole(3),
+      roleService.deleteRole(8),
       (error) => error.statusCode === 409 && error.message.includes('assigned'),
     );
     assert.equal(destroyed, false);
@@ -224,12 +225,13 @@ test('system roles cannot be deleted even when they are temporarily unassigned',
   }
 });
 
-test('unassigned roles can be deleted', async () => {
+test('unassigned custom roles can be deleted', async () => {
   const originalFindByPk = Role.findByPk;
   const originalCount = User.count;
   let destroyed = false;
   Role.findByPk = async () => ({
     id: 7,
+    name: 'support',
     async destroy() { destroyed = true; },
   });
   User.count = async () => 0;

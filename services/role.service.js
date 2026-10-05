@@ -20,8 +20,6 @@ class RoleService {
     try {
       return await Role.create(values);
     } catch (error) {
-      // The unique index is authoritative when concurrent requests pass the
-      // friendly pre-check at the same time.
       if (error.name === 'SequelizeUniqueConstraintError') {
         const conflict = new Error('Role name already exists');
         conflict.statusCode = 409;
@@ -61,11 +59,7 @@ class RoleService {
     }
 
     const values = normalizeRolePayload(payload);
-    if (
-      values.name
-      && values.name !== role.name
-      && SYSTEM_ROLE_NAMES.has(role.name)
-    ) {
+    if (values.name && values.name !== role.name && SYSTEM_ROLE_NAMES.has(role.name)) {
       const error = new Error(`The system role '${role.name}' cannot be renamed`);
       error.statusCode = 409;
       throw error;
@@ -108,6 +102,7 @@ class RoleService {
     await role.destroy();
     return { id: role.id };
   }
+
 }
 
 module.exports = new RoleService();

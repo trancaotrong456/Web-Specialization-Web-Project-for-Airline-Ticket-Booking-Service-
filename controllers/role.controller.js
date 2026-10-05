@@ -46,6 +46,7 @@ class RoleController {
       next(error);
     }
   }
+
 }
 
 module.exports = new RoleController();
