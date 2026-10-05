@@ -564,21 +564,19 @@ class BookingService {
   /**
    * Admin/Staff: Get all bookings
    */
-  async getAllBookings({ page = 1, limit = 10, status, search }) {
-    const offset = (page - 1) * limit;
+  async getAllBookings({ page = 1, limit = 10, status }) {
+    const offset = (Number(page) - 1) * Number(limit);
+  
     const where = {};
-    if (status) where.status = status;
-    if (search) {
-      where[Op.or] = [
-        { booking_code: { [Op.like]: `%${search}%` } },
-        { guest_email: { [Op.like]: `%${search}%` } },
-      ];
+  
+    if (status) {
+      where.status = status;
     }
-
+  
     const { count, rows } = await Booking.findAndCountAll({
       where,
       limit: Number(limit),
-      offset: Number(offset),
+      offset,
       order: [['created_at', 'DESC']],
       include: [
         {
@@ -590,17 +588,30 @@ class BookingService {
             { model: Airport, as: 'arrivalAirport' },
           ],
         },
-        { model: FareClass, as: 'fareClass' },
-        { model: BookingPassenger, as: 'passengers' },
-        { model: Payment, as: 'payments' },
-        { model: User, as: 'user', attributes: ['id', 'full_name', 'email'] },
+        {
+          model: FareClass,
+          as: 'fareClass',
+        },
+        {
+          model: BookingPassenger,
+          as: 'passengers',
+        },
+        {
+          model: Payment,
+          as: 'payments',
+        },
+        {
+          model: User,
+          as: 'user',
+          attributes: ['id', 'full_name', 'email'],
+        },
       ],
     });
-
+  
     return {
       total: count,
-      page,
-      limit,
+      page: Number(page),
+      limit: Number(limit),
       data: rows,
     };
   }
