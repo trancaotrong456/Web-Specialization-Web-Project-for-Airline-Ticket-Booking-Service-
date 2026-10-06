@@ -87,6 +87,20 @@ class PaymentController {
     }
   }
 
+  // Revenue Statistics (Admin)
+  async getRevenue(req, res, next) {
+    try {
+      const result = await paymentService.getRevenue(req.query);
+
+      return ApiResponse.success(
+        res,
+        result,
+        'Revenue statistics retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
   // Refund Endpoint (Admin / Staff)
   async refund(req, res, next) {
     try {
