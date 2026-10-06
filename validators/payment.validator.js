@@ -1,4 +1,4 @@
-const { body, param } = require('express-validator');
+const { body, param, query } = require('express-validator');
 
 const initiatePaymentValidator = [
   body('booking_id')
@@ -35,7 +35,31 @@ const refundValidator = [
     .withMessage('Reason must be a string'),
 ];
 
+const revenueValidator = [
+  query('from_date')
+    .notEmpty()
+    .withMessage('from_date is required')
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('from_date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true, strictSeparator: true })
+    .withMessage('from_date must be a valid date'),
+
+  query('to_date')
+    .notEmpty()
+    .withMessage('to_date is required')
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('to_date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true, strictSeparator: true })
+    .withMessage('to_date must be a valid date'),
+
+  query('group_by')
+    .notEmpty()
+    .withMessage('group_by is required')
+    .isIn(['day', 'month'])
+    .withMessage('group_by must be either day or month'),
+];
 module.exports = {
   initiatePaymentValidator,
   refundValidator,
+  revenueValidator,
 };

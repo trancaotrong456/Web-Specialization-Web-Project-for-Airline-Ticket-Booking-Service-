@@ -5,7 +5,11 @@ const authenticate = require('../middlewares/auth.middleware');
 const optionalAuth = require('../middlewares/optionalAuth.middleware');
 const authorize = require('../middlewares/rbac.middleware');
 const validate = require('../middlewares/validate.middleware');
-const { initiatePaymentValidator, refundValidator } = require('../validators/payment.validator');
+const {
+    initiatePaymentValidator,
+    refundValidator,
+    revenueValidator,
+} = require('../validators/payment.validator');
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);
@@ -20,6 +24,16 @@ router.get('/vnpay/ipn', paymentController.vnpayIpn);
 router.get('/payos/return', paymentController.payosReturn);
 router.post('/payos/webhook', paymentController.payosWebhook);
 router.post('/payos/demo-webhook', paymentController.payosDemoWebhook);
+
+// Admin only: Revenue statistics by day/month
+router.get(
+    '/revenue',
+    authenticate,
+    authorize('admin'),
+    revenueValidator,
+    validate,
+    paymentController.getRevenue
+);
 
 // Admin only: Refund a confirmed booking (Quy tắc nghiệp vụ 1, Chức năng 3)
 router.post('/bookings/:id/refund', authenticate, authorize('admin'), refundValidator, validate, paymentController.refund);
