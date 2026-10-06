@@ -12,6 +12,8 @@ import { UsersPage } from '../features/users/UsersPage';
 import { UserDetailPage } from '../features/users/UserDetailPage';
 import { RolesPage } from '../features/roles/RolesPage';
 import { RoleDetailPage } from '../features/roles/RoleDetailPage';
+import { HomePage } from '../features/flights/HomePage';
+import { FlightResultsPage } from '../features/flights/FlightResultsPage';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -36,6 +38,8 @@ function PublicOnlyRoute() {
 export function AppRoutes() {
   return (
     <Routes>
+      <Route path="/" element={<HomePage />} />
+      <Route path="/flights/search" element={<FlightResultsPage />} />
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -55,7 +59,6 @@ export function AppRoutes() {
       </Route>
 
       <Route path="/forbidden" element={<RoutePage title="Không có quyền truy cập" description="Tài khoản của bạn không được phép mở khu vực này." />} />
-      <Route path="/" element={<Navigate to="/login" replace />} />
       <Route path="*" element={<RoutePage title="Không tìm thấy trang" />} />
     </Routes>
   );
