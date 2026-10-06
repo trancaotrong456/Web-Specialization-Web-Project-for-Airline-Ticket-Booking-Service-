@@ -27,8 +27,17 @@ class BookingController {
 
   async getBookingById(req, res, next) {
     try {
-      const booking = await bookingService.getBookingById(req.params.id, req.user || null, req.query.email);
-      return ApiResponse.success(res, booking, 'Booking details retrieved successfully');
+      const booking = await bookingService.getBookingById(
+        req.params.id,
+        req.user || null,
+        req.query.guest_email
+      );
+
+      return ApiResponse.success(
+        res,
+        booking,
+        'Booking details retrieved successfully'
+      );
     } catch (error) {
       next(error);
     }

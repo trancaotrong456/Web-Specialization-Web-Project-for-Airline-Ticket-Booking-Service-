@@ -53,7 +53,17 @@ const listBookingValidator = [
 ];
 
 const bookingAccessEmailValidator = [
-  query('email').optional().trim().isEmail().withMessage('email must be a valid email if provided'),
+  param('id')
+    .isInt({ min: 1 })
+    .withMessage('booking_id must be a positive integer'),
+
+  query('guest_email')
+    .optional()
+    .trim()
+    .isEmail()
+    .withMessage('guest_email must be a valid email if provided')
+    .isLength({ max: 191 })
+    .withMessage('guest_email must not exceed 191 characters'),
 ];
 
 // Public lookup is intentionally limited to guest bookings and must include
