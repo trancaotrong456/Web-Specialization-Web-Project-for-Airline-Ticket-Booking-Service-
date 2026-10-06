@@ -5,14 +5,14 @@ export function AuthLayout({ eyebrow, title, description, children }) {
     <main className="auth-page">
       <section className="auth-panel" aria-labelledby="auth-title">
         <aside className="auth-visual" aria-label="Airline Booking">
-          <Link className="auth-brand" to="/login" aria-label="Airline Booking">
+          <Link className="auth-brand" to="/" aria-label="Serene Flightways - Trang chủ">
             <span className="auth-brand-mark" aria-hidden="true">✈</span>
-            <span><strong>Airline Booking</strong><small>Serene Flightways</small></span>
+            <span><strong>Serene Flightways</strong><small>Airline Booking</small></span>
           </Link>
           <div className="auth-visual-copy">
-            <span className="auth-chip">Tài khoản Airline Booking</span>
+            <span className="auth-chip">Serene Flightways</span>
             <h2>Tài khoản của bạn, truy cập an tâm.</h2>
-            <p>Cập nhật hồ sơ, đổi mật khẩu và quản lý phiên đăng nhập của bạn.</p>
+            <p>Đăng nhập để quản lý hồ sơ và bảo mật tài khoản của bạn.</p>
           </div>
           <div className="auth-route-card" aria-hidden="true">
             <span>SGN</span><span>✈</span><span>HAN</span>

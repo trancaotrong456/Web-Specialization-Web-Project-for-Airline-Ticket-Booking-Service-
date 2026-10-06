@@ -39,7 +39,7 @@ describe('public authentication pages', () => {
   it('describes the available account features without promising flight management', () => {
     renderPage('/login');
     expect(screen.getByText('Tài khoản của bạn, truy cập an tâm.')).toBeInTheDocument();
-    expect(screen.getByText('Cập nhật hồ sơ, đổi mật khẩu và quản lý phiên đăng nhập của bạn.')).toBeInTheDocument();
+    expect(screen.getByText('Đăng nhập để quản lý hồ sơ và bảo mật tài khoản của bạn.')).toBeInTheDocument();
     expect(screen.queryByText(/Quản lý tài khoản và thông tin chuyến bay/)).not.toBeInTheDocument();
   });
   it('validates required login fields before making a request', async () => {
@@ -156,7 +156,7 @@ describe('public authentication pages', () => {
   it('blocks reset submission when the URL has no reset token', async () => {
     renderPage('/reset-password');
 
-    expect(screen.getByText('Liên kết đặt lại mật khẩu không hợp lệ hoặc đã thiếu token.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent(/hết hạn/);
     expect(screen.getByRole('button', { name: 'Đặt lại mật khẩu' })).toBeDisabled();
   });
 

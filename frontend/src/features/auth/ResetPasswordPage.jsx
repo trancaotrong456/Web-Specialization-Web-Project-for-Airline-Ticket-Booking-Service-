@@ -45,7 +45,7 @@ export function ResetPasswordPage() {
 
   return (
     <AuthLayout eyebrow="Bảo mật tài khoản" title="Đặt lại mật khẩu" description="Chọn mật khẩu mới cho tài khoản của bạn.">
-      {!validToken ? <Notice type="error">Liên kết đặt lại mật khẩu không hợp lệ hoặc đã thiếu token.</Notice> : null}
+      {!validToken ? <Notice type="error">Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.</Notice> : null}
       {message ? <Notice type={message.startsWith('Đặt lại') ? 'success' : 'error'}>{message}</Notice> : null}
       <form className="form-stack" onSubmit={submit} noValidate>
         <Field id="reset-password" name="new_password" label="Mật khẩu mới" type="password" autoComplete="new-password" value={form.new_password} onChange={update} error={errors.new_password} />
