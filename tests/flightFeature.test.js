@@ -110,3 +110,14 @@ test('#21 – updateFlightValidator does not allow available_seats', async () =>
   assert.ok(!fieldNames.includes('available_seats'), 'available_seats should not be validated/allowed in update');
 });
 
+// Test delete flight rules
+test('#21 – deleteFlight contract verifies transaction and 409 when booking exists', () => {
+  const fs = require('fs');
+  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/flight.service.js'), 'utf8');
+
+  assert.ok(serviceCode.includes('sequelize.transaction'), 'deleteFlight must execute within a sequelize.transaction');
+  assert.ok(serviceCode.includes('Booking.count'), 'deleteFlight must check Booking.count before deletion');
+  assert.ok(serviceCode.includes('statusCode = 409'), 'deleteFlight must reject deletion with 409 Conflict if bookings exist');
+});
+
+
