@@ -1,4 +1,4 @@
-const { FareClass } = require('../models');
+const { FareClass, Flight, Booking } = require('../models');
 
 class FareClassService {
   async getByFlight(flight_id) {
@@ -6,12 +6,20 @@ class FareClassService {
   }
 
   async getById(id) {
-    const fc = await FareClass.findByPk(id);
+    const fc = await FareClass.findByPk(id, {
+      include: [{ model: Flight, as: 'flight' }],
+    });
     if (!fc) { const error = new Error('Fare class not found'); error.statusCode = 404; throw error; }
     return fc;
   }
 
   async create(data) {
+    const flight = await Flight.findByPk(data.flight_id);
+    if (!flight) {
+      const error = new Error('Flight not found');
+      error.statusCode = 404;
+      throw error;
+    }
     return FareClass.create(data);
   }
 
