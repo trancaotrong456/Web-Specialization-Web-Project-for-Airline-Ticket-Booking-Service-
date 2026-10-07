@@ -48,3 +48,33 @@ test('#24 – createFareClassValidator validates input', async () => {
   const validResult = validationResult(validReq);
   assert.ok(validResult.isEmpty(), 'Valid payload must pass validation');
 });
+
+test('#24 – updateFareClassValidator validates edit payload', async () => {
+  const { validationResult } = require('express-validator');
+  const { updateFareClassValidator } = require('../validators/fareClass.validator');
+
+  const invalidReq = {
+    body: {
+      price: -500,
+      seat_quota: -1,
+    },
+  };
+  for (const middleware of updateFareClassValidator) {
+    await middleware(invalidReq, {}, () => {});
+  }
+  const result = validationResult(invalidReq);
+  assert.ok(!result.isEmpty(), 'Negative price/seats must fail validation');
+
+  const validReq = {
+    body: {
+      price: 2000000,
+      seat_quota: 120,
+    },
+  };
+  for (const middleware of updateFareClassValidator) {
+    await middleware(validReq, {}, () => {});
+  }
+  const validResult = validationResult(validReq);
+  assert.ok(validResult.isEmpty(), 'Valid update payload must pass');
+});
+
