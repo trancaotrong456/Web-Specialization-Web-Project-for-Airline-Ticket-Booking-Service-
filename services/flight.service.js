@@ -52,9 +52,11 @@ class FlightService {
     if (min_seats) where.available_seats = { [Op.gte]: Number(min_seats) };
 
     if (departure_date) {
-      const dateStart = new Date(departure_date);
-      const dateEnd = new Date(departure_date);
-      dateEnd.setDate(dateEnd.getDate() + 1);
+      // Lọc theo ngày giờ Việt Nam (UTC+7): "YYYY-MM-DD" VN → khoảng UTC
+      const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+      // Đầu ngày VN = 00:00 VN = (ngày T 00:00 UTC - 7h) → UTC = ngày T-1 17:00
+      const dateStart = new Date(new Date(departure_date).getTime() - VN_OFFSET_MS);
+      const dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
       where.departure_time = { [Op.gte]: dateStart, [Op.lt]: dateEnd };
     }
 
