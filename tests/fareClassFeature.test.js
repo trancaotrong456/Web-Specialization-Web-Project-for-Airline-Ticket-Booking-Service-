@@ -78,3 +78,12 @@ test('#24 – updateFareClassValidator validates edit payload', async () => {
   assert.ok(validResult.isEmpty(), 'Valid update payload must pass');
 });
 
+test('#24 – delete fare class checks bookings and throws 409', () => {
+  const fs = require('fs');
+  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/fareClass.service.js'), 'utf8');
+
+  assert.ok(serviceCode.includes('Booking.count'), 'delete must check Booking count before deleting');
+  assert.ok(serviceCode.includes('statusCode = 409'), 'delete must throw 409 if bookings exist');
+});
+
+
