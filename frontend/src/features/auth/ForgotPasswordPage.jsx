@@ -33,11 +33,18 @@ export function ForgotPasswordPage() {
   };
 
   return (
-    <AuthLayout eyebrow="Khôi phục tài khoản" title="Quên mật khẩu" description="Nhập email tài khoản để nhận hướng dẫn đặt lại mật khẩu.">
+    <AuthLayout
+      variant="forgot"
+      eyebrow="Khôi phục tài khoản"
+      title="Quên mật khẩu"
+      description="Nhập email đã đăng ký để nhận hướng dẫn đặt lại mật khẩu."
+      visualHeadline="Lấy lại quyền truy cập, tiếp tục hành trình."
+      visualDescription="Nhập email đã đăng ký để nhận hướng dẫn khôi phục mật khẩu."
+    >
       <Notice type={message.startsWith('Nếu email') ? 'success' : 'error'}>{message}</Notice>
       <form className="form-stack" onSubmit={submit} noValidate>
         <Field id="forgot-email" label="Email" type="email" autoComplete="email" value={email} onChange={(event) => { setEmail(event.target.value); setError(''); }} error={error} />
-        <button className="button button-primary" type="submit" disabled={pending}>{pending ? 'Đang gửi…' : 'Gửi hướng dẫn'}</button>
+        <button className="button button-primary auth-submit" type="submit" disabled={pending}>{pending ? 'Đang gửi…' : 'Gửi hướng dẫn'}</button>
       </form>
       <p className="auth-switch"><Link to="/login">Quay lại đăng nhập</Link></p>
     </AuthLayout>
