@@ -86,3 +86,27 @@ test('#21 – createFlightValidator rejects arrival before departure', async () 
   assert.ok(!result.isEmpty(), 'Validation should fail when arrival <= departure');
   assert.ok(result.array().some((err) => err.msg.includes('arrival_time must be after departure_time')));
 });
+
+// Test edit flight business rules
+test('#21 – updateFlight rejects direct mutation of available_seats (400)', async () => {
+  const flightService = require('../services/flight.service');
+  await assert.rejects(
+    async () => {
+      await flightService.updateFlight(1, { available_seats: 99 });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('available_seats'));
+      return true;
+    }
+  );
+});
+
+test('#21 – updateFlightValidator does not allow available_seats', async () => {
+  const { updateFlightValidator } = require('../validators/flight.validator');
+  assert.ok(Array.isArray(updateFlightValidator));
+  // Ensure available_seats is not in update validators
+  const fieldNames = updateFlightValidator.map((v) => v.builder?.fields?.[0] || '');
+  assert.ok(!fieldNames.includes('available_seats'), 'available_seats should not be validated/allowed in update');
+});
+
