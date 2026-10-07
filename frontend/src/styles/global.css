@@ -491,6 +491,436 @@ a {
   }
 }
 
+/* Login, registration, and recovery share the aviation visual system while
+   keeping their page-specific copy and form flows distinct. */
+.auth-page--login,
+.auth-page--register,
+.auth-page--forgot {
+  min-height: 100svh;
+  padding: clamp(0.75rem, 2.4vw, 2rem);
+  background: #edf2f4;
+}
+
+.auth-page--login .auth-panel,
+.auth-page--register .auth-panel,
+.auth-page--forgot .auth-panel {
+  width: min(100%, 88rem);
+  min-height: min(50rem, calc(100svh - 2.5rem));
+  grid-template-columns: minmax(0, 42fr) minmax(0, 58fr);
+  border: 1px solid rgb(9 49 57 / 10%);
+  border-radius: 1.15rem;
+  box-shadow: 0 26px 72px rgb(6 34 43 / 16%);
+}
+
+.auth-page--login .auth-visual,
+.auth-page--register .auth-visual,
+.auth-page--forgot .auth-visual {
+  isolation: isolate;
+  padding: clamp(1.75rem, 4vw, 3.5rem);
+  background-color: #082f3b;
+  background-image:
+    linear-gradient(180deg, rgb(4 27 36 / 24%) 0%, rgb(5 35 42 / 45%) 49%, rgb(5 31 39 / 90%) 100%),
+    linear-gradient(90deg, rgb(4 37 43 / 28%), rgb(4 37 43 / 5%) 76%),
+    url('/images/auth-aircraft-window.png');
+  background-position: center;
+  background-size: cover;
+}
+
+.auth-page--login .auth-visual::after,
+.auth-page--register .auth-visual::after,
+.auth-page--forgot .auth-visual::after {
+  display: none;
+}
+
+.auth-page--login .auth-brand,
+.auth-page--register .auth-brand,
+.auth-page--forgot .auth-brand {
+  width: fit-content;
+}
+
+.auth-page--login .auth-brand-mark,
+.auth-page--register .auth-brand-mark,
+.auth-page--forgot .auth-brand-mark {
+  width: 3rem;
+  height: 3rem;
+  border-radius: 0.7rem;
+  background: rgb(7 99 94 / 78%);
+  border-color: rgb(255 255 255 / 25%);
+  font-size: 1.45rem;
+}
+
+.auth-page--login .auth-visual-copy,
+.auth-page--register .auth-visual-copy,
+.auth-page--forgot .auth-visual-copy {
+  max-width: 34rem;
+  margin-block: auto;
+}
+
+.auth-page--login .auth-chip,
+.auth-page--register .auth-chip,
+.auth-page--forgot .auth-chip {
+  background: rgb(255 255 255 / 12%);
+  border-color: rgb(255 255 255 / 20%);
+  color: #ffd28e;
+  letter-spacing: 0.06em;
+}
+
+.auth-page--login .auth-visual-copy h2,
+.auth-page--register .auth-visual-copy h2,
+.auth-page--forgot .auth-visual-copy h2 {
+  margin: 1.25rem 0 0.9rem;
+  font-size: clamp(2.35rem, 4.1vw, 3.65rem);
+  font-weight: 700;
+  letter-spacing: -0.045em;
+  line-height: 1.08;
+  text-wrap: balance;
+}
+
+.auth-page--login .auth-visual-copy p,
+.auth-page--register .auth-visual-copy p,
+.auth-page--forgot .auth-visual-copy p {
+  max-width: 28rem;
+  margin: 0;
+  color: rgb(255 255 255 / 84%);
+  font-size: 1.03rem;
+  line-height: 1.7;
+}
+
+.auth-page--login .auth-route-card {
+  gap: 0.85rem;
+  min-width: 13.5rem;
+  justify-content: space-between;
+  padding: 0.9rem 1.1rem;
+  background: rgb(5 30 39 / 52%);
+  border-color: rgb(255 255 255 / 24%);
+  border-radius: 0.75rem;
+  backdrop-filter: blur(0.8rem);
+}
+
+.auth-route-line {
+  position: relative;
+  width: 5.25rem;
+  height: 1px;
+  border-top: 1px dashed rgb(255 255 255 / 65%);
+}
+
+.auth-route-line span {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  padding: 0 0.35rem;
+  color: #ffd28e;
+  background: #123d46;
+  font-size: 1rem;
+  transform: translate(-50%, -50%);
+}
+
+.auth-benefits {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.auth-benefits li {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  width: fit-content;
+  color: rgb(255 255 255 / 92%);
+  font-size: 0.9rem;
+}
+
+.auth-benefits li > span {
+  display: grid;
+  width: 1.65rem;
+  height: 1.65rem;
+  place-items: center;
+  border: 1px solid rgb(255 210 142 / 55%);
+  border-radius: 50%;
+  color: #ffd28e;
+  background: rgb(255 255 255 / 9%);
+  font-size: 0.75rem;
+  font-weight: 800;
+}
+
+.auth-page--login .auth-form-pane,
+.auth-page--register .auth-form-pane,
+.auth-page--forgot .auth-form-pane {
+  align-items: center;
+  padding: clamp(2rem, 5.5vw, 5rem);
+  background: #fff;
+}
+
+.auth-page--login .auth-form-wrap,
+.auth-page--register .auth-form-wrap,
+.auth-page--forgot .auth-form-wrap {
+  width: min(100%, 34rem);
+}
+
+.auth-home-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  margin-bottom: clamp(2.5rem, 6vh, 4.75rem);
+  color: #31545a;
+  font-size: 0.9rem;
+  font-weight: 650;
+  text-decoration: none;
+  transition: color 150ms ease, transform 150ms ease;
+}
+
+.auth-home-link:hover {
+  color: var(--color-primary-dark);
+  transform: translateX(-2px);
+}
+
+.auth-page--login .eyebrow,
+.auth-page--register .eyebrow,
+.auth-page--forgot .eyebrow {
+  display: block;
+  margin-bottom: 0.35rem;
+  color: #176e68;
+  font-size: 0.75rem;
+  letter-spacing: 0.13em;
+}
+
+.auth-page--login .auth-form-wrap h1,
+.auth-page--register .auth-form-wrap h1,
+.auth-page--forgot .auth-form-wrap h1 {
+  margin: 0.4rem 0 0.55rem;
+  color: #102c35;
+  font-size: clamp(2.25rem, 4vw, 3rem);
+  font-weight: 750;
+  letter-spacing: -0.045em;
+  line-height: 1.12;
+}
+
+.auth-page--login .auth-description,
+.auth-page--register .auth-description,
+.auth-page--forgot .auth-description {
+  margin: 0 0 2rem;
+  color: #65747a;
+  font-size: 0.98rem;
+  line-height: 1.65;
+}
+
+.auth-page--login .form-stack,
+.auth-page--register .form-stack,
+.auth-page--forgot .form-stack {
+  gap: 1.1rem;
+}
+
+.auth-page--login .field label,
+.auth-page--register .field label,
+.auth-page--forgot .field label {
+  color: #203b42;
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.auth-page--login .field input,
+.auth-page--register .field input,
+.auth-page--forgot .field input {
+  min-height: 3.2rem;
+  border-color: #d9e1e3;
+  border-radius: 0.65rem;
+}
+
+.auth-page--login .field input:focus,
+.auth-page--register .field input:focus,
+.auth-page--forgot .field input:focus {
+  border-color: #287d77;
+  box-shadow: 0 0 0 3px rgb(40 125 119 / 14%);
+}
+
+.auth-page--login .checkbox-label {
+  color: #5f6d72;
+}
+
+.auth-page--login .checkbox-label input {
+  accent-color: #176e68;
+}
+
+.auth-page--login .auth-submit,
+.auth-page--register .auth-submit,
+.auth-page--forgot .auth-submit {
+  width: 100%;
+  min-height: 3.25rem;
+  margin-top: 0.25rem;
+  border-radius: 0.65rem;
+  color: #2f210e;
+  background: #e8a33e;
+  box-shadow: 0 8px 18px rgb(189 119 31 / 18%);
+}
+
+.auth-page--login .auth-submit:hover:not(:disabled),
+.auth-page--register .auth-submit:hover:not(:disabled),
+.auth-page--forgot .auth-submit:hover:not(:disabled) {
+  background: #f0b04e;
+}
+
+.auth-page--login .auth-switch,
+.auth-page--register .auth-switch,
+.auth-page--forgot .auth-switch {
+  margin-top: 1.5rem;
+  color: #68767b;
+  font-size: 0.9rem;
+}
+
+.auth-page--login .auth-switch a,
+.auth-page--register .auth-switch a,
+.auth-page--forgot .auth-switch a,
+.auth-page--login .form-row a,
+.auth-page--register .form-row a {
+  color: #155e5a;
+}
+
+.auth-page--register .form-grid {
+  align-items: start;
+}
+
+@media (max-width: 56rem) {
+  .auth-page--login,
+  .auth-page--register,
+  .auth-page--forgot {
+    padding: 0;
+  }
+
+  .auth-page--login .auth-panel,
+  .auth-page--register .auth-panel,
+  .auth-page--forgot .auth-panel {
+    width: min(100%, 48rem);
+    min-height: 100svh;
+    grid-template-columns: 1fr;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .auth-page--login .auth-visual,
+  .auth-page--register .auth-visual,
+  .auth-page--forgot .auth-visual {
+    min-height: 18rem;
+    padding: 1.5rem 2rem;
+  }
+
+  .auth-page--login .auth-visual-copy,
+  .auth-page--register .auth-visual-copy,
+  .auth-page--forgot .auth-visual-copy {
+    margin-block: 1.35rem;
+  }
+
+  .auth-page--login .auth-visual-copy h2,
+  .auth-page--register .auth-visual-copy h2,
+  .auth-page--forgot .auth-visual-copy h2 {
+    max-width: 28rem;
+    margin: 0.8rem 0 0.45rem;
+    font-size: clamp(1.9rem, 5vw, 2.6rem);
+  }
+
+  .auth-page--login .auth-visual-copy p,
+  .auth-page--register .auth-visual-copy p,
+  .auth-page--forgot .auth-visual-copy p {
+    display: block;
+    font-size: 0.9rem;
+  }
+
+  .auth-page--login .auth-route-card {
+    display: flex;
+    padding: 0.65rem 0.9rem;
+  }
+
+  .auth-page--register .auth-benefits {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem 1.25rem;
+  }
+
+  .auth-page--login .auth-form-pane,
+  .auth-page--register .auth-form-pane,
+  .auth-page--forgot .auth-form-pane {
+    padding: 2.25rem clamp(1.5rem, 8vw, 4rem) 3rem;
+  }
+
+  .auth-home-link {
+    margin-bottom: 2rem;
+  }
+
+  .auth-page--register .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 36rem) {
+  .auth-page--login .auth-visual,
+  .auth-page--register .auth-visual,
+  .auth-page--forgot .auth-visual {
+    min-height: 15.5rem;
+    padding: 1.1rem 1.25rem;
+  }
+
+  .auth-page--login .auth-brand-mark,
+  .auth-page--register .auth-brand-mark,
+  .auth-page--forgot .auth-brand-mark {
+    width: 2.5rem;
+    height: 2.5rem;
+  }
+
+  .auth-page--login .auth-brand small,
+  .auth-page--register .auth-brand small,
+  .auth-page--forgot .auth-brand small {
+    font-size: 0.6rem;
+  }
+
+  .auth-page--login .auth-visual-copy,
+  .auth-page--register .auth-visual-copy,
+  .auth-page--forgot .auth-visual-copy {
+    margin-block: 0.8rem;
+  }
+
+  .auth-page--login .auth-visual-copy h2,
+  .auth-page--register .auth-visual-copy h2,
+  .auth-page--forgot .auth-visual-copy h2 {
+    margin: 0.55rem 0 0.35rem;
+    font-size: 1.55rem;
+  }
+
+  .auth-page--login .auth-visual-copy p,
+  .auth-page--register .auth-visual-copy p,
+  .auth-page--forgot .auth-visual-copy p {
+    font-size: 0.82rem;
+    line-height: 1.45;
+  }
+
+  .auth-page--login .auth-route-card {
+    display: none;
+  }
+
+  .auth-page--register .auth-benefits {
+    gap: 0.35rem 0.85rem;
+  }
+
+  .auth-page--register .auth-benefits li {
+    gap: 0.4rem;
+    font-size: 0.75rem;
+  }
+
+  .auth-page--register .auth-benefits li > span {
+    width: 1.25rem;
+    height: 1.25rem;
+    font-size: 0.65rem;
+  }
+
+  .auth-page--login .auth-form-pane,
+  .auth-page--register .auth-form-pane,
+  .auth-page--forgot .auth-form-pane {
+    padding: 1.75rem 1.25rem 2.5rem;
+  }
+}
+
 .account-page {
   min-height: 100vh;
   background: var(--color-background);

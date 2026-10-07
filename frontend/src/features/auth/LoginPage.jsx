@@ -41,7 +41,14 @@ export function LoginPage() {
   };
 
   return (
-    <AuthLayout eyebrow="Chào mừng trở lại" title="Đăng nhập" description="Đăng nhập để quản lý hồ sơ và tài khoản của bạn.">
+    <AuthLayout
+      variant="login"
+      eyebrow="Chào mừng trở lại"
+      title="Đăng nhập"
+      description="Nhập thông tin tài khoản để tiếp tục."
+      visualHeadline="Hành trình của bạn bắt đầu từ đây."
+      visualDescription="Đăng nhập để tiếp tục quản lý tài khoản và hành trình của bạn."
+    >
       <Notice type="success">{location.state?.notice}</Notice>
       <Notice type="error">{message}</Notice>
       <form className="form-stack" onSubmit={submit} noValidate>
@@ -61,7 +68,7 @@ export function LoginPage() {
           <label className="checkbox-label"><input name="remember" type="checkbox" checked={form.remember} onChange={update} /> Ghi nhớ đăng nhập</label>
           <Link to="/forgot-password">Quên mật khẩu?</Link>
         </div>
-        <button className="button button-primary" type="submit" disabled={pending}>{pending ? 'Đang đăng nhập…' : 'Đăng nhập'}</button>
+        <button className="button button-primary auth-submit" type="submit" disabled={pending}>{pending ? 'Đang đăng nhập…' : 'Đăng nhập'}</button>
       </form>
       <p className="auth-switch">Chưa có tài khoản? <Link to="/register">Đăng ký ngay</Link></p>
     </AuthLayout>

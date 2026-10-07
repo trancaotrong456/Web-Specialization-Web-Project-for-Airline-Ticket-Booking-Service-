@@ -47,7 +47,15 @@ export function RegisterPage() {
   };
 
   return (
-    <AuthLayout eyebrow="Tài khoản khách hàng" title="Đăng ký tài khoản" description="Tạo tài khoản để quản lý thông tin và các hành trình của bạn.">
+    <AuthLayout
+      variant="register"
+      eyebrow="Thành viên mới"
+      title="Tạo tài khoản"
+      description="Điền thông tin bên dưới để bắt đầu."
+      visualHeadline="Bắt đầu hành trình cùng Airline Booking"
+      visualDescription="Tạo tài khoản để trải nghiệm hệ thống thuận tiện và liền mạch hơn."
+      benefits={['Bảo mật tài khoản', 'Quản lý thông tin thuận tiện']}
+    >
       <Notice type="error">{message}</Notice>
       <form className="form-stack" onSubmit={submit} noValidate>
         <Field id="register-name" name="full_name" label="Họ và tên" autoComplete="name" value={form.full_name} onChange={update} error={errors.full_name} />
@@ -59,7 +67,7 @@ export function RegisterPage() {
           <Field id="register-password" name="password" label="Mật khẩu" type="password" autoComplete="new-password" value={form.password} onChange={update} error={errors.password} hint="Tối thiểu 6 ký tự" />
           <Field id="register-confirm" name="password_confirmation" label="Xác nhận mật khẩu" type="password" autoComplete="new-password" value={form.password_confirmation} onChange={update} error={errors.password_confirmation} />
         </div>
-        <button className="button button-secondary" type="submit" disabled={pending}>{pending ? 'Đang tạo tài khoản…' : 'Tạo tài khoản'}</button>
+        <button className="button button-secondary auth-submit" type="submit" disabled={pending}>{pending ? 'Đang tạo tài khoản…' : 'Tạo tài khoản'}</button>
       </form>
       <p className="auth-switch">Đã có tài khoản? <Link to="/login">Đăng nhập</Link></p>
     </AuthLayout>
