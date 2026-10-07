@@ -100,6 +100,45 @@ class FlightService {
    * Create a new flight (Admin)
    */
   async createFlight(data) {
+    if (data.departure_airport_id && data.arrival_airport_id && Number(data.departure_airport_id) === Number(data.arrival_airport_id)) {
+      const error = new Error('Sân bay đi và sân bay đến không được trùng nhau');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (data.departure_time && data.arrival_time && new Date(data.arrival_time) <= new Date(data.departure_time)) {
+      const error = new Error('Thời gian đến phải sau thời gian khởi hành');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (data.airline_id) {
+      const airline = await Airline.findByPk(data.airline_id);
+      if (!airline) {
+        const error = new Error('Hãng hàng không không tồn tại');
+        error.statusCode = 404;
+        throw error;
+      }
+    }
+
+    if (data.departure_airport_id) {
+      const depAirport = await Airport.findByPk(data.departure_airport_id);
+      if (!depAirport) {
+        const error = new Error('Sân bay đi không tồn tại');
+        error.statusCode = 404;
+        throw error;
+      }
+    }
+
+    if (data.arrival_airport_id) {
+      const arrAirport = await Airport.findByPk(data.arrival_airport_id);
+      if (!arrAirport) {
+        const error = new Error('Sân bay đến không tồn tại');
+        error.statusCode = 404;
+        throw error;
+      }
+    }
+
     const flight = await Flight.create({
       ...data,
       available_seats: data.total_seats,
