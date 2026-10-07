@@ -167,6 +167,14 @@ class FlightService {
       throw error;
     }
 
+    const newDep = data.departure_time ? new Date(data.departure_time) : new Date(flight.departure_time);
+    const newArr = data.arrival_time ? new Date(data.arrival_time) : new Date(flight.arrival_time);
+    if (newArr <= newDep) {
+      const error = new Error('Thời gian đến phải sau thời gian khởi hành');
+      error.statusCode = 400;
+      throw error;
+    }
+
     await flight.update(data);
     const updated = await this.getFlightById(flightId);
 
