@@ -903,6 +903,98 @@ class PaymentService {
   }
 
   /**
+ * Revenue Statistics (Admin)
+ *
+ * Revenue is calculated only from successful payments.
+ * refunded / pending / failed payments are excluded.
+ * paid_at is used as the revenue timestamp.
+ */
+  async getRevenue({ from_date, to_date, group_by }) {
+    // Use calendar-date strings directly instead of JavaScript Date
+    // to avoid timezone conversion when querying MySQL DATETIME.
+    if (from_date > to_date) {
+      const error = new Error(
+        'from_date must be before or equal to to_date'
+      );
+      error.statusCode = 400;
+      throw error;
+    }
+    
+    const startDate = `${from_date} 00:00:00`;
+
+    const [year, month, day] = to_date.split('-').map(Number);
+
+    // Calculate the next calendar day using UTC only as a
+    // timezone-independent date arithmetic helper.
+    const nextDay = new Date(Date.UTC(year, month - 1, day + 1));
+
+    const endDate = [
+      nextDay.getUTCFullYear(),
+      String(nextDay.getUTCMonth() + 1).padStart(2, '0'),
+      String(nextDay.getUTCDate()).padStart(2, '0'),
+    ].join('-') + ' 00:00:00';
+
+    const where = {
+      status: 'success',
+      [Op.and]: [
+        sequelize.literal(`paid_at >= '${startDate}'`),
+        sequelize.literal(`paid_at < '${endDate}'`),
+      ],
+    };
+
+    let rows;
+
+    if (group_by === 'day') {
+      const dateExpression = sequelize.fn(
+        'DATE',
+        sequelize.col('paid_at')
+      );
+
+      rows = await Payment.findAll({
+        attributes: [
+          [dateExpression, 'date'],
+          [sequelize.fn('SUM', sequelize.col('amount')), 'revenue'],
+        ],
+        where,
+        group: [dateExpression],
+        order: [[dateExpression, 'ASC']],
+        raw: true,
+      });
+    } else {
+      const monthExpression = sequelize.fn(
+        'DATE_FORMAT',
+        sequelize.col('paid_at'),
+        '%Y-%m'
+      );
+
+      rows = await Payment.findAll({
+        attributes: [
+          [monthExpression, 'month'],
+          [sequelize.fn('SUM', sequelize.col('amount')), 'revenue'],
+        ],
+        where,
+        group: [monthExpression],
+        order: [[monthExpression, 'ASC']],
+        raw: true,
+      });
+    }
+
+    const totalRevenue = await Payment.sum('amount', { where });
+
+    return {
+      from_date,
+      to_date,
+      group_by,
+      total_revenue: Number(totalRevenue || 0),
+      data: rows.map((row) => ({
+        [group_by === 'day' ? 'date' : 'month']:
+          row[group_by === 'day' ? 'date' : 'month'],
+        revenue: Number(row.revenue || 0),
+      })),
+    };
+  }
+
+  /**
    * 5. Refund Module (Admin only)
    */
   async processRefund(bookingId, reason = 'Customer refund request', adminUser) {
