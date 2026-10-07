@@ -1,5 +1,6 @@
 import { BrowserRouter, Navigate, Outlet, Route, Routes } from 'react-router-dom';
 import { AdminRoute } from './AdminRoute';
+import { StaffOrAdminRoute } from './StaffOrAdminRoute';
 import { useAuth } from './AuthProvider';
 import { ProtectedRoute } from './ProtectedRoute';
 import { ForgotPasswordPage } from '../features/auth/ForgotPasswordPage';
@@ -14,6 +15,14 @@ import { RolesPage } from '../features/roles/RolesPage';
 import { RoleDetailPage } from '../features/roles/RoleDetailPage';
 import { HomePage } from '../features/flights/HomePage';
 import { FlightResultsPage } from '../features/flights/FlightResultsPage';
+import {
+  FareClassDetailPage,
+  FareClassFormPage,
+  FareClassListPage,
+  FlightDetailPage,
+  FlightFormPage,
+  FlightListPage,
+} from '../features/flights/FlightManagementPages';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -55,6 +64,18 @@ export function AppRoutes() {
           <Route path="/admin/users/:id" element={<UserDetailPage />} />
           <Route path="/admin/roles" element={<RolesPage />} />
           <Route path="/admin/roles/:id" element={<RoleDetailPage />} />
+        </Route>
+        <Route element={<StaffOrAdminRoute />}>
+          <Route path="/admin/flights" element={<FlightListPage />} />
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/flights/new" element={<FlightFormPage mode="create" />} />
+          </Route>
+          <Route path="/admin/flights/:id" element={<FlightDetailPage />} />
+          <Route path="/admin/flights/:id/edit" element={<FlightFormPage mode="edit" />} />
+          <Route path="/admin/flights/:flightId/fare-classes" element={<FareClassListPage />} />
+          <Route path="/admin/flights/:flightId/fare-classes/new" element={<FareClassFormPage mode="create" />} />
+          <Route path="/admin/fare-classes/:id" element={<FareClassDetailPage />} />
+          <Route path="/admin/fare-classes/:id/edit" element={<FareClassFormPage mode="edit" />} />
         </Route>
       </Route>
 

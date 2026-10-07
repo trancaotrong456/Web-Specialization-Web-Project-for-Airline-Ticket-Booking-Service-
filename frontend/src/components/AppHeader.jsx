@@ -51,6 +51,7 @@ export function AppHeader() {
         {authenticated ? <>
           <NavLink to="/profile" onClick={() => setMenuOpen(false)}>Hồ sơ</NavLink>
           <NavLink to="/profile/security" onClick={() => setMenuOpen(false)}>Bảo mật</NavLink>
+          {user?.role === 'admin' || user?.role === 'staff' ? <NavLink to="/admin/flights" onClick={() => setMenuOpen(false)}>{user?.role === 'admin' ? 'Quản lý chuyến bay' : 'Vận hành chuyến bay'}</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/users" onClick={() => setMenuOpen(false)}>Quản trị</NavLink> : null}
         </> : <>
           <NavLink className="guest-nav-entry" to="/login" onClick={() => setMenuOpen(false)}>Đăng nhập</NavLink>
