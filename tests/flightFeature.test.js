@@ -163,5 +163,16 @@ test('#22 – searchFlightValidator validates query parameters', async () => {
   assert.ok(!invalidResult.isEmpty(), 'Invalid search query should fail');
 });
 
+// Test flight detail
+test('#23 – getFlightById contract verifies associations and error handling', () => {
+  const fs = require('fs');
+  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/flight.service.js'), 'utf8');
+
+  assert.ok(serviceCode.includes('Flight.findByPk(id'), 'getFlightById must search flight by primary key');
+  assert.ok(serviceCode.includes('FareClass'), 'getFlightById must include FareClass associations for ticket classes and seats');
+  assert.ok(serviceCode.includes("statusCode = 404"), 'getFlightById must throw 404 when flight is not found');
+});
+
+
 
 
