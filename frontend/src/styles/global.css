@@ -357,6 +357,7 @@ a {
   border: 0;
   border-radius: var(--radius-sm);
   font-weight: 700;
+  text-decoration: none;
   cursor: pointer;
   transition: transform 150ms ease, filter 150ms ease;
 }
@@ -1417,6 +1418,83 @@ a {
 .button-danger {
   color: white;
   background: var(--color-danger);
+}
+
+/* Flight operations: reuse the shared navy/teal/amber system with denser, legible data layouts. */
+.flight-management-page { min-height: 100vh; overflow-x: clip; }
+.flight-management-main { width: min(100% - 2rem, 78rem); }
+.flight-management-heading { align-items: center; }
+.flight-management-heading p { max-width: 42rem; }
+.flight-page-actions, .flight-detail-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.7rem; }
+.flight-filter-bar { display: flex; justify-content: space-between; align-items: end; gap: 1rem; margin-bottom: 1.25rem; }
+.flight-filter-bar label { width: min(100%, 22rem); display: grid; gap: 0.4rem; color: #34474d; font-size: 0.84rem; font-weight: 700; }
+.flight-filter-bar select, .field-control select { width: 100%; min-height: 2.9rem; padding: 0.65rem 0.8rem; border: 1px solid var(--color-border); border-radius: var(--radius-sm); color: var(--color-text); background: #fff; }
+.flight-filter-bar > span, .flight-fare-context > span:last-child { color: var(--color-muted); font-size: 0.84rem; font-weight: 650; white-space: nowrap; }
+.flight-table-wrap { overflow-x: auto; }
+.flight-table-wrap td { vertical-align: middle; }
+.flight-table-wrap a { font-weight: 700; text-decoration: none; }
+.flight-card-list { display: none; }
+.flight-detail-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(18rem, 0.85fr); align-items: start; gap: 1.2rem; }
+.flight-section-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.2rem; }
+.flight-section-heading h2 { margin: 0.35rem 0 0; font-size: 1.28rem; letter-spacing: -0.025em; }
+.flight-facts > div { grid-template-columns: minmax(8rem, 0.65fr) minmax(0, 1.35fr); }
+.flight-detail-actions { justify-content: flex-start; margin-top: 1.3rem; padding-top: 1rem; border-top: 1px solid var(--color-border); }
+.fare-class-list { display: grid; }
+.fare-class-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 1rem; padding: 1rem 0; border-bottom: 1px solid var(--color-border); }
+.fare-class-row:last-child { border-bottom: 0; }
+.fare-class-row > div strong, .fare-class-row > div small { display: block; }
+.fare-class-row > div small { margin-top: 0.2rem; color: var(--color-muted); font-size: 0.8rem; }
+.fare-class-row > strong { color: #875000; white-space: nowrap; }
+.compact-empty { min-height: 10rem; padding-inline: 0; }
+.compact-empty h3, .compact-empty p { margin: 0.2rem; }
+.flight-form-card, .fare-form-card { width: min(100%, 54rem); }
+.flight-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.1rem; }
+.flight-form .field, .flight-form > .field-error { min-width: 0; }
+.flight-form-actions { grid-column: 1 / -1; display: flex; justify-content: flex-end; gap: 0.75rem; margin-top: 0.35rem; }
+.flight-edit-context { grid-column: 1 / -1; display: grid; gap: 0.3rem; padding: 1rem 1.1rem; border-left: 3px solid var(--color-secondary); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; color: #173c43; background: #f3f7f6; }
+.flight-edit-context strong { font-size: 1.05rem; }
+.flight-edit-context p { margin: 0; color: var(--color-muted); font-size: 0.85rem; }
+.fare-parent-context { margin-bottom: 1.2rem; }
+.flight-fare-context { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; padding-bottom: 1rem; border-bottom: 1px solid var(--color-border); }
+.fare-class-page-row { grid-template-columns: minmax(0, 1fr) auto auto; }
+.fare-class-page-row > a { text-decoration: none; }
+.fare-detail-card { width: min(100%, 54rem); }
+.fare-detail-card > .button-danger { margin-top: 1.25rem; }
+.fare-price { color: #875000; font-size: 1.2rem; white-space: nowrap; }
+.status-scheduled { color: #075c57; background: #dff4ee; }
+.status-cancelled { color: #8f1d1d; background: #fee8e7; }
+.status-completed { color: #334155; background: #e7edf3; }
+
+@media (max-width: 58rem) {
+  .flight-detail-layout { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 46rem) {
+  .flight-management-main { width: min(100% - 1.25rem, 78rem); }
+  .flight-management-heading { align-items: stretch; }
+  .flight-page-actions { align-items: stretch; }
+  .flight-page-actions > .button { flex: 1 1 auto; }
+  .flight-management-page .flight-table-wrap { display: none; }
+  .flight-card-list { display: grid; gap: 0.8rem; }
+  .flight-card { min-width: 0; padding: 1rem; border: 1px solid var(--color-border); border-radius: var(--radius-md); background: #fff; }
+  .flight-card-top { display: flex; justify-content: space-between; align-items: flex-start; gap: 0.5rem; }
+  .flight-card-top h2 { margin: 0.25rem 0 0; font-size: 1rem; overflow-wrap: anywhere; }
+  .flight-card-route { display: flex; align-items: center; gap: 0.75rem; margin: 0.9rem 0; color: var(--color-primary-dark); font-size: 1.25rem; }
+  .flight-card-route span { color: var(--color-secondary); }
+  .flight-card-meta { display: flex; justify-content: space-between; gap: 0.4rem; margin-bottom: 0.9rem; color: var(--color-muted); font-size: 0.78rem; }
+  .flight-card .button { width: 100%; text-decoration: none; }
+  .flight-filter-bar { align-items: stretch; flex-direction: column; }
+  .flight-filter-bar label { width: 100%; }
+  .flight-facts > div { grid-template-columns: 1fr; gap: 0.2rem; }
+  .fare-class-page-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .fare-class-page-row > a { grid-column: 1 / -1; }
+  .fare-class-page-row > a.button { width: 100%; }
+  .flight-fare-context { align-items: flex-start; flex-direction: column; }
+  .flight-form { grid-template-columns: 1fr; }
+  .flight-form-actions { flex-direction: column-reverse; }
+  .flight-form-actions .button { width: 100%; }
+  .flight-detail-actions { display: grid; grid-template-columns: 1fr; }
+  .flight-detail-actions .button { width: 100%; }
 }
 
 .dialog-backdrop {
