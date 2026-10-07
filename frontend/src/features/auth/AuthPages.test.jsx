@@ -36,11 +36,30 @@ const renderPage = (path, fetchImpl = vi.fn()) => render(
 );
 
 describe('public authentication pages', () => {
-  it('describes the available account features without promising flight management', () => {
+  it('shows the requested aviation-focused login copy', () => {
     renderPage('/login');
-    expect(screen.getByText('Tài khoản của bạn, truy cập an tâm.')).toBeInTheDocument();
-    expect(screen.getByText('Đăng nhập để quản lý hồ sơ và bảo mật tài khoản của bạn.')).toBeInTheDocument();
-    expect(screen.queryByText(/Quản lý tài khoản và thông tin chuyến bay/)).not.toBeInTheDocument();
+    expect(screen.getByText('Hành trình của bạn bắt đầu từ đây.')).toBeInTheDocument();
+    expect(screen.getByText('Đăng nhập để tiếp tục quản lý tài khoản và hành trình của bạn.')).toBeInTheDocument();
+    expect(screen.getByText('SGN')).toBeInTheDocument();
+    expect(screen.getByText('HAN')).toBeInTheDocument();
+  });
+
+  it('shows distinct registration copy and benefits without login copy', () => {
+    renderPage('/register');
+    expect(screen.getByText('Bắt đầu hành trình cùng Airline Booking')).toBeInTheDocument();
+    expect(screen.getByText('Tạo tài khoản để trải nghiệm hệ thống thuận tiện và liền mạch hơn.')).toBeInTheDocument();
+    expect(screen.getByText('Bảo mật tài khoản')).toBeInTheDocument();
+    expect(screen.getByText('Quản lý thông tin thuận tiện')).toBeInTheDocument();
+    expect(screen.queryByText('Đăng nhập để quản lý hồ sơ...')).not.toBeInTheDocument();
+  });
+
+  it('shows aviation-focused recovery copy and home navigation', () => {
+    renderPage('/forgot-password');
+    expect(screen.getByText('Lấy lại quyền truy cập, tiếp tục hành trình.')).toBeInTheDocument();
+    expect(screen.getByText('Nhập email đã đăng ký để nhận hướng dẫn khôi phục mật khẩu.')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Quên mật khẩu' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /Về trang chủ/ })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Quay lại đăng nhập' })).toHaveAttribute('href', '/login');
   });
   it('validates required login fields before making a request', async () => {
     const user = userEvent.setup();
