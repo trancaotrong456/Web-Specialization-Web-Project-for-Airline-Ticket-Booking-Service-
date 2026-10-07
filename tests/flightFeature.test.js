@@ -120,4 +120,48 @@ test('#21 – deleteFlight contract verifies transaction and 409 when booking ex
   assert.ok(serviceCode.includes('statusCode = 409'), 'deleteFlight must reject deletion with 409 Conflict if bookings exist');
 });
 
+// Test flight list & search rules
+test('#22 – searchFlights enforces status=scheduled only', () => {
+  const fs = require('fs');
+  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/flight.service.js'), 'utf8');
+
+  assert.ok(serviceCode.includes("status: 'scheduled'"), 'searchFlights must only filter status scheduled');
+});
+
+test('#22 – searchFlightValidator validates query parameters', async () => {
+  const { validationResult } = require('express-validator');
+  const { searchFlightValidator } = require('../validators/flight.validator');
+
+  const validReq = {
+    query: {
+      departure_airport_id: '1',
+      arrival_airport_id: '2',
+      departure_date: '2026-10-15',
+      min_seats: '2',
+      page: '1',
+      limit: '10',
+    },
+  };
+
+  for (const middleware of searchFlightValidator) {
+    await middleware(validReq, {}, () => {});
+  }
+  const validResult = validationResult(validReq);
+  assert.ok(validResult.isEmpty(), 'Valid search query should pass');
+
+  const invalidReq = {
+    query: {
+      min_seats: '-1',
+      departure_date: 'invalid-date',
+    },
+  };
+
+  for (const middleware of searchFlightValidator) {
+    await middleware(invalidReq, {}, () => {});
+  }
+  const invalidResult = validationResult(invalidReq);
+  assert.ok(!invalidResult.isEmpty(), 'Invalid search query should fail');
+});
+
+
 
