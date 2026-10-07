@@ -52,9 +52,11 @@ class FlightService {
     if (min_seats) where.available_seats = { [Op.gte]: Number(min_seats) };
 
     if (departure_date) {
-      const dateStart = new Date(departure_date);
-      const dateEnd = new Date(departure_date);
-      dateEnd.setDate(dateEnd.getDate() + 1);
+      // Lọc theo ngày giờ Việt Nam (UTC+7): "YYYY-MM-DD" VN → khoảng UTC
+      const VN_OFFSET_MS = 7 * 60 * 60 * 1000;
+      // Đầu ngày VN = 00:00 VN = (ngày T 00:00 UTC - 7h) → UTC = ngày T-1 17:00
+      const dateStart = new Date(new Date(departure_date).getTime() - VN_OFFSET_MS);
+      const dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
       where.departure_time = { [Op.gte]: dateStart, [Op.lt]: dateEnd };
     }
 
@@ -100,6 +102,45 @@ class FlightService {
    * Create a new flight (Admin)
    */
   async createFlight(data) {
+    if (data.departure_airport_id && data.arrival_airport_id && Number(data.departure_airport_id) === Number(data.arrival_airport_id)) {
+      const error = new Error('Sân bay đi và sân bay đến không được trùng nhau');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (data.departure_time && data.arrival_time && new Date(data.arrival_time) <= new Date(data.departure_time)) {
+      const error = new Error('Thời gian đến phải sau thời gian khởi hành');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (data.airline_id) {
+      const airline = await Airline.findByPk(data.airline_id);
+      if (!airline) {
+        const error = new Error('Hãng hàng không không tồn tại');
+        error.statusCode = 404;
+        throw error;
+      }
+    }
+
+    if (data.departure_airport_id) {
+      const depAirport = await Airport.findByPk(data.departure_airport_id);
+      if (!depAirport) {
+        const error = new Error('Sân bay đi không tồn tại');
+        error.statusCode = 404;
+        throw error;
+      }
+    }
+
+    if (data.arrival_airport_id) {
+      const arrAirport = await Airport.findByPk(data.arrival_airport_id);
+      if (!arrAirport) {
+        const error = new Error('Sân bay đến không tồn tại');
+        error.statusCode = 404;
+        throw error;
+      }
+    }
+
     const flight = await Flight.create({
       ...data,
       available_seats: data.total_seats,
@@ -125,6 +166,14 @@ class FlightService {
     if (!flight) {
       const error = new Error('Flight not found');
       error.statusCode = 404;
+      throw error;
+    }
+
+    const newDep = data.departure_time ? new Date(data.departure_time) : new Date(flight.departure_time);
+    const newArr = data.arrival_time ? new Date(data.arrival_time) : new Date(flight.arrival_time);
+    if (newArr <= newDep) {
+      const error = new Error('Thời gian đến phải sau thời gian khởi hành');
+      error.statusCode = 400;
       throw error;
     }
 
