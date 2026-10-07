@@ -86,4 +86,12 @@ test('#24 – delete fare class checks bookings and throws 409', () => {
   assert.ok(serviceCode.includes('statusCode = 409'), 'delete must throw 409 if bookings exist');
 });
 
+test('#24 – getByFlight orders by price ASC', () => {
+  const fs = require('fs');
+  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/fareClass.service.js'), 'utf8');
+
+  assert.ok(serviceCode.includes("order: [['price', 'ASC']]"), 'getByFlight must sort fare classes ascending by price');
+});
+
+
 
