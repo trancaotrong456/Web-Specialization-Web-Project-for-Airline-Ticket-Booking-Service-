@@ -30,6 +30,12 @@ class FareClassService {
 
   async delete(id) {
     const fc = await this.getById(id);
+    const bookingCount = await Booking.count({ where: { fare_class_id: id } });
+    if (bookingCount > 0) {
+      const error = new Error('Không thể xóa hạng vé đã có đơn đặt chỗ.');
+      error.statusCode = 409;
+      throw error;
+    }
     await fc.destroy();
     return { message: 'Fare class deleted' };
   }
