@@ -93,5 +93,14 @@ test('#24 – getByFlight orders by price ASC', () => {
   assert.ok(serviceCode.includes("order: [['price', 'ASC']]"), 'getByFlight must sort fare classes ascending by price');
 });
 
+test('#24 – getById contract verifies flight association and 404', () => {
+  const fs = require('fs');
+  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/fareClass.service.js'), 'utf8');
+
+  assert.ok(serviceCode.includes("model: Flight"), 'getById must include Flight model association');
+  assert.ok(serviceCode.includes("statusCode = 404"), 'getById must throw 404 if fare class not found');
+});
+
+
 
 
