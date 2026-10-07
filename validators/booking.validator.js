@@ -42,14 +42,22 @@ const listBookingValidator = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('page must be >= 1'),
+
   query('limit')
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('limit must be between 1 and 100'),
+
   query('status')
     .optional()
     .isIn(['holding', 'pending_payment', 'confirmed', 'cancelled', 'expired'])
     .withMessage('status filter is invalid'),
+
+  query('search')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 191 })
+    .withMessage('search must be between 1 and 191 characters'),
 ];
 
 const bookingAccessEmailValidator = [
