@@ -310,6 +310,7 @@ class BookingService {
     }
 
     const { count, rows } = await Booking.findAndCountAll({
+      distinct: true,
       where,
       limit: Number(limit),
       offset: Number(offset),
@@ -592,6 +593,7 @@ class BookingService {
     }
 
     const { count, rows } = await Booking.findAndCountAll({
+      distinct: true,
       where,
       limit: Number(limit),
       offset: Number(offset),
