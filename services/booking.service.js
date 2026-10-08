@@ -86,8 +86,24 @@ class BookingService {
         throw error;
       }
 
+      // Reject bookings for flights that have already departed
+      const departureTime = new Date(flight.departure_time);
+
+      if (
+        Number.isNaN(departureTime.getTime()) ||
+        departureTime.getTime() <= Date.now()
+      ) {
+        const error = new Error(
+          'Cannot book a flight that has already departed'
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
       if (flight.available_seats < passengerCount) {
-        const error = new Error(`Not enough available seats. Only ${flight.available_seats} remaining`);
+        const error = new Error(
+          `Not enough available seats. Only ${flight.available_seats} remaining`
+        );
         error.statusCode = 400;
         throw error;
       }
