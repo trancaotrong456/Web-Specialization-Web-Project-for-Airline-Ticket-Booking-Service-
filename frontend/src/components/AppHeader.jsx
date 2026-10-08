@@ -48,10 +48,14 @@ export function AppHeader() {
       <button ref={toggleRef} hidden={!narrow} className="menu-toggle" type="button" aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} aria-expanded={menuOpen} aria-controls="account-navigation" onClick={() => setMenuOpen((value) => !value)}><span aria-hidden="true">☰</span></button>
       <nav id="account-navigation" hidden={narrow && !menuOpen} className={`app-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Điều hướng tài khoản">
         <NavLink end to="/" onClick={() => setMenuOpen(false)}>Trang chủ</NavLink>
+        <NavLink to="/bookings/lookup" onClick={() => setMenuOpen(false)}>Tra cứu đặt chỗ</NavLink>
         {authenticated ? <>
+          <NavLink to="/bookings/my" onClick={() => setMenuOpen(false)}>Đặt chỗ của tôi</NavLink>
           <NavLink to="/profile" onClick={() => setMenuOpen(false)}>Hồ sơ</NavLink>
           <NavLink to="/profile/security" onClick={() => setMenuOpen(false)}>Bảo mật</NavLink>
           {user?.role === 'admin' || user?.role === 'staff' ? <NavLink to="/admin/flights" onClick={() => setMenuOpen(false)}>{user?.role === 'admin' ? 'Quản lý chuyến bay' : 'Vận hành chuyến bay'}</NavLink> : null}
+          {user?.role === 'admin' || user?.role === 'staff' ? <NavLink to="/admin/bookings" onClick={() => setMenuOpen(false)}>{user?.role === 'admin' ? 'Quản lý đặt chỗ' : 'Đặt chỗ vận hành'}</NavLink> : null}
+          {user?.role === 'admin' ? <NavLink to="/admin/payments" onClick={() => setMenuOpen(false)}>Thanh toán</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/users" onClick={() => setMenuOpen(false)}>Quản trị</NavLink> : null}
         </> : <>
           <NavLink className="guest-nav-entry" to="/login" onClick={() => setMenuOpen(false)}>Đăng nhập</NavLink>

@@ -35,6 +35,7 @@ function FlightCard({ flight }) {
       </div>
       <div className="flight-availability"><strong>{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span></div>
       <div className="flight-fare">{lowestFare !== undefined ? <><small>Giá từ</small><strong>{formatPrice(lowestFare)} ₫</strong></> : <span>Chưa có thông tin giá</span>}</div>
+      <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}`}>Chọn chuyến bay</Link>
     </article>
   );
 }
