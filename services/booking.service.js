@@ -15,6 +15,7 @@ const {
 const { getIO } = require('../sockets');
 const flightService = require('./flight.service');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
 
 class BookingService {
   /**
@@ -56,6 +57,7 @@ class BookingService {
    * 1. Create holding booking with row-level locking
    */
   async createHoldingBooking({ flight_id, fare_class_id, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
+    guest_email = normalizeGuestEmail(guest_email);
     if (!user_id && !guest_email) {
       const error = new Error('Guest email is required if you are not logged in');
       error.statusCode = 400;
@@ -86,8 +88,24 @@ class BookingService {
         throw error;
       }
 
+      // Reject bookings for flights that have already departed
+      const departureTime = new Date(flight.departure_time);
+
+      if (
+        Number.isNaN(departureTime.getTime()) ||
+        departureTime.getTime() <= Date.now()
+      ) {
+        const error = new Error(
+          'Cannot book a flight that has already departed'
+        );
+        error.statusCode = 400;
+        throw error;
+      }
+
       if (flight.available_seats < passengerCount) {
-        const error = new Error(`Not enough available seats. Only ${flight.available_seats} remaining`);
+        const error = new Error(
+          `Not enough available seats. Only ${flight.available_seats} remaining`
+        );
         error.statusCode = 400;
         throw error;
       }
@@ -204,6 +222,7 @@ class BookingService {
    * 2. Get booking details by ID or code
    */
   async getBookingById(bookingId, currentUser = null, guestEmail = null) {
+    guestEmail = normalizeGuestEmail(guestEmail);
     const booking = await Booking.findByPk(bookingId, {
       include: [
         {
@@ -238,7 +257,7 @@ class BookingService {
    * Public lookup is restricted to guest bookings and requires the guest email.
    * Registered users must access their bookings through authenticated endpoints.
    */
-  async getBookingByCode(bookingCode, email = null) {
+  async getBookingByCode(bookingCode, guestEmail = null) {
     const where = { booking_code: bookingCode };
 
     const booking = await Booking.findOne({
@@ -266,7 +285,7 @@ class BookingService {
       throw error;
     }
 
-    const normalizedEmail = typeof email === 'string' ? email.trim().toLowerCase() : '';
+    const normalizedEmail = normalizeGuestEmail(guestEmail) || '';
     const normalizedGuestEmail = booking.guest_email ? booking.guest_email.trim().toLowerCase() : '';
 
     if (
@@ -294,6 +313,7 @@ class BookingService {
     }
 
     const { count, rows } = await Booking.findAndCountAll({
+      distinct: true,
       where,
       limit: Number(limit),
       offset: Number(offset),
@@ -326,6 +346,7 @@ class BookingService {
    * 4. Cancel holding booking by user
    */
   async cancelHoldingBooking(bookingId, currentUser = null, guestEmail = null) {
+    guestEmail = normalizeGuestEmail(guestEmail);
     let flightIdToEmit = null;
     let newAvailableSeats = null;
 
@@ -576,6 +597,7 @@ class BookingService {
     }
 
     const { count, rows } = await Booking.findAndCountAll({
+      distinct: true,
       where,
       limit: Number(limit),
       offset: Number(offset),
