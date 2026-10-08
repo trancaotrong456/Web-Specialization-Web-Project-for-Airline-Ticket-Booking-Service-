@@ -23,6 +23,8 @@ import {
   FlightFormPage,
   FlightListPage,
 } from '../features/flights/FlightManagementPages';
+import { AdminBookingsPage, BookingCreatePage, BookingDetailPage, BookingLookupPage, MyBookingsPage } from '../features/bookings/BookingPages';
+import { AdminPaymentDetailPage, AdminPaymentsPage, AdminRevenuePage, PaymentInitiatePage, PaymentResultPage } from '../features/bookings/PaymentPages';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -49,6 +51,11 @@ export function AppRoutes() {
     <Routes>
       <Route path="/" element={<HomePage />} />
       <Route path="/flights/search" element={<FlightResultsPage />} />
+      <Route path="/bookings/new" element={<BookingCreatePage />} />
+      <Route path="/bookings/lookup" element={<BookingLookupPage />} />
+      <Route path="/bookings/:id/payment" element={<PaymentInitiatePage />} />
+      <Route path="/bookings/:id" element={<BookingDetailPage />} />
+      <Route path="/payments/result" element={<PaymentResultPage />} />
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -57,8 +64,18 @@ export function AppRoutes() {
       </Route>
 
       <Route element={<ProtectedRoute />}>
+        <Route path="/bookings/my" element={<MyBookingsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/security" element={<SecurityPage />} />
+        <Route element={<AdminRoute />}>
+          <Route path="/admin/payments" element={<AdminPaymentsPage />} />
+          <Route path="/admin/payments/:id" element={<AdminPaymentDetailPage />} />
+          <Route path="/admin/payments/revenue" element={<AdminRevenuePage />} />
+        </Route>
+        <Route element={<StaffOrAdminRoute />}>
+          <Route path="/admin/bookings" element={<AdminBookingsPage />} />
+          <Route path="/admin/bookings/:id" element={<BookingDetailPage admin />} />
+        </Route>
         <Route element={<AdminRoute />}>
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/users/:id" element={<UserDetailPage />} />

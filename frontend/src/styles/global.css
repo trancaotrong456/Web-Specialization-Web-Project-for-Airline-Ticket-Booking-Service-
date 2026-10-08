@@ -1464,6 +1464,10 @@ a {
 .status-scheduled { color: #075c57; background: #dff4ee; }
 .status-cancelled { color: #8f1d1d; background: #fee8e7; }
 .status-completed { color: #334155; background: #e7edf3; }
+.status-holding, .status-pending, .status-pending_payment { color: #805300; background: #fff0cb; }
+.status-confirmed, .status-success { color: #075c57; background: #dff4ee; }
+.status-expired, .status-failed, .status-cancelled { color: #8f1d1d; background: #fee8e7; }
+.status-refunded { color: #334155; background: #e7edf3; }
 
 @media (max-width: 58rem) {
   .flight-detail-layout { grid-template-columns: 1fr; }
@@ -1794,10 +1798,100 @@ a {
 .flight-duration span { display: block; border-top: 1px solid #98b3b2; }
 .flight-duration span::after { position: absolute; top: -0.2rem; right: -0.1rem; width: 0.35rem; height: 0.35rem; border-top: 1px solid #98b3b2; border-right: 1px solid #98b3b2; content: ''; transform: rotate(45deg); }
 .flight-duration small { display: block; margin-top: 0.35rem; font-size: 0.65rem; }
+.flight-book-link { grid-column: 1 / -1; justify-self: end; text-decoration: none; }
 .flight-availability { display: grid; justify-items: center; color: #627579; font-size: 0.75rem; text-align: center; }
 .flight-availability strong { color: #153e43; font-size: 1.1rem; }
 .flight-fare { display: grid; justify-items: end; gap: 0.15rem; color: var(--color-muted); font-size: 0.78rem; }
 .flight-fare strong { color: #9a5900; font-size: 1.15rem; }
+
+/* Booking and payment journeys */
+.booking-page { min-height: 100vh; }
+.booking-main { width: min(100% - 2.5rem, 76rem); min-height: calc(100vh - 10rem); margin: 0 auto; padding: 2.4rem 0 4rem; }
+.booking-admin-main { width: min(100% - 2.5rem, 82rem); }
+.booking-heading { display: flex; justify-content: space-between; align-items: end; gap: 1.5rem; margin-bottom: 1.5rem; }
+.booking-heading h1 { margin: 0.35rem 0 0.4rem; color: #102e38; font-size: clamp(2rem, 5vw, 3rem); line-height: 1.08; letter-spacing: -0.05em; }
+.booking-heading p { max-width: 42rem; margin: 0; color: var(--color-muted); }
+.booking-heading-actions { display: flex; flex-wrap: wrap; gap: 0.65rem; }
+.booking-panel { padding: clamp(1rem, 3vw, 1.75rem); }
+.booking-panel h2 { margin-top: 0; color: #153e43; }
+.booking-steps { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.75rem; margin: 0 0 1rem; }
+.booking-steps span { display: flex; align-items: center; gap: 0.55rem; padding: 0.7rem; border: 1px solid #dbe6e5; border-radius: 0.65rem; color: #738184; background: #f8faf9; font-size: 0.8rem; }
+.booking-steps span:first-child { border-radius: 0.65rem; }
+.booking-steps span.is-current { border-color: #0f6b66; color: #0a4946; background: #eaf4f1; font-weight: 750; }
+.booking-steps span.is-done { color: #0f6b66; }
+.booking-steps b { font-weight: 650; }
+.booking-search-form { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); align-items: end; gap: 0.8rem; }
+.booking-search-form .button { min-height: 3rem; }
+.booking-search-form .field, .booking-form-grid .field, .booking-list-toolbar .field, .booking-admin-filter .field, .revenue-filter-form .field { display: grid; gap: 0.4rem; color: #34474d; font-size: 0.82rem; font-weight: 700; }
+.booking-search-form input, .booking-search-form select, .booking-form-grid input, .booking-form-grid select, .booking-list-toolbar select, .booking-admin-filter input, .revenue-filter-form input, .revenue-filter-form select, #refund-reason { width: 100%; min-width: 0; min-height: 2.85rem; padding: 0.65rem 0.75rem; border: 1px solid #d8e2e3; border-radius: 0.55rem; color: #142d37; background: #fbfcfc; }
+.booking-flight-list, .booking-card-list { display: grid; gap: 0.75rem; margin-top: 1rem; }
+.booking-flight-choice { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1rem; border: 1px solid #dfe8e8; border-radius: 0.75rem; background: #fff; }
+.booking-flight-choice h3 { margin: 0.2rem 0; color: #153e43; }
+.booking-flight-choice p { margin: 0; color: var(--color-muted); font-size: 0.85rem; }
+.booking-section-heading { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+.booking-section-heading h2, .booking-section-heading p { margin: 0; }
+.booking-section-heading p { color: var(--color-muted); }
+.booking-fare-list { display: grid; gap: 0.7rem; margin: 1rem 0; }
+.booking-fare-option, .payment-method-options label { display: flex; align-items: center; gap: 0.85rem; padding: 1rem; border: 1px solid #dfe8e8; border-radius: 0.7rem; background: #fff; cursor: pointer; }
+.booking-fare-option.is-selected, .payment-method-options label.is-selected { border-color: #0f6b66; background: #eef7f5; box-shadow: 0 0 0 2px rgb(15 107 102 / 8%); }
+.booking-fare-option input, .payment-method-options input { accent-color: var(--color-primary); }
+.booking-fare-option span, .payment-method-options span { display: grid; flex: 1; gap: 0.15rem; }
+.booking-fare-option small, .payment-method-options small { color: var(--color-muted); }
+.booking-passenger-form, .booking-form-grid { display: grid; gap: 1rem; }
+.booking-passenger-form > .button { justify-self: start; }
+.passenger-fieldset { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.8rem; margin: 0; padding: 1rem; border: 1px solid #dfe8e8; border-radius: 0.7rem; }
+.passenger-fieldset legend { padding: 0 0.4rem; color: #0a4946; font-weight: 750; }
+.booking-total-row { display: grid; grid-template-columns: 1fr auto; gap: 0.25rem; padding: 1rem; border-radius: 0.65rem; background: #eef4ff; }
+.booking-total-row strong { color: #875000; }
+.booking-total-row small { grid-column: 1 / -1; color: var(--color-muted); }
+.lookup-panel { max-width: 45rem; }
+.booking-form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.booking-form-grid > .button { grid-column: 1 / -1; justify-self: start; }
+.lookup-result { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; margin-top: 1.3rem; padding: 1rem; border: 1px solid #dce8e6; border-radius: 0.75rem; background: #f7faf9; }
+.lookup-result h2, .lookup-result p { margin: 0.15rem 0; }
+.lookup-result p { color: var(--color-muted); }
+.booking-list-toolbar { display: flex; align-items: end; justify-content: space-between; flex-wrap: wrap; gap: 0.8rem; margin-bottom: 1rem; }
+.booking-list-toolbar > span { padding-bottom: 0.65rem; color: var(--color-muted); }
+.booking-list-toolbar .field { min-width: 12rem; }
+.booking-admin-filter { display: flex; align-items: end; flex: 1; gap: 0.7rem; }
+.booking-admin-filter .field { flex: 1; }
+.booking-card { min-width: 0; padding: 1rem; border: 1px solid #dfe8e8; border-radius: 0.75rem; background: #fff; }
+.booking-card-top, .booking-card-bottom, .booking-detail-title { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; }
+.booking-card-top h2 { margin: 0.15rem 0; font-size: 1.1rem; }
+.booking-card-route { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0.6rem; color: #34474d; }
+.booking-card-route span { color: var(--color-muted); }
+.booking-card-bottom { padding-top: 0.65rem; border-top: 1px solid #edf0f1; }
+.booking-card-bottom > strong { color: #875000; }
+.booking-table-wrap { overflow-x: auto; }
+.booking-table-wrap table { width: 100%; border-collapse: collapse; }
+.booking-table-wrap th, .booking-table-wrap td { padding: 0.8rem 0.65rem; border-bottom: 1px solid #e8eeee; text-align: left; white-space: nowrap; }
+.booking-table-wrap th { color: #5d7074; font-size: 0.75rem; }
+.booking-admin-cards { display: none; }
+.payment-card-list, .revenue-card-list { display: none; }
+.booking-detail-grid, .payment-layout { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(18rem, 0.7fr); align-items: start; gap: 1rem; }
+.booking-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0; margin: 0 0 1.3rem; }
+.booking-facts > div { min-width: 0; padding: 0.75rem 0.5rem 0.75rem 0; border-bottom: 1px solid #e9eeee; }
+.booking-facts dt { color: var(--color-muted); font-size: 0.78rem; }
+.booking-facts dd { overflow-wrap: anywhere; margin: 0.2rem 0 0; color: #173b43; font-weight: 650; }
+.passenger-summary { display: grid; gap: 0.6rem; }
+.passenger-summary > div, .booking-payment-line { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.75rem; border-radius: 0.55rem; background: #f4f8f8; }
+.passenger-summary span { color: var(--color-muted); font-size: 0.82rem; }
+.booking-actions { display: flex; flex-wrap: wrap; gap: 0.7rem; margin-top: 1.2rem; }
+.booking-payment-line { margin-top: 0.6rem; font-size: 0.78rem; }
+.payment-method-options { display: grid; gap: 0.7rem; margin-bottom: 1rem; }
+.payment-layout form > .button { width: 100%; }
+.payment-qr-result { display: grid; justify-items: center; gap: 0.6rem; margin-top: 1.2rem; padding-top: 1rem; border-top: 1px solid #e8eeee; text-align: center; }
+.payment-qr-result img { width: min(100%, 20rem); height: auto; border: 1px solid #e0e7e7; border-radius: 0.6rem; }
+.payment-qr-result p { margin: 0; overflow-wrap: anywhere; }
+.demo-disclaimer { color: #8a5400; font-weight: 700; }
+.refund-disclaimer { padding: 0.85rem; border-radius: 0.6rem; color: #704700; background: #fff5df; }
+.revenue-filter-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; align-items: end; gap: 0.8rem; }
+.revenue-result { margin-top: 1.5rem; }
+.revenue-total { display: grid; gap: 0.1rem; margin-bottom: 1.2rem; padding: 1.1rem; border-radius: 0.7rem; background: #edf5f3; }
+.revenue-total strong { color: #875000; font-size: clamp(1.6rem, 4vw, 2.4rem); }
+.revenue-total small { color: var(--color-muted); }
+.payment-result-panel { max-width: 55rem; }
+.booking-panel .empty-state { padding: 2rem 1rem; text-align: center; }
 .search-state { display: grid; justify-items: center; gap: 0.4rem; margin-top: 1rem; padding: 2.5rem 1.25rem; text-align: center; }
 .search-state h2, .search-state p { margin: 0; }
 .search-state p { max-width: 34rem; color: var(--color-muted); }
@@ -1812,6 +1906,9 @@ a {
   .search-submit { align-self: end; }
   .flight-result-card { grid-template-columns: minmax(8rem, 0.8fr) minmax(14rem, 1.5fr) minmax(5rem, 0.6fr); }
   .flight-fare { grid-column: 2 / 4; justify-items: start; }
+  .booking-detail-grid, .payment-layout { grid-template-columns: 1fr; }
+  .booking-search-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .revenue-filter-form { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 
 @media (max-width: 48rem) {
@@ -1832,6 +1929,13 @@ a {
   .flight-result-card { grid-template-columns: 1fr 1.5fr; }
   .flight-availability { justify-items: start; }
   .flight-fare { grid-column: auto; justify-items: end; }
+  .booking-main, .booking-admin-main { width: min(100% - 1.5rem, 76rem); padding-top: 1.5rem; }
+  .booking-heading { align-items: flex-start; flex-direction: column; }
+  .booking-heading-actions { width: 100%; }
+  .booking-heading-actions .button { flex: 1; }
+  .booking-page .booking-table-wrap { display: none; }
+  .booking-admin-cards { display: grid; gap: 0.75rem; }
+  .payment-card-list, .revenue-card-list { display: grid; gap: 0.75rem; }
 }
 
 @media (max-width: 36rem) {
@@ -1863,4 +1967,31 @@ a {
   .flight-itinerary { grid-column: 1 / -1; grid-row: 2; }
   .flight-availability { grid-column: 1; grid-row: 3; }
   .flight-fare { grid-column: 2; grid-row: 3; }
+  .booking-main, .booking-admin-main { width: min(100% - 1.25rem, 76rem); padding: 1.2rem 0 2.5rem; }
+  .booking-heading h1 { font-size: 2rem; }
+  .booking-heading-actions { display: grid; grid-template-columns: 1fr; }
+  .booking-steps { gap: 0.35rem; }
+  .booking-steps span { justify-content: center; flex-direction: column; padding: 0.55rem 0.25rem; text-align: center; }
+  .booking-steps b { font-size: 0.7rem; }
+  .booking-search-form, .booking-form-grid, .passenger-fieldset, .revenue-filter-form { grid-template-columns: 1fr; }
+  .booking-form-grid > .button { grid-column: auto; width: 100%; }
+  .booking-flight-choice { align-items: stretch; flex-direction: column; }
+  .booking-flight-choice .button { width: 100%; }
+  .booking-section-heading { align-items: flex-start; flex-direction: column; }
+  .booking-fare-option { align-items: flex-start; flex-wrap: wrap; }
+  .booking-fare-option > strong:last-child { width: 100%; padding-left: 1.8rem; }
+  .booking-passenger-form > .button { width: 100%; }
+  .lookup-result { align-items: flex-start; flex-direction: column; }
+  .lookup-result .button { width: 100%; }
+  .booking-admin-filter { align-items: stretch; flex-direction: column; }
+  .booking-admin-filter .button { width: 100%; }
+  .booking-list-toolbar { align-items: stretch; flex-direction: column; }
+  .booking-list-toolbar .field { width: 100%; }
+  .booking-facts { grid-template-columns: 1fr; }
+  .booking-actions { display: grid; grid-template-columns: 1fr; }
+  .booking-actions .button { width: 100%; }
+  .booking-card-top, .booking-detail-title { align-items: flex-start; }
+  .booking-card-bottom { align-items: flex-start; flex-direction: column; }
+  .booking-card-bottom .button { width: 100%; }
+  .payment-qr-result img { width: min(100%, 16rem); }
 }
