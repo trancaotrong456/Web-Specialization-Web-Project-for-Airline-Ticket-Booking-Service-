@@ -13,6 +13,7 @@ router.get('/health', (req, res) => {
 // Mount all feature routes
 router.use('/auth',        require('./auth.route'));
 router.use('/users',       require('./user.route'));
+router.use('/roles',       require('./role.route'));
 router.use('/airlines',    require('./airline.route'));
 router.use('/airports',    require('./airport.route'));
 router.use('/flights',     require('./flight.route'));

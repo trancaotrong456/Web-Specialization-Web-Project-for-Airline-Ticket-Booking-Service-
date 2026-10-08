@@ -1,20 +1,21 @@
-const { verifyToken } = require('../utils/jwt.util');
+const { verifyAccessToken } = require('../utils/jwt.util');
+const { extractBearerToken } = require('../utils/authHeader.util');
 const ApiResponse = require('../utils/apiResponse');
 const { User, Role } = require('../models');
 
 const authenticate = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const token = extractBearerToken(authHeader);
+    if (!token) {
       return ApiResponse.error(res, 'Authentication token missing or invalid format', 401);
     }
 
-    const token = authHeader.split(' ')[1];
-    const decoded = verifyToken(token);
+    const decoded = verifyAccessToken(token);
 
     const user = await User.findByPk(decoded.id, {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
-      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token'] },
+      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token', 'reset_token_expires_at'] },
     });
 
     if (!user) {
