@@ -30,6 +30,14 @@ describe('createApiClient', () => {
     });
   });
 
+  it('returns a PDF response as a Blob when explicitly requested', async () => {
+    const pdf = new Blob(['%PDF-demo'], { type: 'application/pdf' });
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(pdf, { status: 200, headers: { 'Content-Type': 'application/pdf' } }));
+    const { request } = makeClient({ fetchImpl });
+    await expect(request('/bookings/7/ticket', { responseType: 'blob' })).resolves.toBeInstanceOf(Blob);
+    expect(fetchImpl.mock.calls[0][1].responseType).toBe('blob');
+  });
+
   it('preserves status and field validation errors from a failed response', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(jsonResponse({
       success: false,
