@@ -23,6 +23,7 @@ const { getIO } = require('../sockets');
 const flightService = require('./flight.service');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
 const { resolvePaymentReturnUrl } = require('../utils/paymentReturnUrl.util');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -264,6 +265,7 @@ class PaymentService {
    * 1. Initiate Payment: holding -> pending_payment -> build gateway URL
    */
   async initiatePayment({ booking_id, payment_method, ip_addr = '127.0.0.1', return_url, currentUser = null, guest_email = null }) {
+    guest_email = normalizeGuestEmail(guest_email);
     // payOS requires a numeric orderCode. Timestamp plus three random digits
     // stays below Number.MAX_SAFE_INTEGER and avoids same-millisecond collisions.
     const txnRef = payment_method === 'payos'
