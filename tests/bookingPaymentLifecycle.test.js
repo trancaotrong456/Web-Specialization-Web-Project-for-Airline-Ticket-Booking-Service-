@@ -67,10 +67,11 @@ test('#30/#41 creation reserves seats, promo and passengers in one transaction f
   delete process.env.HOLDING_TIME_MINUTES;
   try {
     await bookingService.createHoldingBooking({ flight_id: 2, fare_class_id: 1, promotion_code: 'SALE',
-      guest_email: 'guest@example.com', passengers: f.booking.passengers });
+      guest_email: ' Guest@Example.com ', passengers: f.booking.passengers });
     assert.equal(f.flight.available_seats, 6);
     assert.equal(f.promo.used_count, 2);
     assert.equal(f.booking.total_amount, 180000);
+    assert.equal(f.booking.guest_email, 'guest@example.com');
     assert.equal(passengers[0].passport_no, 'P1');
     assert.equal(passengers.length, 2);
     assert.ok(f.booking.hold_expires_at - before >= 900000);

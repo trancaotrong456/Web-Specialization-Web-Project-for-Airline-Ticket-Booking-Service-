@@ -1,5 +1,6 @@
 const paymentService = require('../services/payment.service');
 const ApiResponse = require('../utils/apiResponse');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
 
 class PaymentController {
   async getAllPayments(req, res, next) {
@@ -25,6 +26,7 @@ class PaymentController {
       const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
       const result = await paymentService.initiatePayment({
         ...req.body,
+        guest_email: normalizeGuestEmail(req.body.guest_email),
         ip_addr: clientIp,
         currentUser: req.user || null,
       });
