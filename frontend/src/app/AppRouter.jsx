@@ -33,6 +33,7 @@ import {
   AirportFormPage,
   AirportListPage,
 } from '../features/airline-airport/AirlineAirportPages';
+import { PromotionDetailPage, PromotionFormPage, PromotionsPage } from '../features/promotions/PromotionPages';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -93,6 +94,10 @@ export function AppRoutes() {
           <Route path="/admin/airports/new" element={<AirportFormPage mode="create" />} />
           <Route path="/admin/airports/:id" element={<AirportDetailPage />} />
           <Route path="/admin/airports/:id/edit" element={<AirportFormPage mode="edit" />} />
+          <Route path="/admin/promotions" element={<PromotionsPage />} />
+          <Route path="/admin/promotions/new" element={<PromotionFormPage mode="create" />} />
+          <Route path="/admin/promotions/:id" element={<PromotionDetailPage />} />
+          <Route path="/admin/promotions/:id/edit" element={<PromotionFormPage mode="edit" />} />
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/users/:id" element={<UserDetailPage />} />
           <Route path="/admin/roles" element={<RolesPage />} />
