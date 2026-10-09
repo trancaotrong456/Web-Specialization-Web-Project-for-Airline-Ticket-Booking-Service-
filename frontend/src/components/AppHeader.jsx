@@ -40,7 +40,7 @@ export function AppHeader() {
   const authenticated = status === 'authenticated';
 
   return (
-    <header className="app-header">
+    <header className={`app-header ${user?.role === 'admin' ? 'app-header-admin' : ''}`}>
       <NavLink className="app-brand" to="/" aria-label="Serene Flightways - Trang chủ">
         <span className="app-brand-mark" aria-hidden="true">✈</span>
         <span><strong>Serene Flightways</strong><small>Airline Booking</small></span>
@@ -56,6 +56,8 @@ export function AppHeader() {
           {user?.role === 'admin' || user?.role === 'staff' ? <NavLink to="/admin/flights" onClick={() => setMenuOpen(false)}>{user?.role === 'admin' ? 'Quản lý chuyến bay' : 'Vận hành chuyến bay'}</NavLink> : null}
           {user?.role === 'admin' || user?.role === 'staff' ? <NavLink to="/admin/bookings" onClick={() => setMenuOpen(false)}>{user?.role === 'admin' ? 'Quản lý đặt chỗ' : 'Đặt chỗ vận hành'}</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/payments" onClick={() => setMenuOpen(false)}>Thanh toán</NavLink> : null}
+          {user?.role === 'admin' ? <NavLink to="/admin/airlines" onClick={() => setMenuOpen(false)}>Hãng hàng không</NavLink> : null}
+          {user?.role === 'admin' ? <NavLink to="/admin/airports" onClick={() => setMenuOpen(false)}>Sân bay</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/users" onClick={() => setMenuOpen(false)}>Quản trị</NavLink> : null}
         </> : <>
           <NavLink className="guest-nav-entry" to="/login" onClick={() => setMenuOpen(false)}>Đăng nhập</NavLink>
