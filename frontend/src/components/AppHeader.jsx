@@ -58,6 +58,7 @@ export function AppHeader() {
           {user?.role === 'admin' ? <NavLink to="/admin/payments" onClick={() => setMenuOpen(false)}>Thanh toán</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/airlines" onClick={() => setMenuOpen(false)}>Hãng hàng không</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/airports" onClick={() => setMenuOpen(false)}>Sân bay</NavLink> : null}
+          {user?.role === 'admin' ? <NavLink to="/admin/promotions" onClick={() => setMenuOpen(false)}>Khuyến mại</NavLink> : null}
           {user?.role === 'admin' ? <NavLink to="/admin/users" onClick={() => setMenuOpen(false)}>Quản trị</NavLink> : null}
         </> : <>
           <NavLink className="guest-nav-entry" to="/login" onClick={() => setMenuOpen(false)}>Đăng nhập</NavLink>
