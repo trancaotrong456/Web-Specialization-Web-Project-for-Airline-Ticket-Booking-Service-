@@ -62,6 +62,7 @@ class FlightService {
 
     const { count, rows } = await Flight.findAndCountAll({
       where,
+      distinct: true, // Count unique flights despite the hasMany fareClasses join.
       limit: Number(limit),
       offset: Number(offset),
       order: [['departure_time', 'ASC']],
@@ -245,6 +246,7 @@ class FlightService {
 
     const { count, rows } = await Flight.findAndCountAll({
       where,
+      distinct: true, // Count unique flights despite the hasMany fareClasses join.
       limit: Number(limit),
       offset: Number(offset),
       order: [['departure_time', 'ASC']],

@@ -176,3 +176,31 @@ test('#23 – getFlightById contract verifies associations and error handling', 
 
 
 
+
+// Regression: JOIN fareClasses must not inflate pagination totals for either endpoint.
+test('#22 – search and admin lists count distinct flights with joined fare classes', async () => {
+  const { Flight } = require('../models');
+  const service = require('../services/flight.service');
+  const original = Flight.findAndCountAll;
+  const captured = [];
+  Flight.findAndCountAll = async (options) => {
+    captured.push(options);
+    // One flight with multiple FareClass rows must count as exactly one flight.
+    return { count: 1, rows: [{ id: 42, fareClasses: [{ id: 1 }, { id: 2 }] }] };
+  };
+  try {
+    const search = await service.searchFlights({ departure_airport_id: 1, arrival_airport_id: 2, page: 1, limit: 10 });
+    const admin = await service.getAllFlights({ page: 1, limit: 10 });
+    assert.equal(search.total, 1);
+    assert.equal(admin.total, 1);
+    assert.equal(captured.length, 2);
+    for (const options of captured) {
+      assert.equal(options.distinct, true, 'findAndCountAll must count distinct Flight primary keys');
+      assert.ok(options.include.some((entry) => entry.as === 'fareClasses'));
+      assert.equal(options.limit, 10);
+      assert.equal(options.offset, 0);
+    }
+  } finally {
+    Flight.findAndCountAll = original;
+  }
+});
