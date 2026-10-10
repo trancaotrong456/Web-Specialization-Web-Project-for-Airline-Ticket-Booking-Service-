@@ -10,6 +10,25 @@ const {
 } = require('../utils/jwt.util');
 
 class AuthService {
+  _hashRefreshToken(rawToken) {
+    return crypto.createHash('sha256').update(rawToken).digest('hex');
+  }
+
+  _matchesRefreshTokenDigest(storedValue, presentedDigest) {
+    if (typeof storedValue !== 'string' || !/^[a-f0-9]{64}$/i.test(storedValue)) return false;
+
+    const storedBuffer = Buffer.from(storedValue, 'hex');
+    const presentedBuffer = Buffer.from(presentedDigest, 'hex');
+    return storedBuffer.length === presentedBuffer.length
+      && crypto.timingSafeEqual(storedBuffer, presentedBuffer);
+  }
+
+  _invalidRefreshTokenError() {
+    const error = new Error('Refresh token has been revoked or is invalid');
+    error.statusCode = 401;
+    return error;
+  }
+
   _passwordResetUrl(rawToken) {
     const configuredUrl = process.env.PASSWORD_RESET_URL
       || (process.env.CLIENT_URL
@@ -87,7 +106,7 @@ class AuthService {
     };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
-    await newUser.update({ refresh_token: refreshToken });
+    await newUser.update({ refresh_token: this._hashRefreshToken(refreshToken) });
 
     return {
       user: {
@@ -139,7 +158,7 @@ class AuthService {
     };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
-    await user.update({ refresh_token: refreshToken });
+    await user.update({ refresh_token: this._hashRefreshToken(refreshToken) });
 
     return {
       user: {
@@ -171,16 +190,45 @@ class AuthService {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
-    if (!user || user.refresh_token !== oldRefreshToken) {
-      const error = new Error('Refresh token has been revoked or is invalid');
-      error.statusCode = 401;
-      throw error;
-    }
+    if (!user) throw this._invalidRefreshTokenError();
+
+    const presentedDigest = this._hashRefreshToken(oldRefreshToken);
+    const storedValue = user.refresh_token;
+    const isLegacyRawToken = storedValue === oldRefreshToken;
+    const isStoredDigest = this._matchesRefreshTokenDigest(storedValue, presentedDigest);
+    if (!isLegacyRawToken && !isStoredDigest) throw this._invalidRefreshTokenError();
 
     if (user.status === 'locked') {
       const error = new Error('Account has been locked. Please contact support.');
       error.statusCode = 403;
       throw error;
+    }
+
+    // Existing raw tokens remain valid until their normal expiry/revocation.
+    // Upgrade only the presented session, and only if it is still current.
+    if (isLegacyRawToken) {
+      const [updatedRows] = await User.update(
+        { refresh_token: presentedDigest },
+        {
+          where: {
+            id: user.id,
+            [Op.and]: User.sequelize.where(
+              User.sequelize.fn('BINARY', User.sequelize.col('refresh_token')),
+              oldRefreshToken,
+            ),
+          },
+        },
+      );
+
+      if (updatedRows !== 1) {
+        // Another request may have upgraded this same token concurrently. Accept
+        // only if it is now stored as the matching digest; logout/revoke remains
+        // fail-closed because the latest value will be null or different.
+        const latestUser = await User.findByPk(user.id);
+        if (!latestUser || !this._matchesRefreshTokenDigest(latestUser.refresh_token, presentedDigest)) {
+          throw this._invalidRefreshTokenError();
+        }
+      }
     }
 
     const roleName = user.role ? user.role.name : 'customer';
