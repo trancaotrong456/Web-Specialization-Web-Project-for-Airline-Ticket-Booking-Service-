@@ -1806,9 +1806,9 @@ a {
 .hero-route i::before { position: absolute; z-index: -1; top: 50%; left: 0; width: 100%; border-top: 1px dashed rgb(255 255 255 / 50%); content: ''; }
 .hero-route small { grid-column: 1 / -1; color: rgb(255 255 255 / 65%); font-size: 0.72rem; }
 
-.hero-sunrise { position: relative; min-height: 23rem; overflow: hidden; border-radius: 46% 54% 38% 62% / 55% 38% 62% 45%; background: linear-gradient(180deg, #8dbfc0 0%, #e7aa73 47%, #284c56 48%, #102f3c 100%); box-shadow: inset 0 -3rem 7rem rgb(6 25 34 / 35%), 0 2rem 4rem rgb(0 0 0 / 15%); transform: rotate(2deg); }
-.hero-sunrise::before { position: absolute; right: -15%; bottom: 17%; left: -10%; height: 22%; border-radius: 50%; background: #102f3c; content: ''; transform: rotate(-5deg); }
-.hero-sunrise::after { position: absolute; inset: 45% -10% auto; height: 1px; content: ''; background: rgb(255 224 184 / 70%); box-shadow: 0 0 1.5rem 0.5rem rgb(255 191 120 / 45%); }
+.hero-sunrise { position: relative; min-height: 23rem; overflow: hidden; border: 1px solid rgb(255 255 255 / 18%); border-radius: 1.1rem; background: linear-gradient(180deg, rgb(8 36 48 / 3%), rgb(8 36 48 / 34%)), url('/images/auth-aircraft-window.png') center 48% / cover; box-shadow: inset 0 -3rem 7rem rgb(6 25 34 / 28%), 0 2rem 4rem rgb(0 0 0 / 15%); }
+.hero-sunrise::before { position: absolute; inset: auto 0 0; height: 42%; content: ''; background: linear-gradient(0deg, rgb(6 27 37 / 48%), transparent); }
+.hero-sunrise::after { position: absolute; top: 1rem; right: 1rem; width: 4rem; height: 4rem; border: 1px solid rgb(255 255 255 / 32%); border-radius: 50%; content: ''; box-shadow: 0 0 0 1rem rgb(255 255 255 / 7%), 0 0 0 2rem rgb(255 255 255 / 4%); }
 .sun-disc { position: absolute; top: 24%; left: 48%; width: 4.5rem; aspect-ratio: 1; border-radius: 50%; background: #ffe0ab; box-shadow: 0 0 3rem 1.4rem rgb(255 193 116 / 32%); }
 .wing-shape { position: absolute; right: -4%; bottom: -3%; width: 78%; height: 48%; border-radius: 100% 0 0; background: linear-gradient(160deg, #496d76, #10232e 68%); clip-path: polygon(100% 0, 100% 100%, 0 100%, 38% 73%, 49% 55%, 68% 38%); }
 
@@ -1816,6 +1816,7 @@ a {
 .flight-search-card { padding: clamp(1.1rem, 3vw, 2rem); border: 1px solid rgb(13 50 61 / 9%); border-radius: 1.1rem; color: var(--color-text); background: #fff; box-shadow: 0 24px 56px rgb(8 42 55 / 18%); }
 .search-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.35rem; }
 .search-card-heading h2 { margin: 0.2rem 0 0; font-size: 1.55rem; letter-spacing: -0.035em; }
+.search-card-heading > .one-way-note { margin: 0; }
 .trip-switch { display: flex; gap: 0.25rem; padding: 0.25rem; border-radius: 0.7rem; background: #f1f5f4; }
 .trip-switch label { display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.55rem 0.75rem; border-radius: 0.5rem; color: #4b5c62; font-size: 0.84rem; font-weight: 650; cursor: pointer; }
 .trip-switch label:has(input:checked) { color: #075c57; background: #fff; box-shadow: 0 2px 8px rgb(0 0 0 / 8%); }
@@ -2185,4 +2186,100 @@ a {
   .booking-card-bottom { align-items: flex-start; flex-direction: column; }
   .booking-card-bottom .button { width: 100%; }
   .payment-qr-result img { width: min(100%, 16rem); }
+}
+
+/* Stitch homepage polish: full-bleed aircraft hero with the real search form floating above its edge. */
+.home-page .app-header { position: relative; z-index: 5; min-height: 5rem; color: #133640; background: #fff; box-shadow: 0 1px 10px rgb(9 45 61 / 7%); }
+.home-page .app-brand { color: #0a4946; }
+.home-page .app-brand-mark { color: white; background: var(--color-primary); }
+.home-page .app-brand small { color: #557177; }
+.home-page .app-nav a { color: #3c545a; }
+.home-page .app-nav a:hover, .home-page .app-nav a.active { color: #075c57; background: #e8f2f0; }
+.home-page .header-login { color: #0a4946; font-weight: 700; text-decoration: none; }
+.home-page .header-register { border-radius: .55rem; }
+.home-hero { min-height: 0; overflow: visible; isolation: isolate; background-color: #082d3a; background-image: linear-gradient(90deg, rgb(4 28 42 / 87%) 0%, rgb(7 40 53 / 70%) 47%, rgb(7 40 53 / 32%) 100%), linear-gradient(180deg, rgb(4 27 39 / 6%) 48%, rgb(4 27 39 / 38%) 100%), url('/images/auth-aircraft-window.png'); background-position: center 48%; background-size: cover; }
+.home-hero::before { z-index: -1; background: linear-gradient(90deg, rgb(3 24 35 / 22%), transparent 78%), linear-gradient(180deg, transparent 59%, rgb(5 30 39 / 42%)); }
+.home-hero-inner { display: flex; align-items: center; min-height: clamp(27rem, 52vw, 39rem); padding: 4.5rem 0 8rem; }
+.home-copy { max-width: 48rem; }
+.home-copy h1 { max-width: 46rem; font-size: clamp(3rem, 6.1vw, 5.15rem); line-height: 1.04; letter-spacing: -.055em; text-wrap: balance; }
+.home-copy > p { max-width: 37rem; font-size: clamp(1rem, 1.4vw, 1.15rem); }
+.hero-route { margin-top: 1.5rem; }
+.hero-sunrise { display: none; }
+.search-card-wrap { margin-top: -5.25rem; padding-bottom: 2.5rem; }
+.flight-search-card { border: 1px solid rgb(9 45 61 / 10%); border-top: 3px solid var(--color-secondary); border-radius: .8rem; box-shadow: 0 22px 48px rgb(9 45 61 / 17%); }
+.search-card-heading { align-items: flex-end; margin-bottom: 1.1rem; }
+.search-card-heading h2 { font-size: clamp(1.35rem, 2.1vw, 1.75rem); }
+.search-submit { border-radius: .55rem; box-shadow: 0 5px 14px rgb(145 92 15 / 16%); }
+.destination-section { padding-top: 1.4rem; }
+.destination-section .section-heading h2 { font-size: clamp(1.55rem, 3vw, 2.1rem); }
+.destination-card { min-height: 13.5rem; border-radius: .7rem; }
+.home-note { border-radius: .7rem; }
+.booking-promotion-entry { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: end; gap: .55rem .75rem; padding: .95rem; border: 1px solid #dce7e8; border-radius: .65rem; background: #f7faf9; }
+.booking-promotion-entry > .field { min-width: 0; }
+.booking-promotion-entry > .button { min-height: 3.05rem; }
+.booking-promotion-message { grid-column: 1 / -1; margin: 0; color: #075c57; font-size: .78rem; line-height: 1.45; }
+.booking-promotion-message.is-error { color: #a21d1d; }
+
+@media (max-width: 48rem) {
+  .home-page .app-header { min-height: 4.4rem; }
+  .home-page .menu-toggle { color: #0a4946; border-color: #d5e2e3; background: #f5f8f8; }
+  .home-page .app-nav { border: 1px solid #e0e8e8; border-radius: .65rem; background: #fff; box-shadow: 0 12px 28px rgb(9 45 61 / 13%); }
+  .home-page .app-nav.is-open { padding: .5rem; }
+  .home-hero-inner { min-height: 27rem; padding: 3.1rem 0 7rem; }
+  .home-copy h1 { font-size: clamp(2.7rem, 9vw, 4.2rem); }
+  .search-card-wrap { margin-top: -4.35rem; }
+  .destination-section { padding-top: 1.1rem; }
+}
+
+@media (max-width: 36rem) {
+  .home-hero { background-position: 58% center; }
+  .home-hero-inner { min-height: 25rem; padding: 2.65rem 0 6.6rem; }
+  .home-copy h1 { max-width: 21rem; font-size: clamp(2.35rem, 10.5vw, 3.25rem); }
+  .hero-route { margin-top: 1rem; }
+  .search-card-wrap { margin-top: -4.15rem; padding-bottom: 1.4rem; }
+  .flight-search-card { padding: 1rem; border-radius: .7rem; }
+  .search-details-row { grid-template-columns: minmax(0, 1fr); }
+  .search-details-row > .one-way-note { display: none; }
+  .passenger-field { max-width: none; }
+  .booking-promotion-entry { grid-template-columns: minmax(0, 1fr); }
+  .booking-promotion-entry > .button { width: 100%; }
+  .booking-promotion-message { grid-column: 1; }
+}
+
+/* Stitch 2.0: shared aviation editorial refinements, scoped to the redesigned flows. */
+.hero-sunrise .sun-disc, .hero-sunrise .wing-shape { display: none; }
+.flight-search-card { border-top: 3px solid #f8a33d; }
+.one-way-note { max-width: 19rem; line-height: 1.45; }
+.results-page { min-height: 100vh; background: #f5f7fa; }
+.results-main { padding-top: 2.6rem; }
+.results-heading { margin: 1.35rem 0 1.5rem; padding: 1.2rem 0 1.35rem; border-bottom: 1px solid #d8e2ed; }
+.results-heading .eyebrow { color: #0f6b66; }
+.results-summary { align-items: center; min-height: 3.2rem; margin-bottom: .9rem; padding: .7rem 1rem; border: 1px solid #dce5e9; border-radius: .65rem; background: #fff; }
+.flight-result-card { border-left: 3px solid #0f6b66; box-shadow: 0 8px 22px rgb(9 45 61 / 5%); }
+.flight-result-card:hover { border-color: #cbd9dd; border-left-color: #f8a33d; }
+.booking-passenger-layout { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(17rem, .75fr); align-items: start; gap: clamp(1rem, 2.5vw, 2rem); }
+.booking-passenger-main { min-width: 0; }
+.booking-passenger-summary { position: sticky; top: 6rem; min-width: 0; padding: 1.25rem; border: 1px solid #d5e4e1; border-top: 3px solid #f8a33d; border-radius: .85rem; background: linear-gradient(155deg, #f1f7f5, #f8fafc 62%, #fff); }
+.booking-passenger-summary h3 { margin: .45rem 0 1rem; color: #153e43; font-size: 1.12rem; }
+.passenger-route-summary { display: flex; align-items: center; gap: .75rem; padding: .9rem; border-radius: .65rem; color: #f5fbfa; background: #0a4946; }
+.passenger-route-summary strong { font-size: 1.15rem; letter-spacing: .08em; }
+.passenger-route-summary span { flex: 1; color: #f8c879; text-align: center; }
+.passenger-airline-summary { margin: .65rem 0; color: #40585c; font-size: .85rem; font-weight: 700; }
+.booking-passenger-summary dl { margin: .8rem 0 0; }
+.booking-passenger-summary dl > div { display: flex; justify-content: space-between; gap: .8rem; padding: .65rem 0; border-bottom: 1px solid #dce8e5; }
+.booking-passenger-summary dt { color: #5f6b76; font-size: .78rem; }
+.booking-passenger-summary dd { margin: 0; color: #183e43; font-size: .82rem; font-weight: 700; text-align: right; }
+.passenger-summary-note { margin: .85rem 0 0; color: #5f6b76; font-size: .75rem; line-height: 1.55; }
+.booking-passenger-main .booking-section-heading { align-items: flex-start; margin-bottom: 1rem; }
+.booking-passenger-main .booking-passenger-form > .button { min-height: 3rem; }
+@media (max-width: 58rem) {
+  .booking-passenger-layout { grid-template-columns: minmax(0, 1fr); }
+  .booking-passenger-summary { position: static; }
+}
+@media (max-width: 36rem) {
+  .results-main { padding-top: 1.25rem; }
+  .results-summary { align-items: flex-start; flex-direction: column; }
+  .booking-passenger-main .booking-section-heading { align-items: stretch; flex-direction: column; }
+  .booking-passenger-main .booking-section-heading .button { width: 100%; }
+  .booking-passenger-summary { padding: 1rem; }
 }

@@ -60,9 +60,11 @@ describe('public flight discovery pages', () => {
     renderRoutes('/', fetchImpl);
 
     expect(await screen.findByRole('heading', { name: /Bay đến nơi/i })).toBeInTheDocument();
+    expect(document.querySelector('.home-hero')).toHaveClass('home-hero--full-bleed');
     await userEvent.setup().click(screen.getByRole('combobox', { name: 'Điểm đi' }));
     expect(await screen.findByRole('option', { name: /HAN.*Hanoi/i })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: /Khứ hồi/i })).toBeChecked();
+    expect(screen.queryByRole('radio', { name: /Khứ hồi/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/hành trình một chiều/i)).toBeInTheDocument();
   });
 
   it('validates and serializes search values into the results URL', async () => {
@@ -76,8 +78,6 @@ describe('public flight discovery pages', () => {
     await user.click(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
     await user.clear(screen.getByLabelText(/departure/i));
     await user.type(screen.getByLabelText(/departure/i), '2026-10-10');
-    await user.clear(screen.getByLabelText(/return/i));
-    await user.type(screen.getByLabelText(/return/i), '2026-10-15');
     await user.clear(screen.getByLabelText(/passengers/i));
     await user.type(screen.getByLabelText(/passengers/i), '2');
     await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
@@ -131,6 +131,12 @@ describe('public flight discovery pages', () => {
     const secondRequest = fetchImpl.mock.calls.map(([url]) => url).find((url) => url.includes('/flights/search?') && url.includes('page=2'));
     expect(secondRequest).not.toContain('trip_type');
     expect(secondRequest).not.toContain('return_date');
+  });
+
+  it('reports the number of flights on the current page instead of trusting inconsistent total metadata', async () => {
+    renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=1&page=1&limit=20', createFetch());
+
+    expect(await screen.findByText('1 chuyến bay trên trang này')).toBeInTheDocument();
   });
 
   it('does not display a zero fare when the API returns no fare classes', async () => {

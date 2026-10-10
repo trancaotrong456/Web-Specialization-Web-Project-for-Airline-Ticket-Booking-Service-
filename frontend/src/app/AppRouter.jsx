@@ -34,6 +34,7 @@ import {
   AirportListPage,
 } from '../features/airline-airport/AirlineAirportPages';
 import { PromotionDetailPage, PromotionFormPage, PromotionsPage } from '../features/promotions/PromotionPages';
+import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -77,6 +78,7 @@ export function AppRoutes() {
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/security" element={<SecurityPage />} />
         <Route element={<AdminRoute />}>
+          <Route path="/admin" element={<AdminDashboardPage />} />
           <Route path="/admin/payments" element={<AdminPaymentsPage />} />
           <Route path="/admin/payments/:id" element={<AdminPaymentDetailPage />} />
           <Route path="/admin/payments/revenue" element={<AdminRevenuePage />} />

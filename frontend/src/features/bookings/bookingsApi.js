@@ -12,6 +12,7 @@ export const createBookingsApi = (request) => ({
   flightDetail: (id) => request(`/flights/${encodeURIComponent(id)}`),
   fareClassesForFlight: (flightId) => request(`/fare-classes/flight/${encodeURIComponent(flightId)}`),
   createBooking: (payload) => request('/bookings', { method: 'POST', body: payload }),
+  validatePromotion: (code) => request(`/promotions/validate/${encodeURIComponent(code)}`),
   myBookings: ({ page = 1, limit = 10, status } = {}) => request(`/bookings/my-bookings?${toQuery({ page, limit, status })}`),
   adminBookings: ({ page = 1, limit = 10, status, search } = {}) => request(`/bookings/admin/all?${toQuery({ page, limit, status, search })}`),
   lookupBooking: (code, guestEmail) => request(`/bookings/lookup/${encodeURIComponent(code)}?${toQuery({ guest_email: guestEmail })}`),
