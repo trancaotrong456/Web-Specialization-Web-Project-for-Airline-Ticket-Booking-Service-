@@ -39,6 +39,13 @@ describe('booking and payment API adapter', () => {
     ]);
   });
 
+  it('validates a promotion through the public code-validation route', async () => {
+    const request = vi.fn(async () => ({ code: 'SKY10' }));
+    const api = createBookingsApi(request);
+    await api.validatePromotion('SKY 10');
+    expect(request).toHaveBeenCalledWith('/promotions/validate/SKY%2010');
+  });
+
   it('validates guest email without accepting whitespace or malformed addresses', () => {
     expect(isValidEmail(' guest@example.com ')).toBe(true);
     expect(isValidEmail('guest@')).toBe(false);
