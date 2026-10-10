@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -12,6 +12,17 @@ const fetchImpl = vi.fn(async (url) => {
   if (url.endsWith('/auth/logout')) return response({});
   throw new Error(`Unexpected ${url}`);
 });
+
+function renderHeaderForRole(role) {
+  const roleFetch = vi.fn(async (url) => {
+    if (url.endsWith('/auth/refresh-token')) return response({ accessToken: 'access' });
+    if (url.endsWith('/auth/me')) return response({ id: 2, full_name: 'Demo User', email: 'user@example.com', role: { name: role } });
+    if (url.endsWith('/auth/logout')) return response({});
+    throw new Error(`Unexpected ${url}`);
+  });
+  sessionStorage.setItem('airline_refresh_token', 'refresh');
+  return render(<AuthProvider fetchImpl={roleFetch}><MemoryRouter initialEntries={['/']}><AppHeader /></MemoryRouter></AuthProvider>);
+}
 
 describe('responsive account navigation', () => {
   afterEach(() => { vi.unstubAllGlobals(); });
@@ -44,5 +55,29 @@ describe('responsive account navigation', () => {
     await user.click(screen.getByRole('button', { name: 'Mở menu' }));
     await user.click(screen.getByRole('link', { name: 'Hồ sơ' }));
     expect(screen.queryByRole('navigation', { name: 'Điều hướng tài khoản' })).not.toBeInTheDocument();
+  });
+
+  it('keeps management links out of the public navigation and gives admins a hover/focus link to the admin area', async () => {
+    const user = userEvent.setup();
+    renderHeaderForRole('admin');
+    const navigation = await screen.findByRole('navigation', { name: 'Điều hướng tài khoản' });
+    for (const label of ['Quản lý chuyến bay', 'Quản lý đặt chỗ', 'Thanh toán', 'Hãng hàng không', 'Sân bay', 'Khuyến mại', 'Tổng quan']) {
+      expect(within(navigation).queryByRole('link', { name: label })).not.toBeInTheDocument();
+    }
+
+    const trigger = await screen.findByRole('button', { name: /Demo User/ });
+    await user.hover(trigger);
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Vào trang quản trị' })).toHaveAttribute('href', '/admin');
+    expect(screen.getByRole('menuitem', { name: 'Đăng xuất' })).toHaveClass('account-menu-logout');
+  });
+
+  it.each(['customer', 'staff'])('gives %s the account dropdown without exposing the admin action', async (role) => {
+    renderHeaderForRole(role);
+    const trigger = await screen.findByRole('button', { name: /Demo User/ });
+    trigger.focus();
+    expect(await screen.findByRole('menu')).toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Vào trang quản trị' })).not.toBeInTheDocument();
+    expect(screen.getByRole('menuitem', { name: 'Đăng xuất' })).toHaveClass('account-menu-logout');
   });
 });

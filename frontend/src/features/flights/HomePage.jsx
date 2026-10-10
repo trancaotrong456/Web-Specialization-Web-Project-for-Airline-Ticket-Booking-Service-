@@ -11,9 +11,9 @@ const todayLocal = () => {
 };
 
 const destinations = [
-  { code: 'HAN', city: 'Hà Nội', note: 'Văn hoá và nhịp sống thủ đô' },
-  { code: 'SGN', city: 'TP. Hồ Chí Minh', note: 'Khám phá thành phố không ngủ' },
-  { code: 'DAD', city: 'Đà Nẵng', note: 'Biển xanh và những cây cầu' },
+  { code: 'HAN', city: 'Hà Nội', note: 'Văn hoá và nhịp sống thủ đô', image: '/images/destinations/hanoi.jpg' },
+  { code: 'SGN', city: 'TP. Hồ Chí Minh', note: 'Khám phá thành phố không ngủ', image: '/images/destinations/ho-chi-minh-city.jpg' },
+  { code: 'DAD', city: 'Đà Nẵng', note: 'Biển xanh và những cây cầu', image: '/images/destinations/da-nang.jpg' },
 ];
 
 export function HomePage() {
@@ -73,7 +73,7 @@ export function HomePage() {
               <span className="eyebrow home-eyebrow">Mỗi hành trình, một câu chuyện</span>
               <h1>Bay đến nơi<br /><em>bạn muốn thuộc về.</em></h1>
               <p>Tìm chuyến bay phù hợp và bắt đầu lên kế hoạch cho chặng đường tiếp theo.</p>
-              <div className="hero-route" aria-hidden="true"><span>HAN</span><i>✈</i><span>SGN</span><small>Việt Nam · kết nối dễ dàng</small></div>
+              <div className="hero-route"><span className="hero-route-icon" aria-hidden="true">✈</span><span>Một chiều · Linh hoạt theo kế hoạch của bạn</span></div>
             </div>
             <div className="hero-sunrise" aria-hidden="true"><span className="sun-disc" /><span className="wing-shape" /></div>
           </div>
@@ -103,7 +103,7 @@ export function HomePage() {
 
         <section className="destination-section" aria-labelledby="destinations-heading">
           <div className="section-heading"><div><span className="eyebrow">Gợi ý hành trình</span><h2 id="destinations-heading">Khám phá các điểm đến</h2></div><p>Một vài thành phố để bạn bắt đầu lên kế hoạch.</p></div>
-          <div className="destination-list">{destinations.map((place, index) => <article className={`destination-card destination-card-${index + 1}`} key={place.code}><div className="destination-art" aria-hidden="true"><span>{place.code}</span></div><div><span className="destination-code">{place.code} · VIỆT NAM</span><h3>{place.city}</h3><p>{place.note}</p></div></article>)}</div>
+          <div className="destination-list">{destinations.map((place, index) => <article className={`destination-card destination-card-${index + 1}`} key={place.code}><div className="destination-art" style={{ backgroundImage: `url("${place.image}")` }} aria-hidden="true"><span>{place.code}</span></div><div><span className="destination-code">{place.code} · VIỆT NAM</span><h3>{place.city}</h3><p>{place.note}</p></div></article>)}</div>
         </section>
         <section className="home-note"><span className="note-mark" aria-hidden="true">✦</span><div><h2>Hành trình tốt bắt đầu từ lựa chọn phù hợp.</h2><p>So sánh giờ bay, chỗ còn trống và hạng vé để tìm chuyến đi hợp với kế hoạch của bạn.</p></div></section>
       </main>

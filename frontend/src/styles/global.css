@@ -1106,6 +1106,65 @@ a {
   white-space: nowrap;
 }
 
+.account-menu { position: relative; }
+.account-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .55rem .7rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+.account-menu-trigger:hover,
+.account-menu-trigger[aria-expanded="true"] { border-color: rgb(255 255 255 / 20%); background: rgb(255 255 255 / 10%); }
+.account-menu-trigger:focus-visible { outline: 2px solid var(--color-secondary); outline-offset: 2px; }
+.account-menu-chevron { color: rgb(255 255 255 / 75%); font-size: .72rem; }
+.account-menu-dropdown {
+  position: absolute;
+  z-index: 30;
+  top: 100%;
+  left: 50%;
+  min-width: 14rem;
+  max-width: calc(100vw - 1.5rem);
+  padding: .35rem;
+  border: 1px solid #dce6eb;
+  border-radius: .65rem;
+  background: #fff;
+  box-shadow: 0 12px 30px rgb(3 31 38 / 20%);
+  transform: translateX(-50%);
+}
+.account-menu-dropdown a {
+  display: block;
+  padding: .7rem .8rem;
+  border-radius: .4rem;
+  color: #113b3c;
+  font-size: .88rem;
+  font-weight: 650;
+  text-decoration: none;
+}
+.account-menu-dropdown a:hover,
+.account-menu-dropdown a:focus-visible { color: #075b49; background: #e7f3ef; outline: none; }
+.account-menu-logout {
+  display: block;
+  width: 100%;
+  padding: .7rem .8rem;
+  border: 0;
+  border-radius: .4rem;
+  color: #b42318;
+  background: transparent;
+  font: inherit;
+  font-size: .88rem;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: left;
+}
+.account-menu-logout:hover,
+.account-menu-logout:focus-visible { color: #912018; background: #fff0ee; outline: none; }
+
 .button-quiet {
   min-height: 2.55rem;
   color: white;
@@ -1226,6 +1285,8 @@ a {
   .account-name {
     display: none;
   }
+
+  .account-menu .account-menu-trigger { display: inline-flex; max-width: 8rem; }
 }
 
 @media (max-width: 30rem) {
@@ -1759,12 +1820,18 @@ a {
   font-size: 0.9rem;
 }
 
+.public-page .app-brand small { color: #64748b; }
+.public-page .app-nav a { color: #3c545a; }
+.public-page .app-nav a:hover,
+.public-page .app-nav a.active { color: #075c57; background: #e8f2f0; }
+.public-page .menu-toggle { color: #075c57; background: #e8f2f0; border-color: #d9e3f4; }
+
 .public-page .account-actions a {
   text-decoration: none;
   font-weight: 700;
 }
 
-.header-login { color: #fff; }
+.header-login { color: #0a4946; }
 .header-register { min-height: 2.55rem; padding: 0.55rem 1rem; }
 .guest-nav-entry { display: none; }
 
@@ -1876,7 +1943,11 @@ a {
 .flight-results-list { display: grid; gap: 0.8rem; }
 .flight-result-card { display: grid; grid-template-columns: minmax(9rem, 0.8fr) minmax(16rem, 1.6fr) minmax(6.5rem, 0.6fr) minmax(9.5rem, 0.8fr); align-items: center; gap: 1.2rem; padding: 1.25rem; border: 1px solid #e0e7e8; border-radius: 0.8rem; background: white; box-shadow: 0 4px 14px rgb(15 48 55 / 4%); }
 .flight-carrier { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
-.flight-carrier img, .carrier-mark { width: 2.6rem; height: 2.6rem; flex: 0 0 auto; display: grid; place-items: center; object-fit: contain; border: 1px solid #e0e7e8; border-radius: 0.55rem; color: var(--color-primary); background: #f2f8f7; }
+.carrier-logo { position: relative; width: 2.6rem; height: 2.6rem; flex: 0 0 auto; }
+.flight-carrier img, .carrier-mark { position: absolute; inset: 0; width: 2.6rem; height: 2.6rem; display: grid; place-items: center; object-fit: contain; border: 1px solid #e0e7e8; border-radius: 0.55rem; color: var(--color-primary); background: #f2f8f7; }
+.carrier-mark { z-index: 0; }
+.flight-carrier img { z-index: 1; }
+.carrier-logo img[hidden] { display: none !important; }
 .flight-carrier strong, .flight-carrier small { display: block; }
 .flight-carrier strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flight-carrier small, .flight-itinerary small { color: var(--color-muted); font-size: 0.75rem; }
@@ -2282,4 +2353,151 @@ a {
   .booking-passenger-main .booking-section-heading { align-items: stretch; flex-direction: column; }
   .booking-passenger-main .booking-section-heading .button { width: 100%; }
   .booking-passenger-summary { padding: 1rem; }
+}
+
+/* Stitch-aligned application surfaces; business data and actions remain API-backed. */
+.home-page, .results-page, .booking-page, .admin-page, .promotion-page, .catalog-page, .flight-management-page, .admin-dashboard-page { background: #f8f9ff; }
+.home-page .app-header, .results-page .app-header, .booking-page:not(:has(.app-admin-sidebar)) .app-header { background: rgb(255 255 255 / 92%); backdrop-filter: blur(16px); }
+.home-page .app-brand strong, .results-page .app-brand strong, .booking-page .app-brand strong { color: #00514d; }
+.home-hero { background-position: center 48%; }
+.hero-route { display: inline-flex; align-items: center; gap: .7rem; width: fit-content; color: #f4f7f9; background: rgb(10 35 47 / 52%); border-color: rgb(255 255 255 / 22%); }
+.hero-route-icon { display: grid; width: 2rem; height: 2rem; place-items: center; border-radius: 50%; color: #092f3b; background: #ffedda; }
+.hero-route > span:last-child { color: #fff; font-size: .79rem; letter-spacing: 0; }
+.home-note { border-color: #d9e3f4; background: linear-gradient(105deg, #eef4ff, #fff); }
+.note-mark { color: #693d00; background: #ffedda; }
+.destination-card { box-shadow: 0 8px 22px rgb(9 45 61 / 8%); }
+.destination-code { color: #ffddb0; }
+
+.destination-card {
+  min-height: 14.5rem;
+  justify-content: flex-end;
+  padding: 1.25rem;
+  border: 1px solid rgb(255 255 255 / 50%);
+  border-top: 0;
+  color: #fff;
+  background: #193c48;
+  box-shadow: 0 8px 22px rgb(9 45 61 / 11%);
+}
+.destination-card::before { z-index: 1; display: block; opacity: 1; background: linear-gradient(180deg, rgb(6 27 37 / 14%) 0%, rgb(6 27 37 / 7%) 34%, rgb(6 27 37 / 82%) 100%); }
+.destination-art { z-index: 0; background-position: center; background-size: cover; transition: transform .45s ease; }
+.destination-card:hover .destination-art { transform: scale(1.035); }
+.destination-art::after { display: none; }
+.destination-art span { top: .95rem; right: auto; left: 1.15rem; color: rgb(255 255 255 / 92%); font-size: clamp(2rem, 4.2vw, 3.1rem); letter-spacing: -.075em; line-height: 1; text-shadow: 0 2px 14px rgb(0 0 0 / 26%); }
+.destination-card > div:last-child { z-index: 2; }
+.destination-code { color: #ffddb0; font-size: .65rem; letter-spacing: .13em; }
+.destination-card h3 { color: #fff; font-size: 1.4rem; letter-spacing: -.025em; }
+.destination-card p { color: rgb(255 255 255 / 82%); }
+
+.results-main { width: min(100% - 2.5rem, 82rem); padding-top: 1.6rem; }
+.results-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 9rem; margin: 1rem 0 1.2rem; padding: 1.35rem 1.5rem; border: 1px solid #d9e3f4; border-radius: .65rem; background: linear-gradient(110deg, #eef4ff 0%, #f8f9ff 72%, #e5eeff 100%); }
+.results-heading h1 { margin: .35rem 0 .25rem; color: #00514d; font-size: clamp(1.8rem, 4vw, 2.6rem); }
+.results-heading p { margin: 0; color: #3f4947; }
+.results-route-chip { display: flex; align-items: center; gap: .85rem; min-width: 11rem; justify-content: center; padding: .85rem 1rem; border: 1px solid #bec9c7; border-radius: .6rem; color: #00514d; background: rgb(255 255 255 / 78%); }
+.results-route-chip span { font-size: 1.05rem; font-weight: 800; letter-spacing: .08em; }
+.results-route-chip i { color: #8a5200; font-style: normal; }
+.results-summary { border-color: #d9e3f4; border-radius: .5rem; color: #3f4947; background: #eef4ff; }
+.results-summary span:first-child { color: #00514d; }
+.flight-results-list { gap: .7rem; }
+.flight-result-card { grid-template-columns: minmax(9rem, .8fr) minmax(16rem, 1.6fr) minmax(6.5rem, .6fr) minmax(9.5rem, .8fr) auto; gap: 1rem; padding: 1rem 1.15rem; border: 1px solid #d9e3f4; border-left: 3px solid #00514d; border-radius: .6rem; box-shadow: 0 1px 8px rgb(9 45 61 / 5%); }
+.flight-result-card:hover { border-color: #bec9c7; border-left-color: #8a5200; box-shadow: 0 8px 22px rgb(9 45 61 / 8%); }
+.flight-itinerary time { color: #00514d; }
+.flight-fare strong { color: #693d00; }
+.flight-book-link { grid-column: auto; justify-self: end; min-width: 8.5rem; }
+.results-pagination { display: flex; align-items: center; justify-content: center; gap: .75rem; margin-top: 1.25rem; padding: .85rem; border: 1px solid #d9e3f4; border-radius: .6rem; background: #fff; }
+.results-pagination button { min-height: 2.5rem; padding: .55rem .8rem; border: 1px solid #bec9c7; border-radius: .45rem; color: #00514d; background: #fff; font-weight: 700; cursor: pointer; }
+.results-pagination button:hover:not(:disabled) { border-color: #00514d; background: #eef4ff; }
+.results-pagination button:disabled { color: #879294; background: #f1f3f8; cursor: not-allowed; }
+.results-pagination span { min-width: 4rem; color: #3f4947; font-size: .82rem; font-weight: 700; text-align: center; }
+
+.booking-page { background: #f8f9ff; }
+.booking-main { width: min(100% - 2.5rem, 82rem); }
+.booking-heading { padding-bottom: 1.1rem; border-bottom: 1px solid #d9e3f4; }
+.booking-heading h1 { color: #00514d; }
+.booking-panel, .booking-passenger-summary { border-color: #d9e3f4; border-radius: .65rem; box-shadow: 0 1px 8px rgb(9 45 61 / 5%); }
+.booking-panel h2, .booking-passenger-summary h3 { color: #00514d; }
+.booking-steps span { border-color: #d9e3f4; border-radius: .5rem; background: #eef4ff; }
+.booking-steps span.is-current { border-color: #00514d; color: #00514d; background: #d8f2ef; }
+.booking-fare-option.is-selected, .payment-method-options label.is-selected { border-color: #00514d; background: #e4f3f1; }
+.passenger-fieldset { border-color: #d9e3f4; border-radius: .5rem; background: #fff; }
+.booking-passenger-summary { border-top-color: #8a5200; background: linear-gradient(155deg, #eef4ff, #fff 72%); }
+.passenger-route-summary { border-radius: .5rem; background: #00514d; }
+.passenger-route-summary span { color: #ffddb0; }
+
+.admin-page, .promotion-page, .catalog-page, .flight-management-page, .booking-page { color: #121c28; }
+.admin-main, .catalog-main, .promotion-main, .flight-management-main, .booking-admin-main { max-width: 82rem; }
+.admin-heading h1, .catalog-heading h1, .promotion-heading h1, .flight-management-heading h1, .booking-heading h1 { color: #00514d; }
+.admin-page .surface-card, .catalog-main .surface-card, .promotion-main .surface-card, .flight-management-main .surface-card, .booking-admin-main .surface-card { border-color: #d9e3f4; border-radius: .65rem; box-shadow: 0 1px 8px rgb(9 45 61 / 5%); }
+.admin-page table th, .catalog-main table th, .promotion-main table th, .flight-management-main table th, .booking-admin-main table th { color: #436274; background: #eef4ff; }
+.admin-page .button, .catalog-main .button, .promotion-main .button, .flight-management-main .button, .booking-admin-main .button { border-radius: .45rem; }
+
+/* Admin workspace treatment based on the approved operations-dashboard reference. */
+body:has(.app-admin-sidebar) { color: #172d3b; background: #f5f8fc; }
+body:has(.app-admin-sidebar) .app-header-admin-area { background: #003d32; }
+@media (max-width: 48rem) {
+  body:has(.app-admin-sidebar) .app-header-admin-area { align-items: center; flex-wrap: nowrap; min-height: 4.5rem; }
+}
+body:has(.app-admin-sidebar) .admin-page,
+body:has(.app-admin-sidebar) .promotion-page,
+body:has(.app-admin-sidebar) .catalog-page,
+body:has(.app-admin-sidebar) .flight-management-page,
+body:has(.app-admin-sidebar) .booking-page,
+body:has(.app-admin-sidebar) .admin-dashboard-page { color: #172d3b; background: #f5f8fc; }
+body:has(.app-admin-sidebar) .admin-heading h1,
+body:has(.app-admin-sidebar) .catalog-heading h1,
+body:has(.app-admin-sidebar) .promotion-heading h1,
+body:has(.app-admin-sidebar) .flight-management-heading h1,
+body:has(.app-admin-sidebar) .booking-heading h1 { color: #0b2e28; letter-spacing: -.04em; }
+body:has(.app-admin-sidebar) .admin-heading p,
+body:has(.app-admin-sidebar) .catalog-heading p,
+body:has(.app-admin-sidebar) .promotion-heading p,
+body:has(.app-admin-sidebar) .flight-management-heading p,
+body:has(.app-admin-sidebar) .booking-heading p { color: #5d7185; }
+body:has(.app-admin-sidebar) .admin-page .surface-card,
+body:has(.app-admin-sidebar) .catalog-main .surface-card,
+body:has(.app-admin-sidebar) .promotion-main .surface-card,
+body:has(.app-admin-sidebar) .flight-management-main .surface-card,
+body:has(.app-admin-sidebar) .booking-admin-main .surface-card { border-color: #e0e7ee; border-radius: .8rem; background: #fff; box-shadow: 0 2px 9px rgb(24 50 68 / 4%); }
+body:has(.app-admin-sidebar) .admin-page table th,
+body:has(.app-admin-sidebar) .catalog-main table th,
+body:has(.app-admin-sidebar) .promotion-main table th,
+body:has(.app-admin-sidebar) .flight-management-main table th,
+body:has(.app-admin-sidebar) .booking-admin-main table th { color: #29465d; background: #f4f8fb; }
+body:has(.app-admin-sidebar) .admin-page table td,
+body:has(.app-admin-sidebar) .catalog-main table td,
+body:has(.app-admin-sidebar) .promotion-main table td,
+body:has(.app-admin-sidebar) .flight-management-main table td,
+body:has(.app-admin-sidebar) .booking-admin-main table td { border-color: #e7edf2; }
+body:has(.app-admin-sidebar) .admin-page .button-primary,
+body:has(.app-admin-sidebar) .catalog-main .button-primary,
+body:has(.app-admin-sidebar) .promotion-main .button-primary,
+body:has(.app-admin-sidebar) .flight-management-main .button-primary,
+body:has(.app-admin-sidebar) .booking-admin-main .button-primary { color: #fff; background: #075744; }
+body:has(.app-admin-sidebar) .admin-page .button-secondary,
+body:has(.app-admin-sidebar) .catalog-main .button-secondary,
+body:has(.app-admin-sidebar) .promotion-main .button-secondary,
+body:has(.app-admin-sidebar) .flight-management-main .button-secondary,
+body:has(.app-admin-sidebar) .booking-admin-main .button-secondary { color: #392000; background: #ffbd66; }
+
+@media (max-width: 58rem) {
+  .flight-result-card { grid-template-columns: minmax(8rem, .8fr) minmax(14rem, 1.5fr) minmax(5rem, .6fr); }
+  .flight-fare { grid-column: 2 / 4; justify-items: start; }
+  .flight-book-link { grid-column: 1 / -1; justify-self: end; }
+}
+@media (max-width: 48rem) {
+  .results-heading { align-items: flex-start; padding: 1rem; }
+  .results-route-chip { min-width: 0; padding: .65rem; }
+  .flight-result-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .booking-main { width: min(100% - 1.5rem, 82rem); }
+}
+@media (max-width: 36rem) {
+  .account-menu-dropdown { right: 0; left: auto; transform: none; }
+  .results-main { width: min(100% - 1.25rem, 82rem); }
+  .results-heading { align-items: flex-start; flex-direction: column; gap: .8rem; }
+  .results-route-chip { align-self: stretch; justify-content: flex-start; }
+  .results-summary { align-items: flex-start; flex-direction: column; }
+  .flight-result-card { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .flight-book-link { width: 100%; }
+  .results-pagination { justify-content: space-between; gap: .35rem; padding: .55rem; }
+  .results-pagination button { padding-inline: .5rem; font-size: .75rem; }
+  .booking-main { width: min(100% - 1.25rem, 82rem); }
 }

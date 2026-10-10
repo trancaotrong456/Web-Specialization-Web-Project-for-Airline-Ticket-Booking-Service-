@@ -1,15 +1,15 @@
 :root {
   color-scheme: light;
   font-family: 'Plus Jakarta Sans', Inter, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --color-primary: #0f6b66;
-  --color-primary-dark: #0a4946;
+  --color-primary: #00514d;
+  --color-primary-dark: #003d3a;
   --color-secondary: #f8a33d;
   --color-neutral: #4b5563;
-  --color-background: #eef4ff;
+  --color-background: #f8f9ff;
   --color-surface: #ffffff;
   --color-text: #121c28;
   --color-muted: #5f6b76;
-  --color-border: #d8e2ed;
+  --color-border: #d9e3f4;
   --color-danger: #c62828;
   --color-success: #0f6b66;
   --space-1: 0.25rem;
