@@ -42,6 +42,9 @@ describe('booking customer pages', () => {
     await user.click(await screen.findByRole('button', { name: 'Chọn chuyến bay' }));
     await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent('Airline');
+    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent('Phổ thông');
+    expect(screen.queryByText(/chọn ghế|hành lý|suất ăn/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Họ tên'), 'Nguyen Van A');
     await user.type(screen.getByLabelText('Email liên hệ'), 'not-an-email');
     await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
@@ -67,6 +70,33 @@ describe('booking customer pages', () => {
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' })); await user.type(screen.getByLabelText('Họ tên'), 'Nguyen Van A');
     await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings', expect.objectContaining({ method: 'POST', body: expect.not.objectContaining({ guest_email: expect.anything() }) })));
+  });
+
+  it('validates a promotion before including promotion_code in booking creation', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockImplementation(async (path, options) => {
+      if (path.startsWith('/airports?')) return { data: [{ id: 1, iata_code: 'HAN' }, { id: 2, iata_code: 'SGN' }] };
+      if (path.startsWith('/flights/search?')) return { data: [flight] };
+      if (path === '/fare-classes/flight/17') return { data: [{ id: 5, class_name: 'Phổ thông', price: 1000000 }] };
+      if (path === '/promotions/validate/SKY10') return { id: 8, code: 'SKY10', discount_type: 'percent', discount_value: '10.00' };
+      if (path === '/bookings') return { id: 103, booking_code: 'BK103', total_amount: 900000 };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    renderPage(<BookingCreatePage />);
+    await screen.findByLabelText('Sân bay đi');
+    await user.selectOptions(screen.getByLabelText('Sân bay đi'), '1'); await user.selectOptions(screen.getByLabelText('Sân bay đến'), '2');
+    await user.type(screen.getByLabelText('Ngày khởi hành'), '2026-10-12'); await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
+    await user.click(await screen.findByRole('button', { name: 'Chọn chuyến bay' })); await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    await user.type(screen.getByLabelText('Mã khuyến mại (không bắt buộc)'), 'sky10');
+    await user.click(screen.getByRole('button', { name: 'Kiểm tra mã' }));
+    expect(await screen.findByText(/Mã SKY10 hợp lệ/i)).toBeInTheDocument();
+    await user.type(screen.getByLabelText('Họ tên'), 'Nguyen Van A');
+    await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings', expect.objectContaining({
+      method: 'POST', body: expect.objectContaining({ promotion_code: 'SKY10' }),
+    })));
   });
 
   it('loads My Bookings with pagination and the selected status', async () => {

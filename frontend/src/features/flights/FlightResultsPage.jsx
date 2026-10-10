@@ -52,16 +52,13 @@ export function FlightResultsPage() {
     page: searchParams.get('page') || '1',
     limit: searchParams.get('limit') || String(pageSize),
   }), [searchParams]);
-  const tripType = searchParams.get('trip_type') === 'round_trip' ? 'round_trip' : 'one_way';
-  const returnDate = searchParams.get('return_date') || '';
   const valid = validId(values.departure_airport_id)
     && validId(values.arrival_airport_id)
     && values.departure_airport_id !== values.arrival_airport_id
     && /^\d{4}-\d{2}-\d{2}$/.test(values.departure_date)
     && Number.isInteger(Number(values.min_seats)) && Number(values.min_seats) >= 1
     && Number.isInteger(Number(values.page)) && Number(values.page) >= 1
-    && Number.isInteger(Number(values.limit)) && Number(values.limit) >= 1
-    && (tripType === 'one_way' || (/^\d{4}-\d{2}-\d{2}$/.test(returnDate) && returnDate >= values.departure_date));
+    && Number.isInteger(Number(values.limit)) && Number(values.limit) >= 1;
   const [result, setResult] = useState({ data: [], pagination: null });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -92,12 +89,12 @@ export function FlightResultsPage() {
       <AppHeader />
       <main className="results-main">
         <Link className="back-link" to="/">← Chỉnh sửa tìm kiếm</Link>
-        <header className="results-heading"><span className="eyebrow">Hành trình của bạn</span><h1>Chuyến bay phù hợp</h1><p>{values.departure_date ? formatDay(values.departure_date) : 'Chưa chọn ngày'} · {tripType === 'one_way' ? 'Một chiều' : `Khứ hồi${returnDate ? ` · về ${formatDay(returnDate)}` : ''}`} · {values.min_seats} hành khách</p></header>
+        <header className="results-heading"><span className="eyebrow">Hành trình một chiều</span><h1>Chuyến bay phù hợp</h1><p>{values.departure_date ? formatDay(values.departure_date) : 'Chưa chọn ngày'} · {values.min_seats} hành khách</p></header>
         {!valid ? <section className="search-state surface-card" role="alert"><h2>Thông tin tìm kiếm chưa đầy đủ</h2><p>Quay lại trang chủ và chọn điểm đi, điểm đến cùng ngày khởi hành hợp lệ.</p><Link className="button button-primary" to="/">Tìm chuyến bay</Link></section> : null}
         {loading ? <LoadingView label="Đang tìm chuyến bay…" /> : null}
         {error ? <section className="search-state surface-card" role="alert"><h2>Chưa tải được kết quả</h2><p>{error}</p><button className="button button-outline" type="button" onClick={() => void load()}>Thử lại</button></section> : null}
         {valid && !loading && !error ? <>
-          <section className="results-summary"><span>{result.pagination?.total ?? result.data.length} chuyến bay</span><span>Sắp xếp theo giờ khởi hành</span></section>
+          <section className="results-summary"><span>{result.data.length} chuyến bay trên trang này</span><span>Sắp xếp theo giờ khởi hành</span></section>
           {result.data.length ? <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} />)}</div> : <section className="search-state surface-card"><span className="empty-mark" aria-hidden="true">✦</span><h2>Không có chuyến bay phù hợp</h2><p>Thử đổi ngày bay, điểm đến hoặc số hành khách để tìm lựa chọn khác.</p><Link className="button button-outline" to="/">Sửa tiêu chí tìm kiếm</Link></section>}
           <Pagination page={Number(result.pagination?.page || values.page)} totalPages={Number(result.pagination?.totalPages || 1)} onPageChange={changePage} />
         </> : null}

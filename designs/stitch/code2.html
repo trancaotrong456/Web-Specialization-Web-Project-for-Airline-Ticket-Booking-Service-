@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+
+<html lang="vi"><head><meta charset="utf-8"/><meta content="width=device-width, initial-scale=1.0" name="viewport"/><meta content="web_dashboard" name="shell-type"/><title>Serene Flightways Operations Portal</title><link href="https://fonts.googleapis.com" rel="preconnect"/><link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/><link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&amp;display=swap" rel="stylesheet"/><link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/><style>@layer base{html,body{margin:0;padding:0;}body{overscroll-behavior:none;}main>:first-child{margin-top:0!important;}main>:last-child{margin-bottom:0!important;}}::-webkit-scrollbar{display:none;}</style><script src="https://cdn.tailwindcss.com"></script><script id="tailwind-config">tailwind.config={darkMode:"class",theme:{extend:{"colors":{"on-primary-fixed-variant":"#00504c","surface-container-low":"#eef4ff","surface-bright":"#f8f9ff","on-error-container":"#93000a","on-secondary-fixed-variant":"#2b4a5b","on-secondary-container":"#49687a","on-primary-fixed":"#00201e","on-background":"#121c28","error":"#ba1a1a","inverse-surface":"#27313e","error-container":"#ffdad6","primary-container":"#0f6b66","tertiary-fixed":"#ffdcbc","on-tertiary-fixed":"#2c1700","on-surface-variant":"#3f4947","on-primary-container":"#9be9e2","on-tertiary-fixed-variant":"#683d00","tertiary":"#693d00","on-tertiary":"#ffffff","on-primary":"#ffffff","surface-tint":"#0c6a65","secondary-fixed":"#c6e7fc","on-secondary-fixed":"#001e2c","surface-container":"#e5eeff","surface-dim":"#d1dbec","surface-variant":"#d9e3f4","inverse-primary":"#87d4ce","primary-fixed":"#a2f1ea","primary":"#00514d","surface-container-lowest":"#ffffff","tertiary-fixed-dim":"#ffb86b","secondary-fixed-dim":"#abcbdf","on-tertiary-container":"#ffd2a6","background":"#f8f9ff","surface":"#f8f9ff","surface-container-high":"#dfe9fa","primary-fixed-dim":"#87d4ce","inverse-on-surface":"#eaf1ff","outline-variant":"#bec9c7","on-secondary":"#ffffff","on-surface":"#121c28","surface-container-highest":"#d9e3f4","secondary-container":"#c6e7fc","outline":"#6f7978","secondary":"#436274","tertiary-container":"#8a5200","on-error":"#ffffff"},"borderRadius":{"DEFAULT":"0.25rem","lg":"0.5rem","xl":"0.75rem","full":"9999px"},"spacing":{"space-xs":"0.25rem","margin":"2.5rem","space-sm":"0.5rem","margin-mobile":"1.25rem","space-lg":"1.5rem","space-xl":"2.5rem","gutter":"1.5rem","space-md":"1rem","gutter-mobile":"1rem"},"fontFamily":{"headline-lg":["Plus Jakarta Sans"],"body-sm":["Plus Jakarta Sans"],"display-hero":["Plus Jakarta Sans"],"headline-lg-mobile":["Plus Jakarta Sans"],"headline-md":["Plus Jakarta Sans"],"title-code":["Plus Jakarta Sans"],"label-md":["Plus Jakarta Sans"],"label-sm":["Plus Jakarta Sans"],"body-lg":["Plus Jakarta Sans"],"numeric-data":["Plus Jakarta Sans"],"body-md":["Plus Jakarta Sans"],"headline-sm":["Plus Jakarta Sans"]},"fontSize":{"headline-lg":["36px",{"lineHeight":"44px","letterSpacing":"-0.02em","fontWeight":"700"}],"body-sm":["13px",{"lineHeight":"18px","fontWeight":"400"}],"display-hero":["48px",{"lineHeight":"56px","letterSpacing":"-0.02em","fontWeight":"700"}],"headline-lg-mobile":["28px",{"lineHeight":"36px","letterSpacing":"-0.01em","fontWeight":"700"}],"headline-md":["24px",{"lineHeight":"32px","letterSpacing":"-0.01em","fontWeight":"600"}],"title-code":["28px",{"lineHeight":"32px","letterSpacing":"0.05em","fontWeight":"800"}],"label-md":["14px",{"lineHeight":"20px","fontWeight":"600"}],"label-sm":["12px",{"lineHeight":"16px","letterSpacing":"0.02em","fontWeight":"600"}],"body-lg":["18px",{"lineHeight":"28px","fontWeight":"400"}],"numeric-data":["16px",{"lineHeight":"24px","letterSpacing":"-0.01em","fontWeight":"700"}],"body-md":["15px",{"lineHeight":"22px","fontWeight":"400"}],"headline-sm":["20px",{"lineHeight":"28px","fontWeight":"600"}]}}}}</script></head><body class="bg-surface font-body-md text-body-md text-on-surface antialiased"><aside class="fixed left-0 top-0 h-full w-72 bg-surface-container-low z-50 flex flex-col pt-space-lg pb-space-lg shadow-[0_1px_8px_rgba(9,45,61,0.04)]"><div class="px-space-lg mb-space-lg flex items-center gap-space-sm"><img alt="Serene Flightways Logo" class="h-8 w-auto object-contain" src="https://lh3.googleusercontent.com/aida/AEtjO1VANbgQUCRQIMc7KhxLyEomwlhiD3YLNE-UYe20UTSCMkSsQNJZeXPybwhYUSyVtDn8FqJl9K_3boYYfY44lnR0uS7SvuE0DfykL-irHUu1LPi_VG3Vy3snDDu-OOOwM6jCExZt1BdTbgPHufYiOCy-YVIEcf3bmQtNLKNMZbZNs8K964ums4CppAjOpTF1GNwcziYVBvKDnG3lcHkLvdOZ6x-mQNjPVZTHcLFAuWwAdG7XAOIJmB4Jojc"/><div class="flex flex-col"><span class="font-headline-sm text-headline-sm text-primary font-bold">Serene Ops</span><span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Điều hành bay</span></div></div><nav class="flex-1 px-space-md flex flex-col gap-space-xs" data-active-classes="bg-primary-container text-on-primary font-bold rounded-lg"><a aria-current="page" class="flex items-center gap-space-sm px-space-md py-space-sm transition-all bg-primary-container text-on-primary font-bold rounded-lg" data-path="portal-dieu-hanh" href="#"><span class="material-symbols-outlined text-[20px]">dashboard</span><span class="font-label-md text-label-md">Tổng quan chuyến bay</span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="quan-ly-lich-bay" href="#"><span class="material-symbols-outlined text-[20px]">flight</span><span class="font-label-md text-label-md">Lịch trình &amp; Slot</span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="quan-ly-hanh-khach" href="#"><span class="material-symbols-outlined text-[20px]">group</span><span class="font-label-md text-label-md">Hành khách &amp; Manifest</span></a><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface transition-all" data-path="bao-cao-doanh-thu" href="#"><span class="material-symbols-outlined text-[20px]">analytics</span><span class="font-label-md text-label-md">Doanh thu tải cung ứng</span></a></nav><div class="px-space-md pt-space-md"><a class="flex items-center gap-space-sm px-space-md py-space-sm rounded-lg text-secondary font-label-md text-label-md hover:bg-surface-container hover:text-on-surface transition-colors" data-path="dat-ve" href="#"><span class="material-symbols-outlined text-[20px]">arrow_back</span><span>Về trang đặt vé</span></a></div></aside><div class="pl-72"><header class="fixed top-0 left-72 right-0 h-16 bg-surface-container-lowest/80 backdrop-blur-xl shadow-[0_1px_8px_rgba(9,45,61,0.04)] z-40 flex items-center justify-between px-space-lg"><div class="flex items-center gap-space-sm"><span class="font-label-md text-label-md text-outline">Hệ thống Điều hành &amp; Khai thác Hàng không</span></div><div class="flex items-center gap-space-md"><span class="material-symbols-outlined text-secondary hover:text-on-surface cursor-pointer text-[22px]">notifications</span><span class="material-symbols-outlined text-secondary hover:text-on-surface cursor-pointer text-[22px]">help</span><div class="flex items-center gap-space-sm"><div class="w-8 h-8 rounded-full bg-primary flex items-center justify-center"><span class="material-symbols-outlined text-on-primary text-[18px]">person</span></div><span class="font-label-md text-label-md text-on-surface hidden sm:inline-block">Ops Supervisor</span></div></div></header><main class="w-full pt-16 bg-surface px-space-lg py-space-lg"><div class="flex flex-col w-full gap-space-lg">
+<!-- Operational Header & Live Status Band -->
+<div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-space-md pb-space-xs">
+<div class="flex flex-col gap-1">
+<nav class="flex items-center gap-space-xs text-secondary font-label-sm text-label-sm">
+<span class="hover:text-primary cursor-pointer transition-colors">Trang chủ quản trị</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="hover:text-primary cursor-pointer transition-colors">Điều hành bay</span>
+<span class="material-symbols-outlined text-[14px]">chevron_right</span>
+<span class="text-primary font-bold">Tổng quan thời gian thực</span>
+</nav>
+<div class="flex items-center gap-space-sm mt-1">
+<h1 class="font-headline-lg text-headline-lg text-on-surface font-extrabold tracking-tight">
+          Trung Tâm Điều Hành Bay &amp; Doanh Thu Trực Tuyến
+        </h1>
+<span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 text-primary font-label-sm text-label-sm animate-pulse">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+          LIVE 10Hz Feed
+        </span>
+</div>
+<p class="font-body-sm text-body-sm text-secondary">
+        Phiên giám sát khai thác hạ tầng đội bay phản lực và tối ưu hóa hệ số doanh thu theo thời gian thực.
+      </p>
+</div>
+<!-- Actions & Global Time Filter -->
+<div class="flex flex-wrap items-center gap-space-sm">
+<div class="flex items-center gap-2 bg-surface-container-lowest px-3 py-2 rounded-lg shadow-sm">
+<span class="material-symbols-outlined text-secondary text-[20px]">calendar_today</span>
+<select class="bg-transparent font-label-md text-label-md text-on-surface outline-none cursor-pointer pr-2">
+<option>Hôm nay, 15/05/2025</option>
+<option>Hôm qua, 14/05/2025</option>
+<option>7 ngày gần nhất</option>
+<option>Tháng này (T5/2025)</option>
+</select>
+</div>
+<button class="inline-flex items-center gap-2 px-space-md py-2 rounded-lg bg-surface-container-lowest text-secondary font-label-md text-label-md hover:bg-surface-container-high transition-all shadow-sm">
+<span class="material-symbols-outlined text-[18px]">table_view</span>
+<span>Xuất Excel</span>
+</button>
+<button class="inline-flex items-center gap-2 px-space-md py-2 rounded-lg bg-primary text-on-primary font-label-md text-label-md hover:bg-primary-container transition-all shadow-sm">
+<span class="material-symbols-outlined text-[20px]">add_circle</span>
+<span>Tạo chuyến bay mới</span>
+</button>
+</div>
+</div>
+<!-- Real-Time Operational KPI Quartet -->
+<div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-space-md">
+<!-- KPI 1 -->
+<div class="flex flex-col bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Doanh thu hôm nay</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">payments</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-headline-md font-extrabold text-on-surface tracking-tight">2.845.000.000</span>
+<span class="font-label-sm text-label-sm font-bold text-secondary">VND</span>
+</div>
+<div class="flex items-center gap-2 mt-auto">
+<span class="inline-flex items-center gap-0.5 text-primary font-label-sm text-label-sm font-bold">
+<span class="material-symbols-outlined text-[16px]">trending_up</span>
+          +14.2%
+        </span>
+<span class="text-secondary font-body-sm text-body-sm">so với hôm qua (2.491 tỷ)</span>
+</div>
+<div class="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 82%;"></div>
+</div>
+</div>
+<!-- KPI 2 -->
+<div class="flex flex-col bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Chuyến bay khai thác</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">flight_takeoff</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-headline-md font-extrabold text-on-surface tracking-tight">68</span>
+<span class="font-body-md text-body-md text-secondary">/ 72 slot</span>
+</div>
+<div class="flex items-center gap-2 mt-auto">
+<span class="inline-flex items-center gap-0.5 text-primary font-label-sm text-label-sm font-bold bg-primary-fixed/20 px-1.5 py-0.5 rounded">
+<span class="material-symbols-outlined text-[14px]">verified</span>
+          OTP: 98.5%
+        </span>
+<span class="text-secondary font-body-sm text-body-sm">Đúng giờ chuẩn IATA</span>
+</div>
+<div class="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 94%;"></div>
+</div>
+</div>
+<!-- KPI 3 -->
+<div class="flex flex-col bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Hệ số lấp đầy (Load Factor)</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-tertiary-container group-hover:bg-tertiary-container group-hover:text-on-tertiary transition-colors">
+<span class="material-symbols-outlined text-[20px]">airline_seat_recline_extra</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-headline-md font-extrabold text-on-surface tracking-tight">88.6%</span>
+<span class="font-body-sm text-body-sm text-secondary font-semibold">+3.1% DoD</span>
+</div>
+<div class="flex items-center justify-between mt-auto">
+<span class="text-secondary font-body-sm text-body-sm">12.450 / 14.050 ghế</span>
+<span class="text-tertiary font-label-sm text-label-sm font-bold">1.600 trống</span>
+</div>
+<div class="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-tertiary-fixed-dim h-full rounded-full" style="width: 88.6%;"></div>
+</div>
+</div>
+<!-- KPI 4 -->
+<div class="flex flex-col bg-surface-container-lowest p-space-md rounded-xl shadow-sm hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="flex items-center justify-between mb-space-sm">
+<span class="font-label-sm text-label-sm text-secondary uppercase tracking-wider">Vé mới đặt trong ngày</span>
+<div class="w-9 h-9 rounded-lg bg-surface-container-low flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
+<span class="material-symbols-outlined text-[20px]">confirmation_number</span>
+</div>
+</div>
+<div class="flex items-baseline gap-2 mb-1">
+<span class="font-headline-md text-headline-md font-extrabold text-on-surface tracking-tight">1.842</span>
+<span class="font-label-sm text-label-sm font-semibold text-secondary">vé xuất xưởng</span>
+</div>
+<div class="flex items-center gap-2 mt-auto">
+<span class="inline-flex items-center gap-0.5 text-primary font-label-sm text-label-sm font-bold">
+<span class="material-symbols-outlined text-[16px]">check_circle</span>
+          99.1%
+        </span>
+<span class="text-secondary font-body-sm text-body-sm">Thanh toán tức thời</span>
+</div>
+<div class="w-full bg-surface-container-low h-1.5 rounded-full mt-3 overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 99.1%;"></div>
+</div>
+</div>
+</div>
+<!-- Real-Time Ops Table Area -->
+<div class="flex flex-col bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+<!-- Filter bar & Table Header -->
+<div class="p-space-md bg-surface-container-lowest flex flex-col md:flex-row items-stretch md:items-center justify-between gap-space-md border-b-0">
+<div class="flex items-center gap-space-sm flex-1 max-w-lg">
+<div class="relative w-full">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-[20px]">search</span>
+<input class="w-full pl-10 pr-4 py-2 bg-surface-container-low text-on-surface placeholder:text-outline text-body-sm rounded-lg outline-none focus:bg-surface-bright transition-colors" id="flightSearchInput" placeholder="Tìm theo mã chuyến bay (SF-102), chặng, hoặc số hiệu..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0" id="filterStatusGroup">
+<button class="filter-btn active-filter px-3 py-1.5 rounded-lg text-label-sm font-label-sm bg-primary text-on-primary transition-colors" data-status="all">Tất cả (68)</button>
+<button class="filter-btn px-3 py-1.5 rounded-lg text-label-sm font-label-sm bg-surface-container-low text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" data-status="boarding">Đang lên khách (4)</button>
+<button class="filter-btn px-3 py-1.5 rounded-lg text-label-sm font-label-sm bg-surface-container-low text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" data-status="ontime">Đúng giờ (48)</button>
+<button class="filter-btn px-3 py-1.5 rounded-lg text-label-sm font-label-sm bg-surface-container-low text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" data-status="departed">Đã cất cánh (14)</button>
+<button class="filter-btn px-3 py-1.5 rounded-lg text-label-sm font-label-sm bg-surface-container-low text-secondary hover:bg-surface-container hover:text-on-surface transition-colors" data-status="delayed">Hoãn chuyến (2)</button>
+</div>
+</div>
+<!-- Responsive Table -->
+<div class="overflow-x-auto">
+<table class="w-full text-left" id="opsFlightTable">
+<thead class="bg-surface-container-low text-secondary font-label-sm text-label-sm uppercase tracking-wider">
+<tr>
+<th class="py-3 px-space-md">Mã chuyến</th>
+<th class="py-3 px-space-md">Hành trình bay</th>
+<th class="py-3 px-space-md">Tàu bay &amp; Đội hình</th>
+<th class="py-3 px-space-md">Giờ STD / STA</th>
+<th class="py-3 px-space-md">Tình trạng</th>
+<th class="py-3 px-space-md">Tải khách / Ghế</th>
+<th class="py-3 px-space-md text-right">Doanh thu chặng</th>
+<th class="py-3 px-space-md text-center">Thao tác</th>
+</tr>
+</thead>
+<tbody class="divide-y-0 text-body-sm font-body-sm text-on-surface">
+<!-- Row 1: SF-102 -->
+<tr class="flight-row hover:bg-surface-container-low transition-colors group" data-status="departed">
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary"></span>
+<span class="font-numeric-data text-numeric-data text-primary group-hover:text-primary-container">SF-102</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2 font-bold text-on-surface">
+<span>HAN</span>
+<span class="material-symbols-outlined text-[16px] text-primary">arrow_forward</span>
+<span>SGN</span>
+<span class="ml-2 text-xs font-normal text-secondary px-1.5 py-0.5 rounded bg-surface-container">Gate 14</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col">
+<span class="font-semibold">Airbus A350-900</span>
+<span class="text-secondary font-label-sm text-label-sm">VN-A899 • Đội Hàng Rào Trục</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-baseline gap-1 font-numeric-data">
+<span class="text-on-surface">07:15</span>
+<span class="text-secondary text-xs">➔ 09:25</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-primary text-on-primary">
+<span class="material-symbols-outlined text-[14px]">flight_takeoff</span>
+                Đã cất cánh
+              </span>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col gap-1 w-32">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="font-bold">298 / 305</span>
+<span class="text-primary font-bold">97.7%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 97.7%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-space-md text-right font-numeric-data text-numeric-data text-on-surface">
+              428.500.000 ₫
+            </td>
+<td class="py-3.5 px-space-md text-center">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-secondary hover:text-primary hover:bg-surface-container transition-colors" title="Xem chi tiết">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-tertiary hover:bg-surface-container transition-colors" title="Điều chỉnh giá Yield">
+<span class="material-symbols-outlined text-[18px]">price_change</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="Cập nhật giờ">
+<span class="material-symbols-outlined text-[18px]">update</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 2: SF-108 -->
+<tr class="flight-row hover:bg-surface-container-low transition-colors group" data-status="boarding">
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-tertiary-fixed-dim animate-ping"></span>
+<span class="font-numeric-data text-numeric-data text-primary group-hover:text-primary-container">SF-108</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2 font-bold text-on-surface">
+<span>HAN</span>
+<span class="material-symbols-outlined text-[16px] text-tertiary">arrow_forward</span>
+<span>DAD</span>
+<span class="ml-2 text-xs font-normal text-secondary px-1.5 py-0.5 rounded bg-tertiary-fixed/30 text-tertiary font-bold">Gate 06 (Khẩn)</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col">
+<span class="font-semibold">Boeing 787-9</span>
+<span class="text-secondary font-label-sm text-label-sm">VN-A866 • Dreamliner</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-baseline gap-1 font-numeric-data">
+<span class="text-on-surface">10:45</span>
+<span class="text-secondary text-xs">➔ 12:05</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-tertiary-fixed text-on-tertiary-fixed font-bold">
+<span class="material-symbols-outlined text-[14px]">sensors</span>
+                Đang lên khách
+              </span>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col gap-1 w-32">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="font-bold">285 / 294</span>
+<span class="text-primary font-bold">96.9%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 96.9%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-space-md text-right font-numeric-data text-numeric-data text-on-surface">
+              342.100.000 ₫
+            </td>
+<td class="py-3.5 px-space-md text-center">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-secondary hover:text-primary hover:bg-surface-container transition-colors" title="Xem chi tiết">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-tertiary hover:bg-surface-container transition-colors" title="Điều chỉnh giá Yield">
+<span class="material-symbols-outlined text-[18px]">price_change</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="Cập nhật giờ">
+<span class="material-symbols-outlined text-[18px]">update</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 3: SF-204 -->
+<tr class="flight-row hover:bg-surface-container-low transition-colors group" data-status="ontime">
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-fixed-dim"></span>
+<span class="font-numeric-data text-numeric-data text-primary group-hover:text-primary-container">SF-204</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2 font-bold text-on-surface">
+<span>SGN</span>
+<span class="material-symbols-outlined text-[16px] text-primary">arrow_forward</span>
+<span>PQC</span>
+<span class="ml-2 text-xs font-normal text-secondary px-1.5 py-0.5 rounded bg-surface-container">Gate 02</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col">
+<span class="font-semibold">Airbus A321neo</span>
+<span class="text-secondary font-label-sm text-label-sm">VN-A612 • Tuyến Du Lịch Vàng</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-baseline gap-1 font-numeric-data">
+<span class="text-on-surface">11:20</span>
+<span class="text-secondary text-xs">➔ 12:25</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-primary-fixed/20 text-primary">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                Đúng giờ
+              </span>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col gap-1 w-32">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="font-bold">180 / 188</span>
+<span class="text-primary font-bold">95.7%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 95.7%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-space-md text-right font-numeric-data text-numeric-data text-on-surface">
+              198.800.000 ₫
+            </td>
+<td class="py-3.5 px-space-md text-center">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-secondary hover:text-primary hover:bg-surface-container transition-colors" title="Xem chi tiết">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-tertiary hover:bg-surface-container transition-colors" title="Điều chỉnh giá Yield">
+<span class="material-symbols-outlined text-[18px]">price_change</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="Cập nhật giờ">
+<span class="material-symbols-outlined text-[18px]">update</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 4: SF-310 (Delayed) -->
+<tr class="flight-row hover:bg-surface-container-low transition-colors group" data-status="delayed">
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-numeric-data text-numeric-data text-primary group-hover:text-primary-container">SF-310</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2 font-bold text-on-surface">
+<span>DAD</span>
+<span class="material-symbols-outlined text-[16px] text-error">arrow_forward</span>
+<span>HAN</span>
+<span class="ml-2 text-xs font-normal text-error px-1.5 py-0.5 rounded bg-error-container/40">Chờ lệnh lăn</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col">
+<span class="font-semibold">Airbus A321neo</span>
+<span class="text-secondary font-label-sm text-label-sm">VN-A618 • Kiểm tra ATC</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-baseline gap-1 font-numeric-data">
+<span class="text-error line-through">13:00</span>
+<span class="text-on-surface font-bold">13:20</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-tertiary-fixed-dim/40 text-on-tertiary-fixed font-bold">
+<span class="material-symbols-outlined text-[14px]">warning</span>
+                Hoãn 20p
+              </span>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col gap-1 w-32">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="font-bold">172 / 188</span>
+<span class="text-secondary font-bold">91.4%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-secondary h-full rounded-full" style="width: 91.4%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-space-md text-right font-numeric-data text-numeric-data text-on-surface">
+              176.400.000 ₫
+            </td>
+<td class="py-3.5 px-space-md text-center">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-secondary hover:text-primary hover:bg-surface-container transition-colors" title="Xem chi tiết">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-tertiary hover:bg-surface-container transition-colors" title="Điều chỉnh giá Yield">
+<span class="material-symbols-outlined text-[18px]">price_change</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="Cập nhật giờ">
+<span class="material-symbols-outlined text-[18px]">update</span>
+</button>
+</div>
+</td>
+</tr>
+<!-- Row 5: SF-502 -->
+<tr class="flight-row hover:bg-surface-container-low transition-colors group" data-status="ontime">
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary-fixed-dim"></span>
+<span class="font-numeric-data text-numeric-data text-primary group-hover:text-primary-container">SF-502</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-center gap-2 font-bold text-on-surface">
+<span>SGN</span>
+<span class="material-symbols-outlined text-[16px] text-primary">arrow_forward</span>
+<span>NRT</span>
+<span class="ml-2 text-xs font-normal text-secondary px-1.5 py-0.5 rounded bg-surface-container">Quốc tế (T2)</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col">
+<span class="font-semibold">Boeing 787-9</span>
+<span class="text-secondary font-label-sm text-label-sm">VN-A870 • Long-haul Fleet</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex items-baseline gap-1 font-numeric-data">
+<span class="text-on-surface">15:30</span>
+<span class="text-secondary text-xs">➔ 23:45</span>
+</div>
+</td>
+<td class="py-3.5 px-space-md">
+<span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full font-label-sm text-label-sm bg-primary-fixed/20 text-primary">
+<span class="material-symbols-outlined text-[14px]">schedule</span>
+                Đúng giờ
+              </span>
+</td>
+<td class="py-3.5 px-space-md">
+<div class="flex flex-col gap-1 w-32">
+<div class="flex justify-between font-label-sm text-label-sm">
+<span class="font-bold">290 / 294</span>
+<span class="text-primary font-bold">98.6%</span>
+</div>
+<div class="w-full bg-surface-container-high h-1.5 rounded-full overflow-hidden">
+<div class="bg-primary h-full rounded-full" style="width: 98.6%;"></div>
+</div>
+</div>
+</td>
+<td class="py-3.5 px-space-md text-right font-numeric-data text-numeric-data text-on-surface">
+              874.200.000 ₫
+            </td>
+<td class="py-3.5 px-space-md text-center">
+<div class="inline-flex items-center gap-1">
+<button class="p-1 rounded text-secondary hover:text-primary hover:bg-surface-container transition-colors" title="Xem chi tiết">
+<span class="material-symbols-outlined text-[18px]">visibility</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-tertiary hover:bg-surface-container transition-colors" title="Điều chỉnh giá Yield">
+<span class="material-symbols-outlined text-[18px]">price_change</span>
+</button>
+<button class="p-1 rounded text-secondary hover:text-on-surface hover:bg-surface-container transition-colors" title="Cập nhật giờ">
+<span class="material-symbols-outlined text-[18px]">update</span>
+</button>
+</div>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<!-- Table Footer Pagination -->
+<div class="px-space-md py-3 bg-surface-container-low flex items-center justify-between font-body-sm text-body-sm text-secondary">
+<div>Hiển thị <span class="font-bold text-on-surface">5</span> trong <span class="font-bold text-on-surface">68</span> chuyến bay hôm nay</div>
+<div class="flex items-center gap-1">
+<button class="px-2 py-1 rounded bg-surface-container-lowest text-secondary hover:text-on-surface disabled:opacity-50" disabled="">
+<span class="material-symbols-outlined text-[18px]">chevron_left</span>
+</button>
+<span class="px-2.5 py-1 rounded bg-primary text-on-primary font-bold">1</span>
+<button class="px-2 py-1 rounded hover:bg-surface-container-high text-secondary">2</button>
+<button class="px-2 py-1 rounded hover:bg-surface-container-high text-secondary">3</button>
+<button class="px-2 py-1 rounded bg-surface-container-lowest text-secondary hover:text-on-surface">
+<span class="material-symbols-outlined text-[18px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Secondary Operations Grid: Load Factor Analytics & ATC Live Alerts -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-space-md">
+<!-- Load Factor by Key Route (7 Columns) -->
+<div class="lg:col-span-7 flex flex-col bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex flex-col">
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Hệ Số Tải Ghế Tuyến Trọng Điểm</h2>
+<span class="font-body-sm text-body-sm text-secondary">Chỉ số khai thác hành khách tuyến thương mại cốt lõi</span>
+</div>
+<span class="text-xs font-bold text-primary px-2 py-1 rounded bg-surface-container-low">Cập nhật mỗi 5 phút</span>
+</div>
+<div class="flex flex-col gap-space-md my-auto">
+<!-- Route 1: HAN - SGN -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface font-label-md text-label-md">Hà Nội (HAN) ➔ TP. Hồ Chí Minh (SGN)</span>
+<span class="font-label-sm text-label-sm px-1.5 rounded bg-primary-container/10 text-primary font-bold">28 chuyến/ngày</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-numeric-data text-numeric-data text-primary">94.2%</span>
+<span class="text-secondary text-xs">(8.420 khách)</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-high h-2.5 rounded-full overflow-hidden flex">
+<div class="bg-primary h-full rounded-full transition-all duration-500" style="width: 94.2%;"></div>
+</div>
+</div>
+<!-- Route 2: SGN - PQC -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface font-label-md text-label-md">TP. Hồ Chí Minh (SGN) ➔ Phú Quốc (PQC)</span>
+<span class="font-label-sm text-label-sm px-1.5 rounded bg-tertiary-fixed/30 text-tertiary font-bold">Peak Du Lịch</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-numeric-data text-numeric-data text-primary">96.0%</span>
+<span class="text-secondary text-xs">(2.180 khách)</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-high h-2.5 rounded-full overflow-hidden flex">
+<div class="bg-tertiary h-full rounded-full transition-all duration-500" style="width: 96.0%;"></div>
+</div>
+</div>
+<!-- Route 3: HAN - DAD -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface font-label-md text-label-md">Hà Nội (HAN) ➔ Đà Nẵng (DAD)</span>
+<span class="font-label-sm text-label-sm px-1.5 rounded bg-surface-container text-secondary">Ổn định</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-numeric-data text-numeric-data text-primary">89.4%</span>
+<span class="text-secondary text-xs">(1.850 khách)</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-high h-2.5 rounded-full overflow-hidden flex">
+<div class="bg-primary h-full rounded-full transition-all duration-500" style="width: 89.4%;"></div>
+</div>
+</div>
+<!-- Route 4: SGN - NRT -->
+<div class="flex flex-col gap-1.5">
+<div class="flex items-center justify-between">
+<div class="flex items-center gap-2">
+<span class="font-bold text-on-surface font-label-md text-label-md">TP. Hồ Chí Minh (SGN) ➔ Tokyo Narita (NRT)</span>
+<span class="font-label-sm text-label-sm px-1.5 rounded bg-surface-container text-secondary">Quốc tế</span>
+</div>
+<div class="flex items-baseline gap-1">
+<span class="font-numeric-data text-numeric-data text-primary">91.8%</span>
+<span class="text-secondary text-xs">(580 khách)</span>
+</div>
+</div>
+<div class="w-full bg-surface-container-high h-2.5 rounded-full overflow-hidden flex">
+<div class="bg-primary-container h-full rounded-full transition-all duration-500" style="width: 91.8%;"></div>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm border-t-0 flex items-center justify-between text-secondary font-body-sm text-body-sm">
+<span>Tổng tải cung ứng cả mạng bay: <strong>14.050 ghế</strong></span>
+<a class="text-primary font-bold hover:underline inline-flex items-center gap-1" href="#">
+          Xem phân tích Yield chi tiết
+          <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Quick Operational Alerts & Fleet Log (5 Columns) -->
+<div class="lg:col-span-5 flex flex-col bg-surface-container-lowest p-space-md rounded-xl shadow-sm">
+<div class="flex items-center justify-between mb-space-md">
+<div class="flex items-center gap-2">
+<span class="material-symbols-outlined text-tertiary text-[22px]">notification_important</span>
+<h2 class="font-headline-sm text-headline-sm text-on-surface font-bold">Cảnh Báo Vận Hành Nhanh</h2>
+</div>
+<span class="w-2.5 h-2.5 rounded-full bg-tertiary-fixed-dim"></span>
+</div>
+<div class="flex flex-col gap-space-sm flex-1">
+<!-- Alert 1 -->
+<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="w-8 h-8 rounded-lg bg-tertiary-fixed/40 flex items-center justify-center text-tertiary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">air</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center justify-between">
+<span class="font-bold text-on-surface font-label-md text-label-md">Thời tiết tại Nội Bài (HAN)</span>
+<span class="text-secondary font-label-sm text-label-sm">10 phút trước</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Gió giật nhẹ phương vị 280° (14kt). Trực ban OCC khuyến cáo chuyến SF-310 giãn cách đường cất hạ cánh 11R.
+            </p>
+</div>
+</div>
+<!-- Alert 2 -->
+<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="w-8 h-8 rounded-lg bg-primary-fixed/30 flex items-center justify-center text-primary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">build_circle</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center justify-between">
+<span class="font-bold text-on-surface font-label-md text-label-md">Bảo dưỡng tàu VN-A899</span>
+<span class="text-secondary font-label-sm text-label-sm">28 phút trước</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Tàu bay A350-900 (VN-A899) đã hoàn thành kiểm tra kỹ thuật A-Check chu kỳ tại Hangar Nội Bài, sẵn sàng bay tối.
+            </p>
+</div>
+</div>
+<!-- Alert 3 -->
+<div class="flex items-start gap-3 p-3 rounded-lg bg-surface-container-low hover:bg-surface-container transition-colors">
+<div class="w-8 h-8 rounded-lg bg-surface-container-high flex items-center justify-center text-secondary shrink-0 mt-0.5">
+<span class="material-symbols-outlined text-[18px]">hub</span>
+</div>
+<div class="flex flex-col gap-0.5">
+<div class="flex items-center justify-between">
+<span class="font-bold text-on-surface font-label-md text-label-md">Đồng bộ Slot Tân Sơn Nhất</span>
+<span class="text-secondary font-label-sm text-label-sm">1 giờ trước</span>
+</div>
+<p class="font-body-sm text-body-sm text-on-surface-variant">
+              Slot cao điểm trưa (11:00 - 13:30) đã thông qua Cục Hàng không Việt Nam (CAAV) không phát sinh phụ thu.
+            </p>
+</div>
+</div>
+</div>
+<div class="mt-space-md pt-space-sm border-t-0 flex justify-end">
+<button class="text-primary font-label-md text-label-md font-bold hover:text-primary-container transition-colors flex items-center gap-1">
+<span>Xem tất cả 14 thông báo</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+</button>
+</div>
+</div>
+</div>
+</div>
+<script>
+  (function () {
+    const searchInput = document.getElementById('flightSearchInput');
+    const filterButtons = document.querySelectorAll('#filterStatusGroup .filter-btn');
+    const rows = document.querySelectorAll('#opsFlightTable tbody .flight-row');
+
+    let currentFilter = 'all';
+
+    function applyFilter() {
+      const term = (searchInput?.value || '').toLowerCase().trim();
+
+      rows.forEach(row => {
+        const rowStatus = row.getAttribute('data-status');
+        const textContent = row.textContent.toLowerCase();
+
+        const matchesStatus = (currentFilter === 'all') || (rowStatus === currentFilter);
+        const matchesSearch = !term || textContent.includes(term);
+
+        if (matchesStatus && matchesSearch) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener('input', applyFilter);
+    }
+
+    filterButtons.forEach(btn => {
+      btn.addEventListener('click', function () {
+        filterButtons.forEach(b => {
+          b.classList.remove('bg-primary', 'text-on-primary');
+          b.classList.add('bg-surface-container-low', 'text-secondary');
+        });
+        this.classList.remove('bg-surface-container-low', 'text-secondary');
+        this.classList.add('bg-primary', 'text-on-primary');
+
+        currentFilter = this.getAttribute('data-status');
+        applyFilter();
+      });
+    });
+  })();
+</script></main></div></body></html>
