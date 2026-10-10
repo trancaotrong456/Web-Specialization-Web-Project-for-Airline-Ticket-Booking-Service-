@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
@@ -67,31 +67,72 @@ describe('public flight discovery pages', () => {
     expect(screen.getByText(/hành trình một chiều/i)).toBeInTheDocument();
   });
 
-  it('validates and serializes search values into the results URL', async () => {
-    const user = userEvent.setup();
+  it('uses only local illustrative destination photography on the homepage', async () => {
     const fetchImpl = createFetch();
     renderRoutes('/', fetchImpl);
 
-    await user.click(screen.getByRole('combobox', { name: 'Điểm đi' }));
-    await user.click(screen.getByRole('option', { name: /HAN.*Hanoi/i }));
-    await user.click(screen.getByRole('combobox', { name: 'Điểm đến' }));
-    await user.click(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
-    await user.clear(screen.getByLabelText(/departure/i));
-    await user.type(screen.getByLabelText(/departure/i), '2026-10-10');
-    await user.clear(screen.getByLabelText(/passengers/i));
-    await user.type(screen.getByLabelText(/passengers/i), '2');
-    await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
+    expect(await screen.findByRole('heading', { name: /Khám phá các điểm đến/i })).toBeInTheDocument();
+    const destinationImages = [...document.querySelectorAll('.destination-art')]
+      .map((element) => element.style.backgroundImage);
+    expect(destinationImages).toHaveLength(3);
+    expect(destinationImages.every((image) => image.startsWith('url(') && image.includes('/images/destinations/'))).toBe(true);
+    expect(destinationImages.some((image) => image.startsWith('url(https://'))).toBe(false);
+  });
 
-    expect(await screen.findByRole('heading', { name: /Chuyến bay phù hợp/i })).toBeInTheDocument();
-    expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(true);
-    const searchUrl = fetchImpl.mock.calls.map(([url]) => url).find((url) => url.includes('/flights/search?'));
-    const params = new URL(searchUrl, 'http://localhost').searchParams;
-    expect(params.get('departure_airport_id')).toBe('1');
-    expect(params.get('arrival_airport_id')).toBe('2');
-    expect(params.get('departure_date')).toBe('2026-10-10');
-    expect(params.get('min_seats')).toBe('2');
-    expect(params.has('trip_type')).toBe(false);
-    expect(params.has('return_date')).toBe(false);
+  it('validates and serializes search values into the results URL', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-01T12:00:00+07:00'));
+    try {
+      const user = userEvent.setup();
+      const fetchImpl = createFetch();
+      renderRoutes('/', fetchImpl);
+
+      await user.click(screen.getByRole('combobox', { name: 'Điểm đi' }));
+      await user.click(screen.getByRole('option', { name: /HAN.*Hanoi/i }));
+      await user.click(screen.getByRole('combobox', { name: 'Điểm đến' }));
+      await user.click(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
+      await user.clear(screen.getByLabelText(/departure/i));
+      await user.type(screen.getByLabelText(/departure/i), '2026-10-10');
+      await user.clear(screen.getByLabelText(/passengers/i));
+      await user.type(screen.getByLabelText(/passengers/i), '2');
+      await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
+
+      expect(await screen.findByRole('heading', { name: /Chuyến bay phù hợp/i })).toBeInTheDocument();
+      const searchUrl = fetchImpl.mock.calls.map(([url]) => url).find((url) => url.includes('/flights/search?'));
+      expect(searchUrl).toBeTruthy();
+      const params = new URL(searchUrl, 'http://localhost').searchParams;
+      expect(params.get('departure_airport_id')).toBe('1');
+      expect(params.get('arrival_airport_id')).toBe('2');
+      expect(params.get('departure_date')).toBe('2026-10-10');
+      expect(params.get('min_seats')).toBe('2');
+      expect(params.has('trip_type')).toBe(false);
+      expect(params.has('return_date')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rejects a departure date before the frozen current date without searching', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-10-10T12:00:00+07:00'));
+    try {
+      const user = userEvent.setup();
+      const fetchImpl = createFetch();
+      renderRoutes('/', fetchImpl);
+
+      await user.click(screen.getByRole('combobox', { name: 'Điểm đi' }));
+      await user.click(screen.getByRole('option', { name: /HAN.*Hanoi/i }));
+      await user.click(screen.getByRole('combobox', { name: 'Điểm đến' }));
+      await user.click(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
+      await user.clear(screen.getByLabelText(/departure/i));
+      await user.type(screen.getByLabelText(/departure/i), '2026-10-09');
+      await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Ngày khởi hành không được ở quá khứ.');
+      expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('shows inline validation and does not call flight search when required airports are missing', async () => {
@@ -115,18 +156,19 @@ describe('public flight discovery pages', () => {
 
   it('loads flight results from URL params and paginates without losing search context', async () => {
     const user = userEvent.setup();
-    const fetchImpl = createFetch();
+    const pageRows = [...flights, ...Array.from({ length: 19 }, (_, index) => ({ ...flights[0], id: index + 30, airline: { name: `Test Airline ${index}` }, fareClasses: [] }))];
+    const fetchImpl = createFetch({ flightResponse: pageRows });
     renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=2&page=1&limit=20&trip_type=round_trip&return_date=2026-10-15', fetchImpl);
 
     expect(await screen.findByText('Serene Air')).toBeInTheDocument();
-    expect(screen.getByText('HAN')).toBeInTheDocument();
-    expect(screen.getByText('SGN')).toBeInTheDocument();
+    expect(screen.getAllByText('HAN').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('SGN').length).toBeGreaterThan(0);
     expect(screen.getByText(/1\.250\.000/)).toBeInTheDocument();
     const firstRequest = fetchImpl.mock.calls.find(([url]) => url.includes('/flights/search?'))[0];
     expect(firstRequest).not.toContain('trip_type');
     expect(firstRequest).not.toContain('return_date');
 
-    await user.click(screen.getByRole('button', { name: /Đi tới trang 2/i }));
+    await user.click(screen.getByRole('button', { name: 'Sang trang tiếp theo' }));
     await waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url.includes('page=2'))).toBe(true));
     const secondRequest = fetchImpl.mock.calls.map(([url]) => url).find((url) => url.includes('/flights/search?') && url.includes('page=2'));
     expect(secondRequest).not.toContain('trip_type');
@@ -137,6 +179,35 @@ describe('public flight discovery pages', () => {
     renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=1&page=1&limit=20', createFetch());
 
     expect(await screen.findByText('1 chuyến bay trên trang này')).toBeInTheDocument();
+  });
+
+  it('does not claim an unreliable total page count and recovers from an empty next page', async () => {
+    const fullPage = Array.from({ length: 20 }, (_, index) => ({ ...flights[0], id: index + 1 }));
+    const fetchImpl = vi.fn(async (url) => {
+      const requestedPage = Number(new URL(url, 'http://localhost').searchParams.get('page'));
+      return response({ success: true, data: requestedPage === 1 ? fullPage : [], pagination: { page: requestedPage, limit: 20, total: 21, totalPages: 2 } });
+    });
+    const user = userEvent.setup();
+    renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=1&page=1&limit=20', fetchImpl);
+
+    expect(await screen.findByText('20 chuyến bay trên trang này')).toBeInTheDocument();
+    expect(screen.queryByText(/\/\s*2/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Sang trang tiếp theo' }));
+
+    expect(await screen.findByText('Trang này không có chuyến bay')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quay lại trang trước' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Quay lại trang trước' }));
+    expect(await screen.findByText('20 chuyến bay trên trang này')).toBeInTheDocument();
+  });
+
+  it('keeps a local carrier mark when a remote airline logo cannot load', async () => {
+    const flightResponse = [{ ...flights[0], airline: { ...flights[0].airline, logo_url: 'https://invalid.example/logo.png' } }];
+    renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=1&page=1&limit=20', createFetch({ flightResponse }));
+
+    const logo = await screen.findByAltText('');
+    fireEvent.error(logo);
+    expect(logo).not.toBeVisible();
+    expect(document.querySelector('.carrier-mark')).toBeVisible();
   });
 
   it('does not display a zero fare when the API returns no fare classes', async () => {

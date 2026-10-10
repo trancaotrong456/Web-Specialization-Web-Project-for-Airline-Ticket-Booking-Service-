@@ -137,8 +137,10 @@ describe('profile and security pages', () => {
     renderProfileRoute('/profile', fetchImpl);
     expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Đăng xuất' }));
+    await user.click(await screen.findByRole('button', { name: /Nguyễn Văn An/ }));
+    await user.click(screen.getByRole('menuitem', { name: 'Đăng xuất' }));
 
+    await waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url.endsWith('/auth/logout'))).toBe(true));
     expect(await screen.findByRole('heading', { name: 'Đăng nhập' })).toBeInTheDocument();
     expect(window.sessionStorage.getItem('airline_refresh_token')).toBeNull();
     await waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url.endsWith('/auth/logout'))).toBe(true));

@@ -56,10 +56,23 @@ function renderSidebar(initialPath = '/admin') {
 }
 
 describe('admin dashboard navigation shell', () => {
+  it('renders distinct, decorative line icons for each existing sidebar destination', async () => {
+    renderSidebar();
+    const navigation = await screen.findByRole('navigation', { name: 'Các khu vực quản trị' });
+    const icons = [...navigation.querySelectorAll('svg[data-sidebar-icon]')];
+
+    expect(icons.map((icon) => icon.getAttribute('data-sidebar-icon'))).toEqual([
+      'overview', 'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions',
+    ]);
+    expect(icons.every((icon) => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
+  });
+
   it('shows links only to existing admin modules without fabricated metrics', async () => {
     renderDashboard();
 
     expect(await screen.findByRole('heading', { name: 'Trung tâm quản trị' })).toBeInTheDocument();
+    expect(screen.getByText('Airline Operations')).toBeInTheDocument();
+    expect(screen.getByText('A', { selector: '.admin-header-avatar' })).toBeInTheDocument();
     expect(screen.queryByRole('navigation', { name: 'Điều hướng tài khoản' })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mở menu' })).not.toBeInTheDocument();
     const main = within(screen.getByRole('main'));
@@ -76,9 +89,33 @@ describe('admin dashboard navigation shell', () => {
       expect(main.getByRole('link', { name: new RegExp(name) })).toHaveAttribute('href', href);
     }
     expect(screen.queryByText(/doanh thu hôm nay|chuyến bay đang bay|hoàn thành nhiệm vụ/i)).not.toBeInTheDocument();
+    expect(document.querySelector('.admin-dashboard-route')).not.toBeInTheDocument();
     const sidebar = screen.getByRole('navigation', { name: 'Các khu vực quản trị' });
     expect(within(sidebar).getByRole('link', { name: /Tổng quan/ })).toHaveAttribute('aria-current', 'page');
     expect(within(sidebar).getByRole('link', { name: /Khuyến mại/ })).toHaveAttribute('href', '/admin/promotions');
+  });
+
+  it('uses a distinct decorative line icon for each admin module card', async () => {
+    renderDashboard();
+    await screen.findByRole('heading', { name: 'Các khu vực quản trị' });
+
+    const icons = [...document.querySelectorAll('.admin-module-icon svg[data-module-icon]')];
+    expect(icons.map((icon) => icon.getAttribute('data-module-icon'))).toEqual([
+      'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions',
+    ]);
+    expect(icons.every((icon) => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
+  });
+
+  it('uses the same recognizable airplane icon in Flight navigation and its dashboard card', async () => {
+    renderDashboard();
+    await screen.findByRole('heading', { name: 'Các khu vực quản trị' });
+    const sidebar = await screen.findByRole('navigation', { name: 'Các khu vực quản trị' });
+    const sidebarPlane = within(sidebar).getByRole('link', { name: /Chuyến bay & hạng vé/ }).querySelector('svg path');
+    const flightCardPlane = within(screen.getByRole('main')).getByRole('link', { name: /Chuyến bay & hạng vé/ }).querySelector('svg path');
+
+    expect(sidebarPlane).toBeInTheDocument();
+    expect(flightCardPlane).toBeInTheDocument();
+    expect(sidebarPlane).toHaveAttribute('d', flightCardPlane.getAttribute('d'));
   });
 
   it('lets an admin collapse the shared navigation without removing its links', async () => {
@@ -92,7 +129,7 @@ describe('admin dashboard navigation shell', () => {
     expect(within(navigation).getByRole('link', { name: /Hãng hàng không/ })).toHaveAttribute('href', '/admin/airlines');
   });
 
-  it('moves focus into the mobile drawer and restores it after Escape', async () => {
+  it('moves focus to the drawer close control and restores it after Escape', async () => {
     const media = { matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() };
     vi.stubGlobal('matchMedia', vi.fn(() => media));
     vi.stubGlobal('innerWidth', 375);
@@ -100,9 +137,9 @@ describe('admin dashboard navigation shell', () => {
     renderDashboard();
     const trigger = await screen.findByRole('button', { name: 'Mở điều hướng quản trị' });
     await user.click(trigger);
-    const navigation = screen.getByRole('navigation', { name: 'Các khu vực quản trị' });
-    expect(navigation).toContainElement(within(navigation).getByRole('link', { name: 'Tổng quan' }));
-    expect(within(navigation).getByRole('link', { name: 'Tổng quan' })).toHaveFocus();
+    const dialog = screen.getByRole('dialog', { name: 'Điều hướng quản trị' });
+    const close = within(dialog).getByRole('button', { name: 'Đóng điều hướng quản trị' });
+    expect(close).toHaveFocus();
     await user.keyboard('{Escape}');
     expect(screen.queryByRole('navigation', { name: 'Các khu vực quản trị' })).not.toBeInTheDocument();
     expect(trigger).toHaveFocus();
@@ -121,22 +158,51 @@ describe('admin dashboard navigation shell', () => {
     const close = within(dialog).getByRole('button', { name: 'Đóng điều hướng quản trị' });
     const promotionLink = within(dialog).getByRole('link', { name: /Khuyến mại/ });
     const dashboardLink = within(dialog).getByRole('link', { name: /Tổng quan/ });
-    expect(dashboardLink).toHaveFocus();
+    expect(close).toHaveFocus();
     expect(dialog).toHaveAttribute('aria-modal', 'true');
     expect(container.querySelector('.app-header')).toHaveAttribute('inert');
     expect(container.querySelector('main')).toHaveAttribute('inert');
 
     container.querySelector('main h1').focus();
-    expect(dashboardLink).toHaveFocus();
-
-    await user.keyboard('{Shift>}{Tab}{/Shift}');
     expect(close).toHaveFocus();
+
     await user.keyboard('{Shift>}{Tab}{/Shift}');
     expect(promotionLink).toHaveFocus();
     await user.tab();
     expect(close).toHaveFocus();
     await user.tab();
     expect(dashboardLink).toHaveFocus();
+  });
+
+  it('waits for the opening transform before focusing a drawer that is still visibility-hidden', async () => {
+    const media = { matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() };
+    vi.stubGlobal('matchMedia', vi.fn(() => media));
+    const user = userEvent.setup();
+    const { container } = renderSidebar();
+    const originalGetComputedStyle = window.getComputedStyle.bind(window);
+    let transitionEnded = false;
+    const getComputedStyle = vi.spyOn(window, 'getComputedStyle').mockImplementation((element, pseudoElement) => {
+      const style = originalGetComputedStyle(element, pseudoElement);
+      if (element?.classList?.contains('app-admin-sidebar') && element.classList.contains('is-open')) {
+        return { ...style, visibility: transitionEnded ? 'visible' : 'hidden', transitionDuration: '200ms' };
+      }
+      return style;
+    });
+    try {
+      await user.click(await screen.findByRole('button', { name: 'Mở điều hướng quản trị' }));
+      const sidebar = container.querySelector('.app-admin-sidebar');
+      const close = container.querySelector('.admin-sidebar-close');
+      expect(close).not.toHaveFocus();
+
+      transitionEnded = true;
+      const transitionEnd = new Event('transitionend', { bubbles: true });
+      Object.defineProperty(transitionEnd, 'propertyName', { value: 'transform' });
+      act(() => sidebar.dispatchEvent(transitionEnd));
+
+      expect(close).toHaveFocus();
+    } finally {
+      getComputedStyle.mockRestore();
+    }
   });
 
   it('closes from the close button and overlay and restores trigger focus', async () => {
