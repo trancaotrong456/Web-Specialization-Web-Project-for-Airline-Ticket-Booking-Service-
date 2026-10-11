@@ -4,6 +4,7 @@ import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
 import { AirportCombobox } from './AirportCombobox';
 import { createFlightDiscoveryApi } from './flightDiscoveryApi';
+import { findNearestSupportedAirport, MAX_GEOLOCATION_ACCURACY_METERS } from './airportCoordinates';
 
 const todayLocal = () => {
   const now = new Date();
@@ -15,6 +16,27 @@ const destinations = [
   { code: 'SGN', city: 'TP. Hồ Chí Minh', note: 'Khám phá thành phố không ngủ', image: '/images/destinations/ho-chi-minh-city.jpg' },
   { code: 'DAD', city: 'Đà Nẵng', note: 'Biển xanh và những cây cầu', image: '/images/destinations/da-nang.jpg' },
 ];
+
+const getCurrentPosition = (geolocation) => new Promise((resolve, reject) => {
+  if (!geolocation?.getCurrentPosition) {
+    reject(new Error('GPS_UNAVAILABLE'));
+    return;
+  }
+  geolocation.getCurrentPosition(resolve, reject, {
+    enableHighAccuracy: true,
+    timeout: 10_000,
+    maximumAge: 0,
+  });
+});
+
+const readAirportPage = (result) => {
+  if (!Array.isArray(result?.data) || !result.pagination) throw new Error('AIRPORT_DATA_UNAVAILABLE');
+  const { totalPages, page } = result.pagination;
+  if (!Number.isInteger(Number(totalPages)) || Number(totalPages) < 1 || Number(page) < 1) {
+    throw new Error('AIRPORT_DATA_UNAVAILABLE');
+  }
+  return { airports: result.data, totalPages: Number(totalPages) };
+};
 
 export function HomePage() {
   const { request } = useAuth();
@@ -30,12 +52,31 @@ export function HomePage() {
   const [departureDate, setDepartureDate] = useState(todayLocal());
   const [passengers, setPassengers] = useState('1');
   const [error, setError] = useState('');
+  const [destinationSuggestionStatus, setDestinationSuggestionStatus] = useState('');
   const [focusOriginAfterDestination, setFocusOriginAfterDestination] = useState(false);
   const searchFormRef = useRef(null);
   const destinationLookupRequest = useRef(0);
   const originRef = useRef(null);
-  const openOriginAirport = useCallback((open) => setActiveAirportField(open ? 'origin' : null), []);
-  const openDestinationAirport = useCallback((open) => setActiveAirportField(open ? 'destination' : null), []);
+  const departureDateRef = useRef(departureDate);
+  const passengersRef = useRef(passengers);
+  const cancelDestinationSuggestion = () => {
+    destinationLookupRequest.current += 1;
+    setDestinationSuggestionStatus('');
+  };
+  const openOriginAirport = useCallback((open) => {
+    if (open) {
+      destinationLookupRequest.current += 1;
+      setDestinationSuggestionStatus('');
+    }
+    setActiveAirportField(open ? 'origin' : null);
+  }, []);
+  const openDestinationAirport = useCallback((open) => {
+    if (open) {
+      destinationLookupRequest.current += 1;
+      setDestinationSuggestionStatus('');
+    }
+    setActiveAirportField(open ? 'destination' : null);
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -54,6 +95,7 @@ export function HomePage() {
   }, [focusOriginAfterDestination]);
 
   const swapAirports = () => {
+    cancelDestinationSuggestion();
     setOrigin(destination);
     originRef.current = destination;
     setDestination(origin);
@@ -62,7 +104,9 @@ export function HomePage() {
 
   const chooseSuggestedDestination = async (place) => {
     const requestId = ++destinationLookupRequest.current;
+    let selectedAirport = null;
     setError('');
+    setDestinationSuggestionStatus('Đang tra cứu sân bay điểm đến…');
     setActiveAirportField(null);
     searchFormRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
 
@@ -76,29 +120,92 @@ export function HomePage() {
       if (requestId !== destinationLookupRequest.current) return;
       if (!airport) {
         setError(`Không tìm thấy sân bay ${place.code} trong dữ liệu hiện có.`);
+        setDestinationSuggestionStatus('');
+        return;
+      }
+      selectedAirport = airport;
+
+      setDestination(airport);
+      setDestinationSuggestionStatus('Đang xác định sân bay khởi hành gần bạn…');
+
+      const position = await getCurrentPosition(navigator.geolocation);
+      if (requestId !== destinationLookupRequest.current) return;
+      if (Number(position?.coords?.accuracy) > MAX_GEOLOCATION_ACCURACY_METERS) {
+        throw new Error('GPS_INACCURATE');
+      }
+
+      setDestinationSuggestionStatus('Đang tra cứu các sân bay phù hợp…');
+      const firstPageResult = await searchAirports({ page: 1, limit: 100 });
+      const firstPage = readAirportPage(firstPageResult);
+      const pages = await Promise.all(Array.from({ length: firstPage.totalPages - 1 }, (_, index) =>
+        searchAirports({ page: index + 2, limit: 100 }).then(readAirportPage)));
+      if (requestId !== destinationLookupRequest.current) return;
+      const airportRecords = [firstPage.airports, ...pages.map((pageResult) => pageResult.airports)].flat();
+      const nearest = findNearestSupportedAirport(position, airportRecords);
+      if (!nearest) throw new Error('NO_NEARBY_AIRPORT');
+
+      if (String(nearest.airport.id) === String(airport.id)) {
+        if (originRef.current?.id === airport.id) {
+          originRef.current = null;
+          setOrigin(null);
+        }
+        throw new Error('SAME_AIRPORT');
+      }
+
+      originRef.current = nearest.airport;
+      setOrigin(nearest.airport);
+      setDestinationSuggestionStatus('');
+      const nextDate = departureDateRef.current;
+      const nextPassengerCount = Number(passengersRef.current);
+      if (!nextDate || nextDate < todayLocal()) {
+        setError('Ngày khởi hành không hợp lệ. Vui lòng chọn lại ngày trước khi tìm chuyến bay.');
+        setFocusOriginAfterDestination(true);
+        return;
+      }
+      if (!Number.isInteger(nextPassengerCount) || nextPassengerCount < 1) {
+        setError('Số hành khách không hợp lệ. Vui lòng kiểm tra trước khi tìm chuyến bay.');
+        setFocusOriginAfterDestination(true);
         return;
       }
 
-      setDestination(airport);
-      const duplicateOrigin = originRef.current?.id === airport.id;
-      if (duplicateOrigin) {
+      const params = new URLSearchParams({
+        departure_airport_id: String(nearest.airport.id),
+        arrival_airport_id: String(airport.id),
+        departure_date: nextDate,
+        min_seats: String(nextPassengerCount),
+        page: '1',
+        limit: '20',
+      });
+      navigate(`/flights/search?${params.toString()}`);
+    } catch (_lookupError) {
+      if (requestId !== destinationLookupRequest.current) return;
+      setDestinationSuggestionStatus('');
+      const selectedDestination = selectedAirport;
+      if (selectedDestination && originRef.current?.id === selectedDestination.id) {
         originRef.current = null;
         setOrigin(null);
-        setError('Điểm đi trùng điểm đến; vui lòng chọn điểm đi khác.');
       }
-      setActiveAirportField(null);
-      if (!originRef.current || duplicateOrigin) {
-        setFocusOriginAfterDestination(true);
-      }
-    } catch (_lookupError) {
-      if (requestId === destinationLookupRequest.current) {
-        setError(`Không thể tra cứu sân bay ${place.code}. Vui lòng thử lại.`);
-      }
+      const messages = {
+        GPS_UNAVAILABLE: 'Vị trí không khả dụng. Điểm đến đã được chọn; hãy chọn điểm đi trong biểu mẫu.',
+        GPS_INACCURATE: 'Vị trí chưa đủ chính xác để gợi ý sân bay. Điểm đến đã được chọn; hãy chọn điểm đi trong biểu mẫu.',
+        SAME_AIRPORT: 'Sân bay gần vị trí của bạn trùng điểm đến. Hãy chọn một điểm đi khác trong biểu mẫu.',
+        NO_NEARBY_AIRPORT: 'Không tìm thấy sân bay phù hợp gần vị trí của bạn. Điểm đến đã được chọn; hãy chọn điểm đi trong biểu mẫu.',
+        AIRPORT_DATA_UNAVAILABLE: 'Không thể xác định sân bay từ dữ liệu API. Điểm đến đã được chọn; hãy chọn điểm đi trong biểu mẫu.',
+      };
+      const reason = _lookupError?.code === 1 || _lookupError?.message === 'GPS_UNAVAILABLE'
+        ? 'GPS_UNAVAILABLE'
+        : _lookupError?.message;
+      const genericFallback = selectedAirport
+        ? 'Không thể xác định sân bay gần bạn. Điểm đến đã được chọn; hãy chọn điểm đi trong biểu mẫu.'
+        : 'Không thể xác nhận sân bay từ API. Hãy chọn điểm đi và điểm đến trong biểu mẫu.';
+      setError(messages[reason] || genericFallback);
+      setFocusOriginAfterDestination(true);
     }
   };
 
   const submit = (event) => {
     event.preventDefault();
+    cancelDestinationSuggestion();
     if (!origin || !destination) return setError('Chọn điểm đi và điểm đến để tiếp tục.');
     if (origin.id === destination.id) return setError('Điểm đi và điểm đến phải khác nhau.');
     if (!departureDate || departureDate < todayLocal()) return setError('Ngày khởi hành không được ở quá khứ.');
@@ -136,18 +243,19 @@ export function HomePage() {
                 <p className="one-way-note" role="note">Hiện hỗ trợ tìm hành trình một chiều.</p>
               </div>
               <div className="search-route-row">
-                <AirportCombobox id="origin-airport" peerId="destination-airport" coveredActionId="swap-airports" label="Điểm đi" value={origin} onChange={(airport) => { originRef.current = airport; setOrigin(airport); }} open={activeAirportField === 'origin'} onOpenChange={openOriginAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
+                <AirportCombobox id="origin-airport" peerId="destination-airport" coveredActionId="swap-airports" label="Điểm đi" value={origin} onChange={(airport) => { cancelDestinationSuggestion(); originRef.current = airport; setOrigin(airport); }} open={activeAirportField === 'origin'} onOpenChange={openOriginAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
                 <button id="swap-airports" className="swap-airports" type="button" aria-label="Đổi điểm đi và điểm đến" onClick={swapAirports}>↔</button>
-                <AirportCombobox id="destination-airport" peerId="origin-airport" coveredActionId="swap-airports" label="Điểm đến" value={destination} onChange={setDestination} open={activeAirportField === 'destination'} onOpenChange={openDestinationAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
+                <AirportCombobox id="destination-airport" peerId="origin-airport" coveredActionId="swap-airports" label="Điểm đến" value={destination} onChange={(airport) => { cancelDestinationSuggestion(); setDestination(airport); }} open={activeAirportField === 'destination'} onOpenChange={openDestinationAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
               </div>
               <div className="search-details-row">
-                <label className="airport-field"><span>Ngày khởi hành</span><input aria-label="Departure date" type="date" min={todayLocal()} value={departureDate} onChange={(event) => setDepartureDate(event.target.value)} /></label>
+                <label className="airport-field"><span>Ngày khởi hành</span><input aria-label="Departure date" type="date" min={todayLocal()} value={departureDate} onChange={(event) => { departureDateRef.current = event.target.value; setDepartureDate(event.target.value); }} /></label>
                 <div className="one-way-note">Chọn sân bay đi, sân bay đến và ngày khởi hành.</div>
-                <label className="airport-field passenger-field"><span>Hành khách</span><input aria-label="Passengers" type="number" min="1" step="1" value={passengers} onChange={(event) => setPassengers(event.target.value)} /></label>
+                <label className="airport-field passenger-field"><span>Hành khách</span><input aria-label="Passengers" type="number" min="1" step="1" value={passengers} onChange={(event) => { passengersRef.current = event.target.value; setPassengers(event.target.value); }} /></label>
                 <button className="button button-secondary search-submit" type="submit">Tìm chuyến bay <span aria-hidden="true">→</span></button>
               </div>
               {airportLoading ? <p className="search-help" role="status">Đang tải sân bay…</p> : null}
               {airportError ? <p className="search-help" role="status">{airportError}</p> : null}
+              {destinationSuggestionStatus ? <p className="search-help" role="status" aria-live="polite">{destinationSuggestionStatus}</p> : null}
               {error ? <p className="search-error" role="alert">{error}</p> : null}
             </form>
           </div>
