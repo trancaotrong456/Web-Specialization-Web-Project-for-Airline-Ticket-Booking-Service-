@@ -13,6 +13,7 @@ const response = (body, status = 200) => new Response(JSON.stringify(body), {
 const airports = [
   { id: 1, iata_code: 'HAN', name: 'Noi Bai International Airport', city: 'Hanoi', country: 'Vietnam' },
   { id: 2, iata_code: 'SGN', name: 'Tan Son Nhat International Airport', city: 'Ho Chi Minh City', country: 'Vietnam' },
+  { id: 3, iata_code: 'DAD', name: 'Da Nang International Airport', city: 'Da Nang', country: 'Vietnam' },
 ];
 
 const flights = [{
@@ -65,6 +66,134 @@ describe('public flight discovery pages', () => {
     expect(await screen.findByRole('option', { name: /HAN.*Hanoi/i })).toBeInTheDocument();
     expect(screen.queryByRole('radio', { name: /Khứ hồi/i })).not.toBeInTheDocument();
     expect(screen.getByText(/hành trình một chiều/i)).toBeInTheDocument();
+  });
+
+  it.each([
+    ['Hà Nội', 'HAN', 'HAN · Hanoi'],
+    ['TP. Hồ Chí Minh', 'SGN', 'SGN · Ho Chi Minh City'],
+    ['Đà Nẵng', 'DAD', 'DAD · Da Nang'],
+  ])('uses the Airport API to set %s as the destination', async (city, code, expectedValue) => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch();
+    const scrollIntoView = vi.fn();
+    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
+    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    try {
+      renderRoutes('/', fetchImpl);
+
+      const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+      const destination = screen.getByRole('combobox', { name: 'Điểm đến' });
+      const departureDate = screen.getByLabelText('Departure date');
+      const passengers = screen.getByRole('spinbutton', { name: 'Passengers' });
+      await user.clear(passengers);
+      await user.type(passengers, '3');
+      const selectedDate = departureDate.value;
+
+      await user.click(screen.getByRole('button', { name: `Tìm chuyến bay đến ${city} (${code})` }));
+
+      await waitFor(() => expect(destination).toHaveValue(expectedValue));
+      expect(origin).toHaveFocus();
+      expect(origin).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getAllByRole('listbox')).toHaveLength(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
+      expect(departureDate).toHaveValue(selectedDate);
+      expect(passengers).toHaveValue(3);
+      await waitFor(() => {
+        expect(fetchImpl.mock.calls.some(([url]) => {
+          const parsed = new URL(url, 'http://localhost');
+          return parsed.pathname.endsWith('/airports') && parsed.searchParams.get('search') === code;
+        })).toBe(true);
+      });
+    } finally {
+      if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
+      else delete HTMLElement.prototype.scrollIntoView;
+    }
+  });
+
+  it('supports activating a destination card with Space and uses its API airport id in flight search', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch();
+    renderRoutes('/', fetchImpl);
+
+    const danang = screen.getByRole('button', { name: 'Tìm chuyến bay đến Đà Nẵng (DAD)' });
+    danang.focus();
+    await user.keyboard(' ');
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('DAD · Da Nang'));
+
+    await user.click(screen.getByRole('combobox', { name: 'Điểm đi' }));
+    await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
+
+    await waitFor(() => {
+      const searchRequest = fetchImpl.mock.calls.find(([url]) => url.includes('/flights/search?'));
+      expect(searchRequest).toBeDefined();
+      const params = new URL(searchRequest[0], 'http://localhost').searchParams;
+      expect(params.get('departure_airport_id')).toBe('1');
+      expect(params.get('arrival_airport_id')).toBe('3');
+    });
+  });
+
+  it('clears a duplicate origin when the chosen destination matches it and explains what to do', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    await user.click(origin);
+    await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đi' })).toHaveValue(''));
+    expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('HAN · Hanoi');
+    expect(screen.getByRole('alert')).toHaveTextContent('Điểm đi trùng điểm đến; vui lòng chọn điểm đi khác.');
+    expect(origin).toHaveFocus();
+  });
+
+  it('explains when a suggested destination is not present in the Airport API', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch({ airportResponse: airports.slice(0, 2) });
+    renderRoutes('/', fetchImpl);
+
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Đà Nẵng (DAD)' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không tìm thấy sân bay DAD trong dữ liệu hiện có.');
+    expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('');
+  });
+
+  it('supports activating a destination card with Enter', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const hanoi = screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' });
+    hanoi.focus();
+    await user.keyboard('{Enter}');
+
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('HAN · Hanoi'));
+  });
+
+  it('ignores a late result from an earlier destination card activation', async () => {
+    const user = userEvent.setup();
+    let resolveHan;
+    let resolveSgn;
+    const fetchImpl = vi.fn((url) => {
+      if (url.includes('/airports?')) {
+        const search = new URL(url, 'http://localhost').searchParams.get('search');
+        if (search === 'HAN') return new Promise((resolve) => { resolveHan = () => resolve(response({ success: true, data: [airports[0]] })); });
+        if (search === 'SGN') return new Promise((resolve) => { resolveSgn = () => resolve(response({ success: true, data: [airports[1]] })); });
+        return Promise.resolve(response({ success: true, data: airports }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    renderRoutes('/', fetchImpl);
+
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+    await waitFor(() => expect(resolveHan).toBeTypeOf('function'));
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến TP. Hồ Chí Minh (SGN)' }));
+    await waitFor(() => expect(resolveSgn).toBeTypeOf('function'));
+
+    resolveSgn();
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('SGN · Ho Chi Minh City'));
+    resolveHan();
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('SGN · Ho Chi Minh City'));
   });
 
   it('closes the selected airport dropdown and keeps the selected airport label', async () => {
@@ -263,7 +392,7 @@ describe('public flight discovery pages', () => {
       await user.type(screen.getByLabelText(/departure/i), '2026-10-10');
       await user.clear(screen.getByLabelText(/passengers/i));
       await user.type(screen.getByLabelText(/passengers/i), '2');
-      await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
 
       expect(await screen.findByRole('heading', { name: /Chuyến bay phù hợp/i })).toBeInTheDocument();
       const searchUrl = fetchImpl.mock.calls.map(([url]) => url).find((url) => url.includes('/flights/search?'));
@@ -294,7 +423,7 @@ describe('public flight discovery pages', () => {
       await user.click(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
       await user.clear(screen.getByLabelText(/departure/i));
       await user.type(screen.getByLabelText(/departure/i), '2026-10-09');
-      await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
 
       expect(screen.getByRole('alert')).toHaveTextContent('Ngày khởi hành không được ở quá khứ.');
       expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
@@ -308,7 +437,7 @@ describe('public flight discovery pages', () => {
     const fetchImpl = createFetch();
     renderRoutes('/', fetchImpl);
 
-    await user.click(screen.getByRole('button', { name: /Tìm chuyến bay/i }));
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
     expect(screen.getByRole('alert')).toHaveTextContent('Chọn điểm đi và điểm đến');
     expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
   });

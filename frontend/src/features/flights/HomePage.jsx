@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
@@ -30,6 +30,10 @@ export function HomePage() {
   const [departureDate, setDepartureDate] = useState(todayLocal());
   const [passengers, setPassengers] = useState('1');
   const [error, setError] = useState('');
+  const [focusOriginAfterDestination, setFocusOriginAfterDestination] = useState(false);
+  const searchFormRef = useRef(null);
+  const destinationLookupRequest = useRef(0);
+  const originRef = useRef(null);
   const openOriginAirport = useCallback((open) => setActiveAirportField(open ? 'origin' : null), []);
   const openDestinationAirport = useCallback((open) => setActiveAirportField(open ? 'destination' : null), []);
 
@@ -43,10 +47,54 @@ export function HomePage() {
     return () => { active = false; };
   }, [api]);
 
+  useEffect(() => {
+    if (!focusOriginAfterDestination) return;
+    document.getElementById('origin-airport')?.focus({ preventScroll: true });
+    setFocusOriginAfterDestination(false);
+  }, [focusOriginAfterDestination]);
+
   const swapAirports = () => {
     setOrigin(destination);
+    originRef.current = destination;
     setDestination(origin);
     setActiveAirportField(null);
+  };
+
+  const chooseSuggestedDestination = async (place) => {
+    const requestId = ++destinationLookupRequest.current;
+    setError('');
+    setActiveAirportField(null);
+    searchFormRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+
+    try {
+      const result = await searchAirports({ page: 1, limit: 20, search: place.code });
+      const matches = Array.isArray(result) ? result : result?.data;
+      const airport = Array.isArray(matches)
+        ? matches.find((item) => String(item?.iata_code || '').trim().toUpperCase() === place.code)
+        : null;
+
+      if (requestId !== destinationLookupRequest.current) return;
+      if (!airport) {
+        setError(`Không tìm thấy sân bay ${place.code} trong dữ liệu hiện có.`);
+        return;
+      }
+
+      setDestination(airport);
+      const duplicateOrigin = originRef.current?.id === airport.id;
+      if (duplicateOrigin) {
+        originRef.current = null;
+        setOrigin(null);
+        setError('Điểm đi trùng điểm đến; vui lòng chọn điểm đi khác.');
+      }
+      setActiveAirportField(null);
+      if (!originRef.current || duplicateOrigin) {
+        setFocusOriginAfterDestination(true);
+      }
+    } catch (_lookupError) {
+      if (requestId === destinationLookupRequest.current) {
+        setError(`Không thể tra cứu sân bay ${place.code}. Vui lòng thử lại.`);
+      }
+    }
   };
 
   const submit = (event) => {
@@ -82,13 +130,13 @@ export function HomePage() {
             <div className="hero-sunrise" aria-hidden="true"><span className="sun-disc" /><span className="wing-shape" /></div>
           </div>
           <div className="search-card-wrap">
-            <form className="flight-search-card" onSubmit={submit} noValidate>
+            <form className="flight-search-card" ref={searchFormRef} onSubmit={submit} noValidate>
               <div className="search-card-heading">
                 <div><span className="eyebrow">Lên kế hoạch · Một chiều</span><h2>Tìm chuyến bay</h2></div>
                 <p className="one-way-note" role="note">Hiện hỗ trợ tìm hành trình một chiều.</p>
               </div>
               <div className="search-route-row">
-                <AirportCombobox id="origin-airport" peerId="destination-airport" coveredActionId="swap-airports" label="Điểm đi" value={origin} onChange={setOrigin} open={activeAirportField === 'origin'} onOpenChange={openOriginAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
+                <AirportCombobox id="origin-airport" peerId="destination-airport" coveredActionId="swap-airports" label="Điểm đi" value={origin} onChange={(airport) => { originRef.current = airport; setOrigin(airport); }} open={activeAirportField === 'origin'} onOpenChange={openOriginAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
                 <button id="swap-airports" className="swap-airports" type="button" aria-label="Đổi điểm đi và điểm đến" onClick={swapAirports}>↔</button>
                 <AirportCombobox id="destination-airport" peerId="origin-airport" coveredActionId="swap-airports" label="Điểm đến" value={destination} onChange={setDestination} open={activeAirportField === 'destination'} onOpenChange={openDestinationAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
               </div>
@@ -107,7 +155,7 @@ export function HomePage() {
 
         <section className="destination-section" aria-labelledby="destinations-heading">
           <div className="section-heading"><div><span className="eyebrow">Gợi ý hành trình</span><h2 id="destinations-heading">Khám phá các điểm đến</h2></div><p>Một vài thành phố để bạn bắt đầu lên kế hoạch.</p></div>
-          <div className="destination-list">{destinations.map((place, index) => <article className={`destination-card destination-card-${index + 1}`} key={place.code}><div className="destination-art" style={{ backgroundImage: `url("${place.image}")` }} aria-hidden="true"><span>{place.code}</span></div><div><span className="destination-code">{place.code} · VIỆT NAM</span><h3>{place.city}</h3><p>{place.note}</p></div></article>)}</div>
+          <div className="destination-list">{destinations.map((place, index) => <button className={`destination-card destination-card-${index + 1}`} type="button" key={place.code} aria-label={`Tìm chuyến bay đến ${place.city} (${place.code})`} onClick={() => chooseSuggestedDestination(place)}><div className="destination-art" style={{ backgroundImage: `url("${place.image}")` }} aria-hidden="true"><span>{place.code}</span></div><div><span className="destination-code">{place.code} · VIỆT NAM</span><h3>{place.city}</h3><p>{place.note}</p></div></button>)}</div>
         </section>
         <section className="home-note"><span className="note-mark" aria-hidden="true">✦</span><div><h2>Hành trình tốt bắt đầu từ lựa chọn phù hợp.</h2><p>So sánh giờ bay, chỗ còn trống và hạng vé để tìm chuyến đi hợp với kế hoạch của bạn.</p></div></section>
       </main>
