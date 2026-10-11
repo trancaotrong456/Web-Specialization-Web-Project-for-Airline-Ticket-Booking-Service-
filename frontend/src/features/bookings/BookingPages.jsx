@@ -7,7 +7,7 @@ import { Field } from '../../components/Field';
 import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
-import { StatusBadge } from '../../components/StatusBadge';
+import { StatusBadge, statusLabel } from '../../components/StatusBadge';
 import { createBookingsApi, isValidEmail } from './bookingsApi';
 
 const bookingStatuses = ['holding', 'pending_payment', 'confirmed', 'cancelled', 'expired'];
@@ -22,6 +22,15 @@ const airportsOf = (flight) => `${flight?.departureAirport?.iata_code || flight?
 const flightCarrier = (flight) => flight?.airline?.name || flight?.airline?.iata_code || 'Chuyến bay';
 const passengerList = (booking) => booking?.passengers || booking?.bookingPassengers || [];
 const paymentsList = (booking) => booking?.payments || [];
+// The query comes from public search; do not allocate an unbounded passenger
+// form from a malformed or excessively large URL parameter.
+const countFromSearchParams = (params) => {
+  const raw = params.get('passengers');
+  const count = Number(raw);
+  return /^\d+$/.test(raw || '') && Number.isSafeInteger(count) && count >= 1 && count <= 200
+    ? String(count)
+    : '1';
+};
 
 function BookingShell({ children, admin = false }) {
   return <div className="public-page booking-page"><AppHeader /><main className={`booking-main ${admin ? 'booking-admin-main' : ''}`}>{children}</main><footer className="site-footer"><span>Serene Flightways</span><span>Thông tin đặt chỗ được xử lý theo trạng thái từ hệ thống.</span></footer></div>;
@@ -44,8 +53,9 @@ export function BookingCreatePage() {
   const api = useBookingsApi();
   const { user, status } = useAuth();
   const navigate = useNavigate();
+  const [urlParams] = useSearchParams();
   const [airports, setAirports] = useState([]);
-  const [criteria, setCriteria] = useState({ departure_airport_id: '', arrival_airport_id: '', departure_date: '', passengers: '1' });
+  const [criteria, setCriteria] = useState({ departure_airport_id: '', arrival_airport_id: '', departure_date: '', passengers: countFromSearchParams(urlParams) });
   const [results, setResults] = useState([]);
   const [flight, setFlight] = useState(null);
   const [fares, setFares] = useState([]);
@@ -56,7 +66,6 @@ export function BookingCreatePage() {
   const [guestEmail, setGuestEmail] = useState('');
   const [formErrors, setFormErrors] = useState({});
   const [state, setState] = useState({ loadingAirports: true, searching: false, loadingFares: false, submitting: false, error: '', stage: 'flight' });
-  const urlParams = new URLSearchParams(window.location.search);
   const presetFlight = urlParams.get('flight_id');
 
   useEffect(() => {
@@ -226,7 +235,7 @@ export function BookingLookupPage() {
 
 function BookingCard({ booking, to, guestEmail }) {
   const flight = booking.flight || {};
-  return <article className="booking-card"><div className="booking-card-top"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2>{booking.booking_code || `#${booking.id}`}</h2></div><StatusBadge status={booking.status} /></div><p className="booking-card-route"><strong>{airportsOf(flight)}</strong><span>{dateTime(flight.departure_time)}</span></p><div className="booking-card-bottom"><strong>{money(booking.total_amount)}</strong><Link className="button button-outline" to={to} state={{ guestEmail }}>Chi tiết</Link></div></article>;
+  return <article className="booking-card"><div className="booking-card-top"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2>{booking.booking_code || `#${booking.id}`}</h2></div><StatusBadge status={booking.status} /></div><p className="booking-card-route"><strong>{airportsOf(flight)}</strong><span>{dateTime(flight.departure_time)}</span></p><div className="booking-card-bottom"><strong>{money(booking.total_amount)}</strong>{to ? <Link className="button button-outline" to={to} state={{ guestEmail }}>Chi tiết</Link> : null}</div></article>;
 }
 
 export function MyBookingsPage() {
@@ -237,11 +246,13 @@ export function MyBookingsPage() {
   const load = useCallback(async () => { setState((current) => ({ ...current, loading: true, error: '' })); try { const result = await api.myBookings({ page, limit, status }); setState({ loading: false, rows: rowsOf(result), pagination: pageOf(result, page, limit), error: '' }); } catch (error) { setState((current) => ({ ...current, loading: false, error: errText(error, 'Không thể tải đặt chỗ.') })); } }, [api, page, limit, status]);
   useEffect(() => { void load(); }, [load]);
   const update = (values) => setParams((current) => { const next = new URLSearchParams(current); Object.entries(values).forEach(([key, value]) => value ? next.set(key, String(value)) : next.delete(key)); return next; });
-  return <BookingShell><PageHeading title="Đặt chỗ của tôi" description="Theo dõi trạng thái và thông tin các đặt chỗ của bạn." actions={<Link className="button button-primary" to="/bookings/new">Đặt vé</Link>} />{state.loading ? <LoadingView label="Đang tải đặt chỗ…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><label className="field"><span>Lọc trạng thái</span><select aria-label="Lọc trạng thái" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả trạng thái</option>{bookingStatuses.map((item) => <option key={item} value={item}>{item}</option>)}</select></label><span>{state.pagination?.total ?? state.rows.length} đặt chỗ</span></div>{state.rows.length ? <div className="booking-card-list">{state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} to={`/bookings/${booking.id}`} />)}</div> : <div className="empty-state"><h2>Chưa có đặt chỗ</h2><p>Khi tạo đặt chỗ, thông tin sẽ xuất hiện tại đây.</p><Link className="button button-primary" to="/bookings/new">Tìm chuyến bay</Link></div>}<Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} /></section>}</BookingShell>;
+  return <BookingShell><PageHeading title="Đặt chỗ của tôi" description="Theo dõi trạng thái và thông tin các đặt chỗ của bạn." actions={<Link className="button button-primary" to="/bookings/new">Đặt vé</Link>} />{state.loading ? <LoadingView label="Đang tải đặt chỗ…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><label className="field"><span>Lọc trạng thái</span><select aria-label="Lọc trạng thái" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả trạng thái</option>{bookingStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label><span>{state.pagination?.total ?? state.rows.length} đặt chỗ</span></div>{state.rows.length ? <div className="booking-card-list">{state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} to={`/bookings/${booking.id}`} />)}</div> : <div className="empty-state"><h2>Chưa có đặt chỗ</h2><p>Khi tạo đặt chỗ, thông tin sẽ xuất hiện tại đây.</p><Link className="button button-primary" to="/bookings/new">Tìm chuyến bay</Link></div>}<Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} /></section>}</BookingShell>;
 }
 
 export function AdminBookingsPage() {
   const api = useBookingsApi();
+  const { user } = useAuth();
+  const canViewDetails = user?.role === 'admin';
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Number(params.get('page')) || 1); const limit = Math.max(1, Number(params.get('limit')) || 10); const status = params.get('status') || ''; const search = params.get('search') || '';
   const [draftSearch, setDraftSearch] = useState(search); const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
@@ -249,7 +260,7 @@ export function AdminBookingsPage() {
   useEffect(() => { void load(); }, [load]);
   const update = (values) => setParams((current) => { const next = new URLSearchParams(current); Object.entries(values).forEach(([key, value]) => value ? next.set(key, String(value)) : next.delete(key)); return next; });
   const submitSearch = (event) => { event.preventDefault(); update({ search: draftSearch.trim(), page: 1 }); };
-  return <BookingShell admin><PageHeading eyebrow="VẬN HÀNH" title="Quản lý đặt chỗ" description="Tra cứu đặt chỗ theo mã/email và theo dõi trạng thái." />{state.loading ? <LoadingView label="Đang tải danh sách…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><form className="booking-admin-filter" onSubmit={submitSearch}><Field id="booking-admin-search" label="Tìm mã đặt chỗ hoặc email" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} /><button className="button button-secondary" type="submit">Tìm</button></form><label className="field"><span>Trạng thái</span><select aria-label="Trạng thái đặt chỗ" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả</option>{bookingStatuses.map((item) => <option key={item} value={item}>{item}</option>)}</select></label></div>{state.rows.length ? <><div className="table-wrap booking-table-wrap"><table><thead><tr><th>Mã</th><th>Khách</th><th>Chuyến bay</th><th>Tạo lúc</th><th>Tổng tiền</th><th>Trạng thái</th><th /></tr></thead><tbody>{state.rows.map((booking) => <tr key={booking.id}><td>{booking.booking_code}</td><td>{booking.user?.full_name || booking.guest_email || booking.user?.email || '—'}</td><td>{airportsOf(booking.flight)}</td><td>{dateTime(booking.created_at)}</td><td>{money(booking.total_amount)}</td><td><StatusBadge status={booking.status} /></td><td><Link to={`/admin/bookings/${booking.id}`}>Chi tiết</Link></td></tr>)}</tbody></table></div><div className="booking-admin-cards">{state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} to={`/admin/bookings/${booking.id}`} />)}</div><Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} /></> : <div className="empty-state"><h2>Không có kết quả</h2><p>Thử mã đặt chỗ, email hoặc trạng thái khác.</p></div>}</section>}</BookingShell>;
+  return <BookingShell admin><PageHeading eyebrow="VẬN HÀNH" title="Quản lý đặt chỗ" description="Tra cứu đặt chỗ theo mã/email và theo dõi trạng thái." />{state.loading ? <LoadingView label="Đang tải danh sách…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><form className="booking-admin-filter" onSubmit={submitSearch}><Field id="booking-admin-search" label="Tìm mã đặt chỗ hoặc email" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} /><button className="button button-secondary" type="submit">Tìm</button></form><label className="field"><span>Trạng thái</span><select aria-label="Trạng thái đặt chỗ" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả</option>{bookingStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label></div>{state.rows.length ? <><div className="table-wrap booking-table-wrap"><table><thead><tr><th>Mã</th><th>Khách</th><th>Chuyến bay</th><th>Tạo lúc</th><th>Tổng tiền</th><th>Trạng thái</th><th /></tr></thead><tbody>{state.rows.map((booking) => <tr key={booking.id}><td>{booking.booking_code}</td><td>{booking.user?.full_name || booking.guest_email || booking.user?.email || '—'}</td><td>{airportsOf(booking.flight)}</td><td>{dateTime(booking.created_at)}</td><td>{money(booking.total_amount)}</td><td><StatusBadge status={booking.status} /></td><td>{canViewDetails ? <Link to={`/admin/bookings/${booking.id}`}>Chi tiết</Link> : <span aria-label="Không có quyền xem chi tiết">—</span>}</td></tr>)}</tbody></table></div><div className="booking-admin-cards">{state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} to={canViewDetails ? `/admin/bookings/${booking.id}` : null} />)}</div><Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} /></> : <div className="empty-state"><h2>Không có kết quả</h2><p>Thử mã đặt chỗ, email hoặc trạng thái khác.</p></div>}</section>}</BookingShell>;
 }
 
 export function BookingDetailPage({ admin = false }) {

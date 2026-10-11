@@ -85,7 +85,9 @@ export function AppRoutes() {
         </Route>
         <Route element={<StaffOrAdminRoute />}>
           <Route path="/admin/bookings" element={<AdminBookingsPage />} />
-          <Route path="/admin/bookings/:id" element={<BookingDetailPage admin />} />
+          <Route element={<AdminRoute />}>
+            <Route path="/admin/bookings/:id" element={<BookingDetailPage admin />} />
+          </Route>
         </Route>
         <Route element={<AdminRoute />}>
           <Route path="/admin/airlines" element={<AirlineListPage />} />
