@@ -26,9 +26,12 @@ export function HomePage() {
   const [airportError, setAirportError] = useState('');
   const [origin, setOrigin] = useState(null);
   const [destination, setDestination] = useState(null);
+  const [activeAirportField, setActiveAirportField] = useState(null);
   const [departureDate, setDepartureDate] = useState(todayLocal());
   const [passengers, setPassengers] = useState('1');
   const [error, setError] = useState('');
+  const openOriginAirport = useCallback((open) => setActiveAirportField(open ? 'origin' : null), []);
+  const openDestinationAirport = useCallback((open) => setActiveAirportField(open ? 'destination' : null), []);
 
   useEffect(() => {
     let active = true;
@@ -43,6 +46,7 @@ export function HomePage() {
   const swapAirports = () => {
     setOrigin(destination);
     setDestination(origin);
+    setActiveAirportField(null);
   };
 
   const submit = (event) => {
@@ -84,9 +88,9 @@ export function HomePage() {
                 <p className="one-way-note" role="note">Hiện hỗ trợ tìm hành trình một chiều.</p>
               </div>
               <div className="search-route-row">
-                <AirportCombobox id="origin-airport" label="Điểm đi" value={origin} onChange={setOrigin} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
-                <button className="swap-airports" type="button" aria-label="Đổi điểm đi và điểm đến" onClick={swapAirports}>↔</button>
-                <AirportCombobox id="destination-airport" label="Điểm đến" value={destination} onChange={setDestination} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
+                <AirportCombobox id="origin-airport" peerId="destination-airport" coveredActionId="swap-airports" label="Điểm đi" value={origin} onChange={setOrigin} open={activeAirportField === 'origin'} onOpenChange={openOriginAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
+                <button id="swap-airports" className="swap-airports" type="button" aria-label="Đổi điểm đi và điểm đến" onClick={swapAirports}>↔</button>
+                <AirportCombobox id="destination-airport" peerId="origin-airport" coveredActionId="swap-airports" label="Điểm đến" value={destination} onChange={setDestination} open={activeAirportField === 'destination'} onOpenChange={openDestinationAirport} searchAirports={searchAirports} initialAirports={airports} placeholder="Thành phố hoặc sân bay" />
               </div>
               <div className="search-details-row">
                 <label className="airport-field"><span>Ngày khởi hành</span><input aria-label="Departure date" type="date" min={todayLocal()} value={departureDate} onChange={(event) => setDepartureDate(event.target.value)} /></label>
