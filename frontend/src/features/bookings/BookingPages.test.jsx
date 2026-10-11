@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -24,7 +24,7 @@ describe('booking customer pages', () => {
     expect(mocks.request).toHaveBeenCalledWith('/bookings/lookup/BK123?guest_email=guest%40example.com');
   });
 
-  it('preserves a two-passenger search when opening the chosen flight from results', async () => {
+  it.each([1, 2, 3])('preserves a %i-passenger search through fare selection without creating a booking', async (count) => {
     mocks.user = { id: 2, role: 'customer' };
     mocks.status = 'authenticated';
     mocks.request.mockImplementation(async (path) => {
@@ -34,11 +34,13 @@ describe('booking customer pages', () => {
       throw new Error(`Unexpected request ${path}`);
     });
     const user = userEvent.setup();
-    renderPage(<BookingCreatePage />, '/bookings/new?flight_id=17&passengers=2');
+    renderPage(<BookingCreatePage />, `/bookings/new?flight_id=17&passengers=${count}`);
     await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
-    expect(screen.getAllByLabelText('Họ tên')).toHaveLength(2);
-    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent('2');
+    expect(screen.getAllByLabelText('Họ tên')).toHaveLength(count);
+    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent(String(count));
+    expect(screen.getByText('Giá tham khảo trước ưu đãi')).toBeInTheDocument();
+    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent(new RegExp(`${(count * 1000000).toLocaleString('vi-VN')}\\s*₫`));
     expect(mocks.request.mock.calls.some(([path]) => path === '/bookings')).toBe(false);
   });
 
@@ -133,6 +135,16 @@ describe('booking customer pages', () => {
     expect((await screen.findAllByText('BKSTAFF')).length).toBeGreaterThan(0);
     expect(mocks.request).toHaveBeenCalledWith('/bookings/admin/all?page=1&limit=10&status=holding&search=BKSTAFF');
     expect(screen.queryByRole('link', { name: 'Chi tiết' })).not.toBeInTheDocument();
+  });
+
+  it('uses report labels for booking status filter options while keeping enum values', async () => {
+    mocks.user = { id: 3, role: 'staff' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ data: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    renderPage(<AdminBookingsPage />, '/admin/bookings');
+
+    const statusFilter = await screen.findByLabelText('Trạng thái đặt chỗ');
+    expect(screen.getByRole('option', { name: 'Đang xử lý thanh toán' })).toHaveValue('pending_payment');
+    expect(within(statusFilter).queryByRole('option', { name: 'pending_payment' })).not.toBeInTheDocument();
   });
 
   it('shows a cancellation confirmation only for a holding guest booking and sends guest_email', async () => {

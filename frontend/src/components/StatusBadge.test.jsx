@@ -4,7 +4,7 @@ import { StatusBadge } from './StatusBadge';
 
 describe('booking and payment labels in the submitted report', () => {
   it.each([
-    ['holding', 'Đang giữ chỗ'],
+    ['holding', 'Giữ chỗ / Chờ thanh toán'],
     ['pending_payment', 'Đang xử lý thanh toán'],
     ['confirmed', 'Đã xác nhận'],
     ['pending', 'Thanh toán chờ xử lý'],

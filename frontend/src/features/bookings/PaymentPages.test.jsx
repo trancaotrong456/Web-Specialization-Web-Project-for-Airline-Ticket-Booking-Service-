@@ -1,8 +1,8 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { AdminPaymentDetailPage, AdminPaymentsPage, AdminRevenuePage, PaymentInitiatePage } from './PaymentPages';
+import { AdminPaymentDetailPage, AdminPaymentsPage, AdminRevenuePage, PaymentInitiatePage, PaymentResultPage } from './PaymentPages';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), user: null, status: 'anonymous' }));
 vi.mock('../../app/AuthProvider', () => ({ useAuth: () => ({ request: mocks.request, user: mocks.user, status: mocks.status }) }));
@@ -27,6 +27,13 @@ describe('payment pages', () => {
     await user.click(screen.getByRole('button', { name: 'Tiếp tục thanh toán' }));
     expect(await screen.findByRole('img', { name: 'Mã QR do payOS trả về' })).toHaveAttribute('src', 'data:image/png;base64,serverQr');
     expect(mocks.request).toHaveBeenCalledWith('/payments/initiate', expect.objectContaining({ method: 'POST', body: expect.objectContaining({ booking_id: 7, payment_method: 'payos', guest_email: 'guest@example.com' }) }));
+  });
+
+  it('uses the submitted-report booking status label on payment result', async () => {
+    mocks.request.mockResolvedValue(booking);
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&demo=1');
+    expect(await screen.findByText('BK123')).toBeInTheDocument();
+    expect(screen.getByText(/Đặt chỗ được xác nhận khi trạng thái hệ thống/)).toHaveTextContent('Hiện tại: Giữ chỗ / Chờ thanh toán');
   });
 
   it('rejects reversed revenue dates before making the request', async () => {
@@ -61,6 +68,16 @@ describe('payment pages', () => {
     expect(mocks.request).toHaveBeenCalledWith('/payments?page=1&limit=20&status=success&payment_method=vnpay&booking_id=7');
   });
 
+  it('uses report labels for payment status filter options while keeping enum values', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ data: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    render(<MemoryRouter><AdminPaymentsPage /></MemoryRouter>);
+
+    const statusFilter = await screen.findByLabelText('Lọc trạng thái thanh toán');
+    expect(screen.getByRole('option', { name: 'Thanh toán thành công' })).toHaveValue('success');
+    expect(within(statusFilter).queryByRole('option', { name: 'success' })).not.toBeInTheDocument();
+  });
+
   it('requires confirmation and labels booking refund as internal-only', async () => {
     mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
     let refunded = false;
@@ -76,7 +93,7 @@ describe('payment pages', () => {
     await user.click(screen.getByRole('button', { name: 'Xử lý refund nội bộ' }));
     expect(screen.getByRole('dialog')).toHaveTextContent('không gọi hoàn tiền thật qua gateway');
     await user.click(screen.getByRole('button', { name: 'Xác nhận refund' }));
-    await screen.findByText('Đã refund');
+    await screen.findByText('Đã hoàn tiền');
     expect(mocks.request).toHaveBeenCalledWith('/payments/bookings/7/refund', { method: 'POST', body: {} });
   });
 });
