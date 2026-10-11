@@ -18,6 +18,13 @@ describe('booking and payment route authorization', () => {
     expect(mocks.request).toHaveBeenCalledWith('/bookings/admin/all?page=1&limit=10');
   });
 
+  it('denies staff direct access to other customers booking detail', async () => {
+    mocks.user = { id: 2, role: 'staff' };
+    renderRoute('/admin/bookings/8');
+    expect(await screen.findByRole('heading', { name: 'Không có quyền truy cập' })).toBeInTheDocument();
+    expect(mocks.request).not.toHaveBeenCalled();
+  });
+
   it('keeps payment list and revenue routes admin-only', async () => {
     mocks.user = { id: 2, role: 'staff' };
     renderRoute('/admin/payments/revenue');

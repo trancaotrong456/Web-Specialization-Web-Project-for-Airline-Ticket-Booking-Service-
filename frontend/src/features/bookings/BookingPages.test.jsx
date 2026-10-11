@@ -24,6 +24,24 @@ describe('booking customer pages', () => {
     expect(mocks.request).toHaveBeenCalledWith('/bookings/lookup/BK123?guest_email=guest%40example.com');
   });
 
+  it('preserves a two-passenger search when opening the chosen flight from results', async () => {
+    mocks.user = { id: 2, role: 'customer' };
+    mocks.status = 'authenticated';
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/airports?')) return { data: [] };
+      if (path === '/flights/17') return flight;
+      if (path === '/fare-classes/flight/17') return { data: [{ id: 5, class_name: 'Phổ thông', price: 1000000 }] };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    renderPage(<BookingCreatePage />, '/bookings/new?flight_id=17&passengers=2');
+    await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    expect(screen.getAllByLabelText('Họ tên')).toHaveLength(2);
+    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent('2');
+    expect(mocks.request.mock.calls.some(([path]) => path === '/bookings')).toBe(false);
+  });
+
   it('requires a valid guest email before sending booking creation', async () => {
     mocks.request.mockImplementation(async (path) => {
       if (path.startsWith('/airports?')) return { data: [{ id: 1, iata_code: 'HAN', city: 'Hà Nội' }, { id: 2, iata_code: 'SGN', city: 'TP. Hồ Chí Minh' }] };
@@ -114,6 +132,7 @@ describe('booking customer pages', () => {
     renderPage(<AdminBookingsPage />, '/admin/bookings?status=holding&search=BKSTAFF');
     expect((await screen.findAllByText('BKSTAFF')).length).toBeGreaterThan(0);
     expect(mocks.request).toHaveBeenCalledWith('/bookings/admin/all?page=1&limit=10&status=holding&search=BKSTAFF');
+    expect(screen.queryByRole('link', { name: 'Chi tiết' })).not.toBeInTheDocument();
   });
 
   it('shows a cancellation confirmation only for a holding guest booking and sends guest_email', async () => {

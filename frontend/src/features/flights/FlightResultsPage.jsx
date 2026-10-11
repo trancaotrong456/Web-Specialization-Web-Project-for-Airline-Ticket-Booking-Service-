@@ -12,7 +12,7 @@ const formatDay = (value) => value ? new Intl.DateTimeFormat('vi-VN', { day: 'nu
 const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price);
 const flightStatusLabel = (status) => ({ scheduled: 'Theo lịch', cancelled: 'Đã hủy', completed: 'Đã hoàn thành' })[status] || 'Thông tin chuyến bay';
 
-function FlightCard({ flight }) {
+function FlightCard({ flight, passengerCount }) {
   const farePrices = Array.isArray(flight.fareClasses)
     ? flight.fareClasses
       .map((fare) => fare.price)
@@ -34,7 +34,7 @@ function FlightCard({ flight }) {
       </div>
       <div className="flight-availability"><strong>{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span></div>
       <div className="flight-fare">{lowestFare !== undefined ? <><small>Giá từ</small><strong>{formatPrice(lowestFare)} ₫</strong></> : <span>Chưa có thông tin giá</span>}</div>
-      <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}`}>Chọn chuyến bay</Link>
+      <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}>Chọn chuyến bay</Link>
     </article>
   );
 }
@@ -97,11 +97,11 @@ export function FlightResultsPage() {
         {error ? <section className="search-state surface-card" role="alert"><h2>Chưa tải được kết quả</h2><p>{error}</p><button className="button button-outline" type="button" onClick={() => void load()}>Thử lại</button></section> : null}
         {valid && !loading && !error ? <>
           <section className="results-summary"><span>{result.data.length} chuyến bay trên trang này</span><span>Thứ tự khởi hành do hệ thống sắp xếp</span></section>
-          {result.data.length ? <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} />)}</div> : <section className="search-state surface-card"><span className="empty-mark" aria-hidden="true">✦</span><h2>{currentPage > 1 ? 'Trang này không có chuyến bay' : 'Không có chuyến bay phù hợp'}</h2><p>{currentPage > 1 ? 'Thông tin tổng số trang từ máy chủ có thể chưa khớp với danh sách. Bạn có thể quay lại trang trước.' : 'Thử đổi ngày bay, điểm đến hoặc số hành khách để tìm lựa chọn khác.'}</p>{currentPage === 1 ? <Link className="button button-outline" to="/">Sửa tiêu chí tìm kiếm</Link> : null}</section>}
+          {result.data.length ? <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} passengerCount={values.min_seats} />)}</div> : <section className="search-state surface-card"><span className="empty-mark" aria-hidden="true">✦</span><h2>{currentPage > 1 ? 'Trang này không có chuyến bay' : 'Không có chuyến bay phù hợp'}</h2><p>{currentPage > 1 ? 'Thông tin tổng số trang từ máy chủ có thể chưa khớp với danh sách. Bạn có thể quay lại trang trước.' : 'Thử đổi ngày bay, điểm đến hoặc số hành khách để tìm lựa chọn khác.'}</p>{currentPage === 1 ? <Link className="button button-outline" to="/">Sửa tiêu chí tìm kiếm</Link> : null}</section>}
           {(currentPage > 1 || canGoNext) ? <nav className="results-pagination" aria-label="Phân trang chuyến bay"><button type="button" onClick={() => changePage(currentPage - 1)} disabled={currentPage <= 1} aria-label="Quay lại trang trước">← Trước</button><span aria-current="page">Trang {currentPage}</span><button type="button" onClick={() => changePage(currentPage + 1)} disabled={!canGoNext} aria-label="Sang trang tiếp theo">Tiếp theo →</button></nav> : null}
         </> : null}
       </main>
-      <footer className="site-footer"><span>Serene Flightways</span><span>Giờ bay hiển thị theo giờ địa phương.</span></footer>
+      <footer className="site-footer"><span>Serene Flightways</span><span>Giờ bay hiển thị theo giờ Việt Nam (UTC+7).</span></footer>
     </div>
   );
 }

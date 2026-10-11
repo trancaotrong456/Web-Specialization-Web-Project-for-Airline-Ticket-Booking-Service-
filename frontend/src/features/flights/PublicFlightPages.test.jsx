@@ -666,6 +666,13 @@ describe('public flight discovery pages', () => {
     expect(secondRequest).not.toContain('return_date');
   });
 
+  it('preserves the passenger count in the booking link and labels the Vietnam time zone accurately', async () => {
+    renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=3&page=1&limit=20', createFetch());
+    const choose = await screen.findByRole('link', { name: 'Chọn chuyến bay' });
+    expect(choose).toHaveAttribute('href', '/bookings/new?flight_id=17&passengers=3');
+    expect(screen.getByText('Giờ bay hiển thị theo giờ Việt Nam (UTC+7).')).toBeInTheDocument();
+  });
+
   it('reports the number of flights on the current page instead of trusting inconsistent total metadata', async () => {
     renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=1&page=1&limit=20', createFetch());
 
