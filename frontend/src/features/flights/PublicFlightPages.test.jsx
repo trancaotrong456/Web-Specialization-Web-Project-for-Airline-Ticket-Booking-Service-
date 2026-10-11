@@ -4,11 +4,36 @@ import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../../app/AuthProvider';
 import { AppRoutes } from '../../app/AppRouter';
+import { findNearestSupportedAirport } from './airportCoordinates';
 
 const response = (body, status = 200) => new Response(JSON.stringify(body), {
   status,
   headers: { 'Content-Type': 'application/json' },
 });
+
+const tomorrowLocal = () => {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
+
+function mockGeolocation(position) {
+  const original = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+  const getCurrentPosition = vi.fn((success) => success({
+    coords: { ...position, accuracy: position.accuracy ?? 500 },
+  }));
+  Object.defineProperty(navigator, 'geolocation', {
+    configurable: true,
+    value: { getCurrentPosition },
+  });
+  return {
+    getCurrentPosition,
+    restore() {
+      if (original) Object.defineProperty(navigator, 'geolocation', original);
+      else delete navigator.geolocation;
+    },
+  };
+}
 
 const airports = [
   { id: 1, iata_code: 'HAN', name: 'Noi Bai International Airport', city: 'Hanoi', country: 'Vietnam' },
@@ -28,12 +53,14 @@ const flights = [{
   fareClasses: [{ id: 3, class_name: 'Economy', price: 1250000, seat_quota: 12 }],
 }];
 
-function createFetch({ flightResponse, airportResponse = airports, airportFails = false, flightFailsOnce = false } = {}) {
+function createFetch({ flightResponse, airportResponse = airports, flightFailsOnce = false } = {}) {
   let failedFlight = false;
   return vi.fn(async (url) => {
     if (url.endsWith('/airports') || url.includes('/airports?')) {
-      if (airportFails) return response({ message: 'Không thể tải danh sách sân bay.' }, 503);
-      return response({ success: true, data: airportResponse, pagination: { page: 1, limit: 20, total: airportResponse.length, totalPages: 1 } });
+      const params = new URL(url, 'http://localhost').searchParams;
+      const page = Number(params.get('page') || 1);
+      const limit = Number(params.get('limit') || 20);
+      return response({ success: true, data: airportResponse, pagination: { page, limit, total: airportResponse.length, totalPages: 1 } });
     }
     if (url.includes('/flights/search?')) {
       if (flightFailsOnce && !failedFlight) {
@@ -69,44 +96,43 @@ describe('public flight discovery pages', () => {
   });
 
   it.each([
-    ['Hà Nội', 'HAN', 'HAN · Hanoi'],
-    ['TP. Hồ Chí Minh', 'SGN', 'SGN · Ho Chi Minh City'],
-    ['Đà Nẵng', 'DAD', 'DAD · Da Nang'],
-  ])('uses the Airport API to set %s as the destination', async (city, code, expectedValue) => {
+    ['TP. Hồ Chí Minh', 'Hà Nội', 'HAN', 2, 1, { latitude: 10.8188, longitude: 106.652 }],
+    ['Hà Nội', 'Đà Nẵng', 'DAD', 1, 3, { latitude: 21.2212, longitude: 105.807 }],
+    ['Đà Nẵng', 'TP. Hồ Chí Minh', 'SGN', 3, 2, { latitude: 16.0439, longitude: 108.199 }],
+  ])('uses GPS near %s to fly to %s (%s)', async (nearCity, destinationCity, destinationCode, originId, destinationId, position) => {
     const user = userEvent.setup();
     const fetchImpl = createFetch();
-    const scrollIntoView = vi.fn();
-    const originalScrollIntoView = HTMLElement.prototype.scrollIntoView;
-    Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: scrollIntoView });
+    const geolocation = mockGeolocation(position);
     try {
       renderRoutes('/', fetchImpl);
 
-      const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
-      const destination = screen.getByRole('combobox', { name: 'Điểm đến' });
+      expect(geolocation.getCurrentPosition).not.toHaveBeenCalled();
       const departureDate = screen.getByLabelText('Departure date');
       const passengers = screen.getByRole('spinbutton', { name: 'Passengers' });
+      const date = tomorrowLocal();
+      await user.clear(departureDate);
+      await user.type(departureDate, date);
       await user.clear(passengers);
       await user.type(passengers, '3');
-      const selectedDate = departureDate.value;
 
-      await user.click(screen.getByRole('button', { name: `Tìm chuyến bay đến ${city} (${code})` }));
+      await user.click(screen.getByRole('button', { name: `Tìm chuyến bay đến ${destinationCity} (${destinationCode})` }));
 
-      await waitFor(() => expect(destination).toHaveValue(expectedValue));
-      expect(origin).toHaveFocus();
-      expect(origin).toHaveAttribute('aria-expanded', 'true');
-      expect(screen.getAllByRole('listbox')).toHaveLength(1);
-      expect(scrollIntoView).toHaveBeenCalledWith({ behavior: 'smooth', block: 'center' });
-      expect(departureDate).toHaveValue(selectedDate);
-      expect(passengers).toHaveValue(3);
       await waitFor(() => {
-        expect(fetchImpl.mock.calls.some(([url]) => {
-          const parsed = new URL(url, 'http://localhost');
-          return parsed.pathname.endsWith('/airports') && parsed.searchParams.get('search') === code;
-        })).toBe(true);
+        const searchCall = fetchImpl.mock.calls.find(([url]) => url.includes('/flights/search?'));
+        expect(searchCall).toBeDefined();
+        const params = new URL(searchCall[0], 'http://localhost').searchParams;
+        expect(params.get('departure_airport_id')).toBe(String(originId));
+        expect(params.get('arrival_airport_id')).toBe(String(destinationId));
+        expect(params.get('departure_date')).toBe(date);
+        expect(params.get('min_seats')).toBe('3');
+        expect(params.get('page')).toBe('1');
+        expect(params.get('limit')).toBe('20');
       });
+      expect(geolocation.getCurrentPosition).toHaveBeenCalledTimes(1);
+      expect(geolocation.getCurrentPosition.mock.calls[0][2]).toMatchObject({ timeout: 10000, maximumAge: 0 });
+      expect(await screen.findByRole('heading', { name: /Chuyến bay phù hợp/i })).toBeInTheDocument();
     } finally {
-      if (originalScrollIntoView) Object.defineProperty(HTMLElement.prototype, 'scrollIntoView', { configurable: true, value: originalScrollIntoView });
-      else delete HTMLElement.prototype.scrollIntoView;
+      geolocation.restore();
     }
   });
 
@@ -133,19 +159,24 @@ describe('public flight discovery pages', () => {
     });
   });
 
-  it('clears a duplicate origin when the chosen destination matches it and explains what to do', async () => {
+  it('falls back to manual origin selection when the nearest airport is the destination', async () => {
     const user = userEvent.setup();
-    renderRoutes('/', createFetch());
+    const geolocation = mockGeolocation({ latitude: 21.2212, longitude: 105.807 });
+    try {
+      renderRoutes('/', createFetch());
 
-    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
-    await user.click(origin);
-    await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
-    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+      const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+      await user.click(origin);
+      await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
 
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đi' })).toHaveValue(''));
-    expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('HAN · Hanoi');
-    expect(screen.getByRole('alert')).toHaveTextContent('Điểm đi trùng điểm đến; vui lòng chọn điểm đi khác.');
-    expect(origin).toHaveFocus();
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đi' })).toHaveValue(''));
+      expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('HAN · Hanoi');
+      expect(screen.getByRole('alert')).toHaveTextContent('Sân bay gần vị trí của bạn trùng điểm đến');
+      expect(origin).toHaveFocus();
+    } finally {
+      geolocation.restore();
+    }
   });
 
   it('explains when a suggested destination is not present in the Airport API', async () => {
@@ -194,6 +225,169 @@ describe('public flight discovery pages', () => {
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('SGN · Ho Chi Minh City'));
     resolveHan();
     await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('SGN · Ho Chi Minh City'));
+  });
+
+  it('falls back to manual origin selection when geolocation is too inaccurate', async () => {
+    const user = userEvent.setup();
+    const geolocation = mockGeolocation({ latitude: 10.8188, longitude: 106.652, accuracy: 25_001 });
+    const fetchImpl = createFetch();
+    try {
+      renderRoutes('/', fetchImpl);
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Vị trí chưa đủ chính xác');
+      expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('HAN · Hanoi');
+      expect(screen.getByRole('combobox', { name: 'Điểm đi' })).toHaveFocus();
+      expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
+    } finally {
+      geolocation.restore();
+    }
+  });
+
+  it('falls back to the form when the browser denies location access', async () => {
+    const user = userEvent.setup();
+    const original = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition: (_success, failure) => failure({ code: 1 }) },
+    });
+    const fetchImpl = createFetch();
+    try {
+      renderRoutes('/', fetchImpl);
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Đà Nẵng (DAD)' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Vị trí không khả dụng');
+      expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('DAD · Da Nang');
+      expect(screen.getByRole('combobox', { name: 'Điểm đi' })).toHaveFocus();
+      expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
+    } finally {
+      if (original) Object.defineProperty(navigator, 'geolocation', original);
+      else delete navigator.geolocation;
+    }
+  });
+
+  it('does not start a flight search when Airport API data fails during origin resolution', async () => {
+    const user = userEvent.setup();
+    const geolocation = mockGeolocation({ latitude: 10.8188, longitude: 106.652 });
+    const fetchImpl = vi.fn(async (url) => {
+      if (url.includes('/airports?')) {
+        const params = new URL(url, 'http://localhost').searchParams;
+        if (params.get('limit') === '100') return response({ message: 'Airport API unavailable.' }, 503);
+        return response({ success: true, data: airports, pagination: { page: 1, limit: Number(params.get('limit')), total: airports.length, totalPages: 1 } });
+      }
+      if (url.includes('/flights/search?')) return response({ success: true, data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    try {
+      renderRoutes('/', fetchImpl);
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('Không thể xác định sân bay gần bạn');
+      expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('HAN · Hanoi');
+      expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
+    } finally {
+      geolocation.restore();
+    }
+  });
+
+  it('uses API airport records from later pages when resolving a nearby origin', async () => {
+    const user = userEvent.setup();
+    const geolocation = mockGeolocation({ latitude: 10.8188, longitude: 106.652 });
+    const fetchImpl = vi.fn(async (url) => {
+      if (url.includes('/airports?')) {
+        const params = new URL(url, 'http://localhost').searchParams;
+        const search = params.get('search');
+        const page = Number(params.get('page'));
+        if (search) return response({ success: true, data: [airports[0]], pagination: { page, limit: 20, total: 1, totalPages: 1 } });
+        return response({ success: true, data: page === 1 ? [airports[0]] : [airports[1]], pagination: { page, limit: 100, total: 2, totalPages: 2 } });
+      }
+      if (url.includes('/flights/search?')) return response({ success: true, data: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 0 } });
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    try {
+      renderRoutes('/', fetchImpl);
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+
+      await waitFor(() => {
+        const searchCall = fetchImpl.mock.calls.find(([url]) => url.includes('/flights/search?'));
+        expect(searchCall).toBeDefined();
+        expect(new URL(searchCall[0], 'http://localhost').searchParams.get('departure_airport_id')).toBe('2');
+      });
+      expect(fetchImpl.mock.calls.some(([url]) => new URL(url, 'http://localhost').searchParams.get('page') === '2')).toBe(true);
+    } finally {
+      geolocation.restore();
+    }
+  });
+
+  it('ignores an older GPS result when the user activates a newer destination card', async () => {
+    const user = userEvent.setup();
+    const original = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+    const successCallbacks = [];
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition: (success) => successCallbacks.push(success) },
+    });
+    const fetchImpl = createFetch();
+    try {
+      renderRoutes('/', fetchImpl);
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Hà Nội (HAN)' }));
+      await waitFor(() => expect(successCallbacks).toHaveLength(1));
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Đà Nẵng (DAD)' }));
+      await waitFor(() => expect(successCallbacks).toHaveLength(2));
+
+      successCallbacks[1]({ coords: { latitude: 10.8188, longitude: 106.652, accuracy: 500 } });
+      await waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(true));
+      successCallbacks[0]({ coords: { latitude: 21.2212, longitude: 105.807, accuracy: 500 } });
+      await waitFor(() => {
+        const searches = fetchImpl.mock.calls.filter(([url]) => url.includes('/flights/search?'));
+        expect(searches).toHaveLength(1);
+        const params = new URL(searches[0][0], 'http://localhost').searchParams;
+        expect(params.get('departure_airport_id')).toBe('2');
+        expect(params.get('arrival_airport_id')).toBe('3');
+      });
+    } finally {
+      if (original) Object.defineProperty(navigator, 'geolocation', original);
+      else delete navigator.geolocation;
+    }
+  });
+
+  it('does not override manual airport selection while a GPS suggestion is pending', async () => {
+    const user = userEvent.setup();
+    const original = Object.getOwnPropertyDescriptor(navigator, 'geolocation');
+    let resolvePosition;
+    Object.defineProperty(navigator, 'geolocation', {
+      configurable: true,
+      value: { getCurrentPosition: (success) => { resolvePosition = success; } },
+    });
+    const fetchImpl = createFetch();
+    try {
+      renderRoutes('/', fetchImpl);
+      await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay đến Đà Nẵng (DAD)' }));
+      await waitFor(() => expect(resolvePosition).toBeTypeOf('function'));
+      await user.click(screen.getByRole('combobox', { name: 'Điểm đi' }));
+      await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
+      resolvePosition({ coords: { latitude: 10.8188, longitude: 106.652, accuracy: 500 } });
+
+      await waitFor(() => expect(screen.getByRole('combobox', { name: 'Điểm đi' })).toHaveValue('HAN · Hanoi'));
+      expect(screen.getByRole('combobox', { name: 'Điểm đến' })).toHaveValue('DAD · Da Nang');
+      expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
+    } finally {
+      if (original) Object.defineProperty(navigator, 'geolocation', original);
+      else delete navigator.geolocation;
+    }
+  });
+
+  it('uses only supported airports present in API data and rejects locations outside the supported radius', () => {
+    const near = findNearestSupportedAirport({ coords: { latitude: 10.8188, longitude: 106.652, accuracy: 500 } }, airports);
+    expect(near?.airport).toBe(airports[1]);
+    expect(findNearestSupportedAirport({ coords: { latitude: 0, longitude: 0, accuracy: 500 } }, airports)).toBeNull();
+    expect(findNearestSupportedAirport({ coords: { latitude: 10.8188, longitude: 106.652, accuracy: 25_001 } }, airports)).toBeNull();
+    expect(findNearestSupportedAirport({ coords: { latitude: 10.8188, longitude: 106.652, accuracy: 500 } }, [
+      { ...airports[1], country: 'Việt Nam' },
+    ])?.airport).toEqual({ ...airports[1], country: 'Việt Nam' });
+    expect(findNearestSupportedAirport({ coords: { latitude: 10.8188, longitude: 106.652, accuracy: 500 } }, [
+      { ...airports[1], country: 'Thailand' },
+    ])).toBeNull();
   });
 
   it('closes the selected airport dropdown and keeps the selected airport label', async () => {
