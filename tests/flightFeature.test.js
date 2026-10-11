@@ -173,10 +173,6 @@ test('#23 – getFlightById contract verifies associations and error handling', 
   assert.ok(serviceCode.includes("statusCode = 404"), 'getFlightById must throw 404 when flight is not found');
 });
 
-
-
-
-
 // Regression: JOIN fareClasses must not inflate pagination totals for either endpoint.
 test('#22 – search and admin lists count distinct flights with joined fare classes', async () => {
   const { Flight } = require('../models');
