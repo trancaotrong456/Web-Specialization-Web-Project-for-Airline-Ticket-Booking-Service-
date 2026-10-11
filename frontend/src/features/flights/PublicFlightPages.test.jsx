@@ -67,6 +67,174 @@ describe('public flight discovery pages', () => {
     expect(screen.getByText(/hành trình một chiều/i)).toBeInTheDocument();
   });
 
+  it('closes the selected airport dropdown and keeps the selected airport label', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    await user.click(origin);
+    await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
+
+    expect(origin).toHaveValue('HAN · Hanoi');
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox', { name: 'Điểm đi options' })).not.toBeInTheDocument();
+  });
+
+  it('keeps only the destination dropdown open when switching from origin', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    const destination = screen.getByRole('combobox', { name: 'Điểm đến' });
+    await user.click(origin);
+    expect(origin).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(destination);
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+    expect(destination).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('listbox')).toHaveLength(1);
+  });
+
+  it('focuses the other airport input when its mobile hit area is covered by the open list', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    const destination = screen.getByRole('combobox', { name: 'Điểm đến' });
+    await user.click(origin);
+    const coveredPoint = { left: 1000, right: 1100, top: 1000, bottom: 1100, width: 100, height: 100, x: 1000, y: 1000, toJSON: () => ({}) };
+    vi.spyOn(destination, 'getBoundingClientRect').mockReturnValue(coveredPoint);
+
+    fireEvent.pointerDown(screen.getByRole('option', { name: /HAN.*Hanoi/i }), { clientX: 1050, clientY: 1050 });
+
+    expect(document.activeElement).toBe(destination);
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+    expect(destination).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('listbox')).toHaveLength(1);
+  });
+
+  it('closes the open airport dropdown on an outside pointer click', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    await user.click(origin);
+    await user.click(screen.getByRole('heading', { name: /Bay đến nơi/i }));
+
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('closes on Escape and reopens when the focused input is clicked again', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    await user.click(origin);
+    await user.keyboard('{Escape}');
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+
+    await user.click(origin);
+    expect(origin).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.getAllByRole('listbox')).toHaveLength(1);
+  });
+
+  it('supports selecting an airport with the combobox keyboard controls', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    await user.click(origin);
+    await user.keyboard('{ArrowDown}{Enter}');
+
+    expect(origin).toHaveValue('HAN · Hanoi');
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('keeps searching airports through the existing API as the query changes', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch({ airportResponse: [airports[1]] });
+    renderRoutes('/', fetchImpl);
+
+    await user.type(screen.getByRole('combobox', { name: 'Điểm đi' }), 'Ho Chi Minh');
+
+    await waitFor(() => {
+      expect(fetchImpl.mock.calls.some(([url]) => url.includes('/airports?') && url.includes('search=Ho+Chi+Minh'))).toBe(true);
+    });
+    expect(await screen.findByRole('option', { name: /SGN.*Ho Chi Minh City/i })).toBeInTheDocument();
+  });
+
+  it('ignores an older airport search response that arrives after a newer query', async () => {
+    const user = userEvent.setup();
+    let resolveHan;
+    let resolveSgn;
+    const fetchImpl = vi.fn((url) => {
+      if (url.includes('/airports?')) {
+        const search = new URL(url, 'http://localhost').searchParams.get('search');
+        if (search === 'HAN') return new Promise((resolve) => { resolveHan = () => resolve(response({ success: true, data: [airports[0]] })); });
+        if (search === 'SGN') return new Promise((resolve) => { resolveSgn = () => resolve(response({ success: true, data: [airports[1]] })); });
+        return Promise.resolve(response({ success: true, data: airports }));
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    renderRoutes('/', fetchImpl);
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    await user.type(origin, 'HAN');
+    await waitFor(() => expect(resolveHan).toBeTypeOf('function'));
+    await user.clear(origin);
+    await user.type(origin, 'SGN');
+    await waitFor(() => expect(resolveSgn).toBeTypeOf('function'));
+
+    resolveSgn();
+    expect(await screen.findByRole('option', { name: /SGN.*Ho Chi Minh City/i })).toBeInTheDocument();
+    resolveHan();
+    await waitFor(() => expect(screen.queryByRole('option', { name: /HAN.*Hanoi/i })).not.toBeInTheDocument());
+    expect(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i })).toBeInTheDocument();
+  });
+
+  it('swaps selected airports and closes the dropdown', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    const destination = screen.getByRole('combobox', { name: 'Điểm đến' });
+    await user.click(origin);
+    await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
+    await user.click(destination);
+    await user.click(await screen.findByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
+    await user.click(destination);
+    await user.click(screen.getByRole('button', { name: 'Đổi điểm đi và điểm đến' }));
+
+    expect(origin).toHaveValue('SGN · Ho Chi Minh City');
+    expect(destination).toHaveValue('HAN · Hanoi');
+    expect(origin).toHaveAttribute('aria-expanded', 'false');
+    expect(destination).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
+  it('preserves the swap action when an open mobile dropdown covers its hit area', async () => {
+    const user = userEvent.setup();
+    renderRoutes('/', createFetch());
+
+    const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
+    const destination = screen.getByRole('combobox', { name: 'Điểm đến' });
+    await user.click(origin);
+    await user.click(screen.getByRole('option', { name: /HAN.*Hanoi/i }));
+    await user.click(destination);
+    await user.click(screen.getByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
+    await user.click(origin);
+
+    const swap = screen.getByRole('button', { name: 'Đổi điểm đi và điểm đến' });
+    vi.spyOn(swap, 'getBoundingClientRect').mockReturnValue({ left: 1000, right: 1100, top: 1000, bottom: 1100, width: 100, height: 100, x: 1000, y: 1000, toJSON: () => ({}) });
+    fireEvent.pointerDown(screen.getByRole('option', { name: /HAN.*Hanoi/i }), { clientX: 1050, clientY: 1050 });
+
+    expect(origin).toHaveValue('SGN · Ho Chi Minh City');
+    expect(destination).toHaveValue('HAN · Hanoi');
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
+  });
+
   it('uses only local illustrative destination photography on the homepage', async () => {
     const fetchImpl = createFetch();
     renderRoutes('/', fetchImpl);
