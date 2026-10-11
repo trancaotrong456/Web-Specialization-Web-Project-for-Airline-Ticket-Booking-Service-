@@ -10,15 +10,15 @@ const admin = { id: 1, email: 'admin@example.com', full_name: 'Admin', status: '
 const target = { id: 9, email: 'user@example.com', full_name: 'Nguyễn Văn An', phone: '0912345678', status: 'active', role: { id: 1, name: 'customer' } };
 const roles = [{ id: 1, name: 'customer' }, { id: 2, name: 'staff' }, { id: 3, name: 'admin' }];
 
-const createFetch = ({ actor = admin, user = target, actionError } = {}) => vi.fn(async (url, options = {}) => {
+const createFetch = ({ actor = admin, user = target, actionError, roleOptions = roles } = {}) => vi.fn(async (url, options = {}) => {
   const method = options.method || 'GET';
   if (url.endsWith('/auth/refresh-token')) return response({ success: true, data: { accessToken: 'access' } });
   if (url.endsWith('/auth/me')) return response({ success: true, data: actor });
   if (url.endsWith(`/users/${user.id}`) && method === 'GET') return response({ success: true, data: user });
-  if (url.endsWith('/roles')) return response({ success: true, data: roles });
+  if (url.endsWith('/roles')) return response({ success: true, data: roleOptions });
   if (actionError && method !== 'GET') return response({ success: false, message: actionError.message }, actionError.status);
   if (url.endsWith(`/users/${user.id}/status`)) return response({ success: true, data: { id: user.id, status: JSON.parse(options.body).status } });
-  if (url.endsWith(`/users/${user.id}/role`)) return response({ success: true, data: { ...user, role: roles.find((role) => role.id === JSON.parse(options.body).role_id) } });
+  if (url.endsWith(`/users/${user.id}/role`)) return response({ success: true, data: { ...user, role: roleOptions.find((role) => role.id === JSON.parse(options.body).role_id) } });
   if (url.endsWith(`/users/${user.id}`) && method === 'DELETE') return response({ success: true, data: { message: 'deleted' } });
   throw new Error(`Unexpected ${method} ${url}`);
 });
@@ -53,6 +53,28 @@ describe('admin user detail', () => {
     await user.click(screen.getByRole('button', { name: 'Xóa người dùng' }));
     await user.click(screen.getByRole('button', { name: 'Xác nhận xóa' }));
     expect(await screen.findByRole('heading', { name: 'Quản lý người dùng' })).toBeInTheDocument();
+  });
+
+  it('offers only supported RBAC roles and does not submit unchanged assignments', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch({ roleOptions: [...roles, { id: 7, name: 'support' }] });
+    renderDetail(fetchImpl);
+    await screen.findByText('user@example.com');
+
+    expect(screen.queryByRole('option', { name: 'support' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cập nhật vai trò' })).toBeDisabled();
+    await user.selectOptions(screen.getByLabelText('Vai trò'), '2');
+    expect(screen.getByRole('button', { name: 'Cập nhật vai trò' })).toBeEnabled();
+  });
+
+  it('requires selecting a supported role when editing an existing custom role', async () => {
+    renderDetail(createFetch({
+      user: { ...target, role: { id: 7, name: 'support' } },
+      roleOptions: [...roles, { id: 7, name: 'support' }],
+    }));
+    await screen.findByText('user@example.com');
+    expect(screen.getByLabelText('Vai trò')).toHaveValue('');
+    expect(screen.getByRole('button', { name: 'Cập nhật vai trò' })).toBeDisabled();
   });
 
   it('keeps old data after an API conflict and explains the error in Vietnamese', async () => {
