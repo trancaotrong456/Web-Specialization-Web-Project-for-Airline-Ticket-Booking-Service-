@@ -2501,3 +2501,8 @@ body:has(.app-admin-sidebar) .booking-admin-main .button-secondary { color: #392
   .results-pagination button { padding-inline: .5rem; font-size: .75rem; }
   .booking-main { width: min(100% - 1.25rem, 82rem); }
 }
+
+/* Destination suggestions are native buttons so they work with keyboard and screen readers. */
+.destination-card { width: 100%; border: 0; font: inherit; text-align: left; cursor: pointer; }
+.destination-card:focus-visible { outline: 3px solid #ffbd66; outline-offset: 3px; }
+.destination-card:active { transform: translateY(1px); }
