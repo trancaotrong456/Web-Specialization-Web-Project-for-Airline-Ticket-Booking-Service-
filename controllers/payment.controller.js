@@ -1,12 +1,32 @@
 const paymentService = require('../services/payment.service');
 const ApiResponse = require('../utils/apiResponse');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
 
 class PaymentController {
+  async getAllPayments(req, res, next) {
+    try {
+      const result = await paymentService.getAllPayments(req.query);
+      return ApiResponse.paginated(res, result, 'Payments retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getPaymentById(req, res, next) {
+    try {
+      const payment = await paymentService.getPaymentById(req.params.id);
+      return ApiResponse.success(res, payment, 'Payment retrieved successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
   async initiatePayment(req, res, next) {
     try {
       const clientIp = req.headers['x-forwarded-for'] || req.socket.remoteAddress || '127.0.0.1';
       const result = await paymentService.initiatePayment({
         ...req.body,
+        guest_email: normalizeGuestEmail(req.body.guest_email),
         ip_addr: clientIp,
         currentUser: req.user || null,
       });
@@ -69,6 +89,20 @@ class PaymentController {
     }
   }
 
+  // Revenue Statistics (Admin)
+  async getRevenue(req, res, next) {
+    try {
+      const result = await paymentService.getRevenue(req.query);
+
+      return ApiResponse.success(
+        res,
+        result,
+        'Revenue statistics retrieved successfully'
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
   // Refund Endpoint (Admin / Staff)
   async refund(req, res, next) {
     try {

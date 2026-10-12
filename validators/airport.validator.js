@@ -2,6 +2,19 @@
 
 const { body, param, query } = require('express-validator');
 
+const FORBIDDEN_FIELDS = ['id', 'created_at', 'updated_at', 'createdAt', 'updatedAt'];
+
+const checkForbiddenFields = (locationDesc = 'airport payload') => body().custom((_value, { req }) => {
+  if (req.body && typeof req.body === 'object') {
+    for (const field of FORBIDDEN_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+        throw new Error(`Field '${field}' is not allowed in ${locationDesc}`);
+      }
+    }
+  }
+  return true;
+});
+
 // ─── Validator ID ──────────────────────────────────────────────────────────────
 const airportIdValidator = [
   param('id')
@@ -26,7 +39,7 @@ const listAirportValidator = [
     .withMessage('search keyword must not exceed 100 characters'),
 ];
 
-// ─── Validator IATA code (dùng lại) ────────────────────────────────────────────
+// ─── Validator IATA code ───────────────────────────────────────────────────────
 const iataCodeField = (required = true) => {
   const v = body('iata_code')
     .trim()
@@ -38,22 +51,20 @@ const iataCodeField = (required = true) => {
 
 // ─── Validator tạo mới ─────────────────────────────────────────────────────────
 const createAirportValidator = [
+  checkForbiddenFields('creation payload'),
   iataCodeField(true),
-
   body('name')
     .trim()
     .notEmpty()
     .withMessage('Airport name is required')
     .isLength({ min: 3, max: 200 })
     .withMessage('Airport name must be between 3 and 200 characters'),
-
   body('city')
     .trim()
     .notEmpty()
     .withMessage('City is required')
     .isLength({ min: 2, max: 100 })
     .withMessage('City must be between 2 and 100 characters'),
-
   body('country')
     .optional({ nullable: true })
     .trim()
@@ -64,10 +75,9 @@ const createAirportValidator = [
 // ─── Validator cập nhật ────────────────────────────────────────────────────────
 const updateAirportValidator = [
   ...airportIdValidator,
-
-  // Phải cung cấp ít nhất 1 trường
+  checkForbiddenFields('update payload'),
   body().custom((_value, { req }) => {
-    const { iata_code, name, city, country } = req.body;
+    const { iata_code, name, city, country } = req.body || {};
     if (
       iata_code === undefined &&
       name === undefined &&
@@ -80,26 +90,22 @@ const updateAirportValidator = [
     }
     return true;
   }),
-
   body('iata_code')
     .optional()
     .trim()
     .toUpperCase()
     .matches(/^[A-Z]{3}$/)
     .withMessage('IATA code must be exactly 3 uppercase letters (e.g. SGN, HAN, DAD)'),
-
   body('name')
     .optional()
     .trim()
     .isLength({ min: 3, max: 200 })
     .withMessage('Airport name must be between 3 and 200 characters'),
-
   body('city')
     .optional()
     .trim()
     .isLength({ min: 2, max: 100 })
     .withMessage('City must be between 2 and 100 characters'),
-
   body('country')
     .optional({ nullable: true })
     .trim()

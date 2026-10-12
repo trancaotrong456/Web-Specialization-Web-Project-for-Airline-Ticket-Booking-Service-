@@ -30,9 +30,27 @@ const searchFlightValidator = [
 const createFlightValidator = [
   body('airline_id').notEmpty().isInt({ min: 1 }).withMessage('airline_id is required'),
   body('departure_airport_id').notEmpty().isInt({ min: 1 }).withMessage('departure_airport_id is required'),
-  body('arrival_airport_id').notEmpty().isInt({ min: 1 }).withMessage('arrival_airport_id is required'),
+  body('arrival_airport_id')
+    .notEmpty()
+    .isInt({ min: 1 })
+    .withMessage('arrival_airport_id is required')
+    .custom((val, { req }) => {
+      if (req.body.departure_airport_id && Number(val) === Number(req.body.departure_airport_id)) {
+        throw new Error('arrival_airport_id must be different from departure_airport_id');
+      }
+      return true;
+    }),
   body('departure_time').notEmpty().isISO8601().withMessage('departure_time must be a valid ISO8601 datetime'),
-  body('arrival_time').notEmpty().isISO8601().withMessage('arrival_time must be a valid ISO8601 datetime'),
+  body('arrival_time')
+    .notEmpty()
+    .isISO8601()
+    .withMessage('arrival_time must be a valid ISO8601 datetime')
+    .custom((val, { req }) => {
+      if (req.body.departure_time && new Date(val) <= new Date(req.body.departure_time)) {
+        throw new Error('arrival_time must be after departure_time');
+      }
+      return true;
+    }),
   body('total_seats').notEmpty().isInt({ min: 1 }).withMessage('total_seats must be a positive integer'),
   body('status')
     .optional()
