@@ -1,8 +1,16 @@
 const { body } = require('express-validator');
 
+const validateBcryptPasswordLength = (value) => {
+  if (Buffer.byteLength(value, 'utf8') > 72) {
+    throw new Error('Password must not exceed 72 bytes');
+  }
+  return true;
+};
+
 const registerValidator = [
   body('email')
     .trim()
+    .normalizeEmail()
     .notEmpty()
     .withMessage('Email is required')
     .isEmail()
@@ -11,7 +19,8 @@ const registerValidator = [
     .notEmpty()
     .withMessage('Password is required')
     .isLength({ min: 6 })
-    .withMessage('Password must be at least 6 characters long'),
+    .withMessage('Password must be at least 6 characters long')
+    .custom(validateBcryptPasswordLength),
   body('full_name')
     .trim()
     .notEmpty()
@@ -28,6 +37,7 @@ const registerValidator = [
 const loginValidator = [
   body('email')
     .trim()
+    .normalizeEmail()
     .notEmpty()
     .withMessage('Email is required')
     .isEmail()
@@ -35,7 +45,22 @@ const loginValidator = [
   body('password').notEmpty().withMessage('Password is required'),
 ];
 
+const refreshTokenValidator = [
+  body('refreshToken')
+    .isString()
+    .withMessage('Refresh token must be a string')
+    .trim()
+    .notEmpty()
+    .withMessage('Refresh token is required'),
+];
+
 const updateProfileValidator = [
+  body().custom((_value, { req }) => {
+    if (req.body.full_name === undefined && req.body.phone === undefined) {
+      throw new Error('At least one of full_name or phone is required');
+    }
+    return true;
+  }),
   body('full_name')
     .optional()
     .trim()
@@ -54,7 +79,33 @@ const changePasswordValidator = [
     .notEmpty()
     .withMessage('New password is required')
     .isLength({ min: 6 })
-    .withMessage('New password must be at least 6 characters long'),
+    .withMessage('New password must be at least 6 characters long')
+    .custom(validateBcryptPasswordLength),
+];
+
+const forgotPasswordValidator = [
+  body('email')
+    .trim()
+    .normalizeEmail()
+    .notEmpty()
+    .withMessage('Email is required')
+    .isEmail()
+    .withMessage('Must be a valid email address'),
+];
+
+const resetPasswordValidator = [
+  body('token')
+    .trim()
+    .isLength({ min: 64, max: 64 })
+    .withMessage('Reset token is invalid')
+    .isHexadecimal()
+    .withMessage('Reset token is invalid'),
+  body('new_password')
+    .notEmpty()
+    .withMessage('New password is required')
+    .isLength({ min: 6 })
+    .withMessage('New password must be at least 6 characters long')
+    .custom(validateBcryptPasswordLength),
 ];
 
 module.exports = {
@@ -62,4 +113,7 @@ module.exports = {
   loginValidator,
   updateProfileValidator,
   changePasswordValidator,
+  refreshTokenValidator,
+  forgotPasswordValidator,
+  resetPasswordValidator,
 };
