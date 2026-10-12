@@ -3,11 +3,34 @@ import { useEffect, useRef, useState } from 'react';
 
 let socketInstance = null;
 
+/**
+ * Returns the shared Socket.IO client singleton.
+ *
+ * URL resolution (in priority order):
+ *  1. customUrl argument (for tests / special cases)
+ *  2. VITE_SOCKET_URL  — explicit socket server override
+ *  3. Derived from VITE_API_BASE_URL origin (handles cross-domain production
+ *     where frontend is on Vercel/Netlify and backend is on Render/Railway)
+ *  4. window.location.origin — same-origin dev fallback
+ */
 export function getSocket(customUrl) {
   if (!socketInstance) {
-    const socketUrl = customUrl
-      || import.meta.env.VITE_SOCKET_URL
-      || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
+    let socketUrl;
+    if (customUrl) {
+      socketUrl = customUrl;
+    } else if (import.meta.env.VITE_SOCKET_URL) {
+      socketUrl = import.meta.env.VITE_SOCKET_URL;
+    } else if (import.meta.env.VITE_API_BASE_URL) {
+      // Strip the /api/v1 path to get the origin of the backend server
+      try {
+        const apiUrl = new URL(import.meta.env.VITE_API_BASE_URL, window.location.origin);
+        socketUrl = apiUrl.origin;
+      } catch {
+        socketUrl = window.location.origin;
+      }
+    } else {
+      socketUrl = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000';
+    }
 
     socketInstance = io(socketUrl, {
       autoConnect: false,
