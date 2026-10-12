@@ -43,6 +43,27 @@ test('airport list uses the documented fields, search filtering, and pagination'
   }
 });
 
+test('airport list clamps pagination bounds and applies defaults', async () => {
+  const originalFindAndCountAll = Airport.findAndCountAll;
+  let receivedOptions;
+  Airport.findAndCountAll = async (options) => {
+    receivedOptions = options;
+    return { count: 0, rows: [] };
+  };
+
+  try {
+    const result = await airportService.getAll({ page: -5, limit: 500, search: '   ' });
+    assert.equal(result.page, 1);
+    assert.equal(result.limit, 100);
+    assert.equal(receivedOptions.limit, 100);
+    assert.equal(receivedOptions.offset, 0);
+    assert.deepEqual(receivedOptions.where, {});
+  } finally {
+    Airport.findAndCountAll = originalFindAndCountAll;
+  }
+});
+
+
 test('airport detail returns documented attributes', async () => {
   const originalFindByPk = Airport.findByPk;
   let receivedId;
