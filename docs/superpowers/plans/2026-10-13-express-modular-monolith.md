@@ -91,9 +91,8 @@
 
 **Files to modify:**
 
-- `application/buildContainer.js`, `application/registerModules.js` — add Airline dependency construction and one router mount.
-- `app.js` — provide constructed router collection to existing `/api/v1` tree while preserving mount structure.
-- Existing auth/validation middleware only if a thin factory seam is needed; keep old exports intact.
+- None in the active production route graph. The existing auth/validation middleware stays untouched and is injected by identity.
+- Stage 2's module factory is an isolated DI seam only; it is not mounted. `application/buildContainer.js`, `application/registerModules.js`, `routes/index.js`, and `app.js` are wired to the AirlineModule atomically in Stage 3, when legacy forwarding adapters and identity tests are ready.
 
 **Implementation sequence (test-first):**
 
