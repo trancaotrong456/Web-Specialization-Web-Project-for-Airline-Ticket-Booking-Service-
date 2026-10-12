@@ -87,6 +87,72 @@ test('#21 – createFlightValidator rejects arrival before departure', async () 
   assert.ok(result.array().some((err) => err.msg.includes('arrival_time must be after departure_time')));
 });
 
+test('#21 – createFlight rejects client-supplied available_seats and system fields', async () => {
+  const flightService = require('../services/flight.service');
+
+  await assert.rejects(
+    async () => {
+      await flightService.createFlight({
+        airline_id: 1,
+        departure_airport_id: 1,
+        arrival_airport_id: 2,
+        departure_time: '2026-10-10T10:00:00Z',
+        arrival_time: '2026-10-10T12:00:00Z',
+        total_seats: 100,
+        available_seats: 50,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('available_seats'));
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    async () => {
+      await flightService.createFlight({
+        id: 999,
+        airline_id: 1,
+        departure_airport_id: 1,
+        arrival_airport_id: 2,
+        departure_time: '2026-10-10T10:00:00Z',
+        arrival_time: '2026-10-10T12:00:00Z',
+        total_seats: 100,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('trường hệ thống'));
+      return true;
+    }
+  );
+});
+
+test('#21 – createFlightValidator rejects available_seats and system fields', async () => {
+  const { validationResult } = require('express-validator');
+  const { createFlightValidator } = require('../validators/flight.validator');
+
+  const req = {
+    body: {
+      airline_id: 1,
+      departure_airport_id: 1,
+      arrival_airport_id: 2,
+      departure_time: '2026-10-10T10:00:00Z',
+      arrival_time: '2026-10-10T12:00:00Z',
+      total_seats: 100,
+      available_seats: 80,
+    },
+  };
+
+  for (const middleware of createFlightValidator) {
+    await middleware(req, {}, () => {});
+  }
+  const result = validationResult(req);
+  assert.ok(!result.isEmpty(), 'Validation must fail when available_seats is supplied');
+});
+
+
 // Test edit flight business rules
 test('#21 – updateFlight rejects direct mutation of available_seats (400)', async () => {
   const flightService = require('../services/flight.service');

@@ -103,6 +103,27 @@ class FlightService {
    * Create a new flight (Admin)
    */
   async createFlight(data) {
+    if (!data || typeof data !== 'object') {
+      const error = new Error('Dữ liệu chuyến bay không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (Object.prototype.hasOwnProperty.call(data, 'available_seats')) {
+      const error = new Error('available_seats do hệ thống quản lý, không thể thiết lập trực tiếp');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const systemFields = ['id', 'created_at', 'updated_at', 'createdAt', 'updatedAt'];
+    for (const field of systemFields) {
+      if (Object.prototype.hasOwnProperty.call(data, field)) {
+        const error = new Error(`Không được phép truyền trường hệ thống: ${field}`);
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+
     if (data.departure_airport_id && data.arrival_airport_id && Number(data.departure_airport_id) === Number(data.arrival_airport_id)) {
       const error = new Error('Sân bay đi và sân bay đến không được trùng nhau');
       error.statusCode = 400;
@@ -143,7 +164,13 @@ class FlightService {
     }
 
     const flight = await Flight.create({
-      ...data,
+      airline_id: data.airline_id,
+      departure_airport_id: data.departure_airport_id,
+      arrival_airport_id: data.arrival_airport_id,
+      departure_time: data.departure_time,
+      arrival_time: data.arrival_time,
+      total_seats: data.total_seats,
+      status: data.status || 'scheduled',
       available_seats: data.total_seats,
     });
 

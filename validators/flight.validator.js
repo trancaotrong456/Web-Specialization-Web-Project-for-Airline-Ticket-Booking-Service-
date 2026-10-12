@@ -28,6 +28,20 @@ const searchFlightValidator = [
 ];
 
 const createFlightValidator = [
+  body().custom((value, { req }) => {
+    if (req.body && typeof req.body === 'object') {
+      if (Object.prototype.hasOwnProperty.call(req.body, 'available_seats')) {
+        throw new Error('available_seats do hệ thống quản lý, không được gửi từ client');
+      }
+      const systemFields = ['id', 'created_at', 'updated_at', 'createdAt', 'updatedAt'];
+      for (const field of systemFields) {
+        if (Object.prototype.hasOwnProperty.call(req.body, field)) {
+          throw new Error(`Không được phép truyền trường hệ thống: ${field}`);
+        }
+      }
+    }
+    return true;
+  }),
   body('airline_id').notEmpty().isInt({ min: 1 }).withMessage('airline_id is required'),
   body('departure_airport_id').notEmpty().isInt({ min: 1 }).withMessage('departure_airport_id is required'),
   body('arrival_airport_id')
