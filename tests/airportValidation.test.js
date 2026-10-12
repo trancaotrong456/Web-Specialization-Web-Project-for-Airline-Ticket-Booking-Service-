@@ -119,3 +119,26 @@ test('airport validation rejects invalid query parameters for listing', async ()
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
 });
+
+test('airport validation rejects invalid ID param on detail endpoint', async () => {
+  const app = express();
+  app.get('/airports/:id', airportIdValidator, validate, (_req, res) => res.json({ reached: true }));
+
+  const server = await new Promise((resolve) => {
+    const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+
+  try {
+    const resBadIdStr = await fetch(`http://127.0.0.1:${server.address().port}/airports/abc`);
+    assert.equal(resBadIdStr.status, 422);
+
+    const resBadIdZero = await fetch(`http://127.0.0.1:${server.address().port}/airports/0`);
+    assert.equal(resBadIdZero.status, 422);
+
+    const resValidId = await fetch(`http://127.0.0.1:${server.address().port}/airports/12`);
+    assert.equal(resValidId.status, 200);
+  } finally {
+    await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+  }
+});
+
