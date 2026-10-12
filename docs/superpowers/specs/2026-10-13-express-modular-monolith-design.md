@@ -1,6 +1,6 @@
 # Serene Flightways Express Modular Monolith — Design Specification
 
-**Status:** Draft for owner review
+**Status:** Conditionally approved; implementation plan pending owner review
 **Source baseline:** `origin/develop` at `eaed4634ab9dd577b83d551bff31f7fa9dd94e71` (fetched successfully from configured `origin`)
 **Dedicated branch:** `codex/express-modular-refactor`
 **Scope:** Backend architecture refactor; Airline is the proof-of-concept module.
@@ -55,19 +55,22 @@ infrastructure/
 config/, models/, migrations/, seeders/, templates/, utils/ remain root-level
 ```
 
-Only `modules/airline` and the minimum shared composition code are introduced in the proof of concept. Other existing feature folders remain in place until their individual migration is approved and verified. Temporary compatibility exports may keep old imports working during a transition; duplicate implementations must not remain after each feature is completed.
+Only `modules/airline` and the minimum shared composition code are introduced in the proof of concept. Other existing feature folders remain in place until their individual migration is approved and verified. The existing paths `services/airline.service.js` and `routes/airline.route.js` are compatibility entry points during and after the Airline transition while any runtime code or tests import them. They must forward to the canonical AirlineModule implementation; they must never contain a second service, controller, or route implementation. The composition root mounts the Airline router exactly once.
 
 ## 4. Dependency injection and composition root
 
-Use explicit CommonJS factories/constructor injection, with no global service locator and no new runtime dependency. A single composition root receives concrete infrastructure (`models`, `sequelize`, logger, socket publisher, email provider as applicable), constructs repositories, services, controllers, guards, and module routers, then mounts the routers.
+Use explicit CommonJS factories/constructor injection, with no cross-module/global service locator and no new runtime dependency. A single composition root receives concrete infrastructure (`models`, `sequelize`, logger, socket publisher, email provider as applicable), constructs repositories, services, controllers, guards, and module routers, then mounts the routers. A module-local, lazy, memoized default AirlineModule may be used solely to preserve the two legacy CommonJS import paths; it is not a general-purpose locator. The composition root and both adapters must resolve to that same default module instance. Tests may call the factory with isolated fake dependencies and must not initialize the default module unless testing compatibility.
 
 For the Airline proof of concept, construction is explicit and inspectable:
 
 ```js
-const airlineRepository = new SequelizeAirlineRepository({ Airline, Flight, Op });
-const airlineService = new AirlineService({ repository: airlineRepository });
-const airlineController = new AirlineController({ service: airlineService, apiResponse: ApiResponse });
-const airlineModule = createAirlineModule({ controller: airlineController, guards, validation });
+const airlineModule = createAirlineModule({
+  repository: new SequelizeAirlineRepository({ Airline, Flight, Op }),
+  guards,
+  validation,
+  apiResponse: ApiResponse,
+});
+// airlineModule exposes one router and its canonical service/controller for tests/adapters.
 ```
 
 Factories accept test doubles, so unit tests can exercise service/controller behavior without connecting to MySQL. Modules publish routers/dependencies rather than reaching into an arbitrary global container. Shared providers are passed explicitly at module construction.
@@ -92,7 +95,23 @@ Repositories encapsulate Sequelize model/query access and accept explicit query 
 
 No query, include/association, ordering, pagination, lock mode, isolation level, or transaction boundary may change during extraction. Booking/Payment transaction and row-lock logic remains in its services until those features are migrated and characterized; when their repositories are eventually added, transaction propagation is mandatory and tested with the same use case boundary.
 
-For the Airline repository, document the methods actually needed by current `AirlineService` (list/search/pagination, get-by-id, create, update, delete and flight-reference checks). Preserve exact Sequelize options and results observed in the current implementation; do not redesign data access while moving it.
+### Airline Repository/Service contract (verified against the current source)
+
+`AirlineService` currently normalizes list pagination (`page`: integer fallback 1, minimum 1; `limit`: integer fallback 20, clamped 1–100), trims optional search, and returns `{ total, page, limit, data }`. It delegates directly to Sequelize today. The repository extraction must preserve these semantics and exact query contract:
+
+- `findPage({ page, limit, search })` returns Sequelize-compatible `{ count, rows }`. The Sequelize implementation computes `offset = (page - 1) * limit`; when search is nonempty it applies `Op.or` over `name LIKE %search%` and `iata_code LIKE %search%`; it orders by `name ASC`; and it selects exactly `id`, `name`, `iata_code`, `logo_url`, `created_at`, `updated_at`. Do not add sorting/filter parameters or change wildcard behavior.
+- `findById(id)` queries by primary key with the same six selected fields and returns the model instance or `null`.
+- `findByIataCode(code, { excludeId })` performs the duplicate lookup using the current `where: { iata_code }` shape, with `id: { [Op.ne]: excludeId }` added only for update; do not add a projection or other query options.
+- `create(values)` persists the normalized values and returns the created model instance.
+- `update(instance, values)` updates the existing model instance and returns it, preserving Sequelize instance behavior.
+- `countFlightsByAirlineId(id)` returns the `Flight.count` for `{ airline_id: id }`.
+- `delete(instance)` destroys that instance and returns no new business result; the service retains the existing `{ id: Number(id), message: 'Airline deleted' }` response value.
+
+The service remains responsible for use-case rules and compatibility: missing airline becomes 404 `Airline not found`; create/update trim `name`, trim and uppercase `iata_code`, and map a falsy `logo_url` to `null` (a truthy value is trimmed). On HTTP routes the existing validator trims whitespace before the service, so whitespace-only logo input becomes falsy/null; do not introduce new direct-service semantics. Duplicate IATA pre-check and Sequelize unique-constraint races both become 409 `Airline with this IATA code already exists`; update only changes supplied (`!== undefined`) fields and excludes the current row from uniqueness lookup; delete first resolves the airline, counts flights, and returns 409 `Cannot delete airline with existing flights` when count is greater than zero. Preserve existing return values and error properties/status mapping. Do not add or remove validators or business rules.
+
+The existing validator contract remains authoritative: name is trimmed/nonempty and 2–150 chars; IATA is trimmed/uppercased and matches `^[A-Z0-9]{2,3}$`; optional nullable logo is trimmed, at most 500 chars, and must be an HTTP(S) URL or root-relative path; page is >=1, limit is 1–100, search is trimmed and at most 100 chars; ID is a positive integer. Service normalization is not a replacement for route validation.
+
+No transaction is introduced for Airline deletion: preserve current lookup → flight count → destroy order in this structural refactor. Any future race-hardening or behavior change requires a separate approval and characterization.
 
 ## 7. AirlineModule proof of concept
 
@@ -102,10 +121,17 @@ Migrate Airline completely as the first vertical slice:
 - Keep public read access and Admin-only writes.
 - Preserve current validators, middleware order, response helpers, pagination, errors, and association behavior.
 - Move query construction into `AirlineRepository`; keep business rules in `AirlineService`; keep HTTP extraction/response in `AirlineController`.
-- Build the module through injected dependencies in the composition root and mount its router at the same prefix.
-- Keep an old-path adapter only if required by existing imports/tests; remove it within the Airline slice once all consumers use the module API.
+- Build the module through injected dependencies in the composition root and mount its router exactly once at the same prefix. Do not mount both the old router and new router.
+- Keep `services/airline.service.js` and `routes/airline.route.js` as thin forwarders to the one canonical default AirlineModule while any runtime consumer or test imports either path. The service adapter must expose the same service object; the route adapter must export the same Router object. No second business implementation is allowed.
+- An adapter may be removed only after a repository-wide runtime-and-test import search reports zero consumers, all supported imports have been migrated, compatibility tests are intentionally retired or replaced, and the owner approves removal. Until then, retaining a tiny adapter is safer than deleting it merely to achieve a clean directory layout.
 
-Acceptance requires existing Airline tests unchanged and passing; added tests prove factory injection with fakes, route methods and access policy, validation/error contract compatibility, and representative list/detail/create/update/delete service behavior. No test may write the existing demo or production database.
+Acceptance requires existing Airline tests unchanged and passing; added tests prove: old-path import compatibility and object identity; DI with a mocked repository; controller/service isolation; exactly one mount/registration for each endpoint; HTTP response, status, RBAC, validation, and error parity; and representative list/detail/create/update/delete service behavior. Add a startup side-effect regression proving that importing `app.js` for tests does not authenticate/connect to MySQL, start cron, create an HTTP listener, or initialize Socket.IO. No test may write the existing demo or production database.
+
+### Module registration and lifecycle constraints
+
+The only public prefix remains `/api/v1/airlines`, nested under the existing `/api/v1` mount. Preserve the existing middleware stack and order, including global middleware, API router, 404 handler, and final error handler. The central registry owns one registration per feature. For Airline, it must register either the canonical default module router or its legacy forwarding export, never both. Assert route stack/mount counts in tests to catch duplication.
+
+`app.js` remains safe to import and is an app/configuration factory (or a backwards-compatible app export backed by that factory); it must not connect to the database, start cron, create/listen on an HTTP server, or initialize Socket.IO as an import side effect. `server.js` remains the process entry point and owns runtime startup/shutdown. Preserve Socket.IO initialization, cron timing/configuration, Docker startup expectations, and all existing listener behavior. Do not solve testability by moving lifecycle side effects into a new global bootstrap that runs on `require()`.
 
 ## 8. Remaining modules and migration order
 
@@ -167,4 +193,4 @@ Before implementation, re-check current origin/develop and worktree status. Keep
 
 ## 12. Review gate
 
-This document specifies the architecture and staged acceptance criteria only. It does not authorize bulk refactoring. The owner must review this written specification before a detailed implementation task plan is prepared and before AirlineModule source changes begin.
+This document specifies architecture and staged acceptance criteria only; it does not authorize bulk refactoring. The owner conditionally approved this architecture on 2026-10-13 subject to the compatibility, Airline contract, registration/lifecycle, testing, and Git-delivery constraints above. A detailed implementation plan is maintained separately at `docs/superpowers/plans/2026-10-13-express-modular-monolith.md`. The owner must review that plan before AirlineModule source changes begin.
