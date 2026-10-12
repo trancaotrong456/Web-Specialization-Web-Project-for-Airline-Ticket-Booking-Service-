@@ -1,6 +1,9 @@
 const { Op } = require('sequelize');
 const { User, Role } = require('../models');
-const bcrypt = require('bcryptjs');
+
+// RBAC middleware recognizes these three names. Custom role records have no
+// permission configuration and must not be assignable until that is supported.
+const ASSIGNABLE_ROLE_NAMES = new Set(['customer', 'staff', 'admin']);
 
 class UserService {
   async getAllUsers({ page = 1, limit = 20, search, status }) {
@@ -19,7 +22,7 @@ class UserService {
       limit: Number(limit),
       offset: Number(offset),
       order: [['created_at', 'DESC']],
-      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token'] },
+      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token', 'reset_token_expires_at'] },
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
@@ -28,7 +31,7 @@ class UserService {
 
   async getUserById(id) {
     const user = await User.findByPk(id, {
-      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token'] },
+      attributes: { exclude: ['password_hash', 'refresh_token', 'reset_token', 'reset_token_expires_at'] },
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
     });
     if (!user) {
@@ -39,7 +42,13 @@ class UserService {
     return user;
   }
 
-  async updateUserStatus(id, status) {
+  async updateUserStatus(id, status, actorUserId) {
+    if (String(id) === String(actorUserId) && status === 'locked') {
+      const error = new Error('Administrators cannot lock their own account');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const user = await User.findByPk(id);
     if (!user) {
       const error = new Error('User not found');
@@ -47,15 +56,27 @@ class UserService {
       throw error;
     }
     user.status = status;
+    if (status === 'locked') user.refresh_token = null;
     await user.save();
     return { id: user.id, status: user.status };
   }
 
-  async updateUserRole(id, role_id) {
+  async updateUserRole(id, role_id, actorUserId) {
+    if (String(id) === String(actorUserId)) {
+      const error = new Error('Administrators cannot change their own role');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const role = await Role.findByPk(role_id);
     if (!role) {
       const error = new Error('Role not found');
       error.statusCode = 404;
+      throw error;
+    }
+    if (!ASSIGNABLE_ROLE_NAMES.has(role.name)) {
+      const error = new Error('Only system roles (customer, staff, admin) can be assigned to users');
+      error.statusCode = 400;
       throw error;
     }
     const user = await User.findByPk(id);
@@ -65,11 +86,18 @@ class UserService {
       throw error;
     }
     user.role_id = role_id;
+    user.refresh_token = null;
     await user.save();
     return this.getUserById(id);
   }
 
-  async deleteUser(id) {
+  async deleteUser(id, actorUserId) {
+    if (String(id) === String(actorUserId)) {
+      const error = new Error('Administrators cannot delete their own account');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const user = await User.findByPk(id);
     if (!user) {
       const error = new Error('User not found');
