@@ -228,7 +228,7 @@ async function runDemoUp({
   commandRunner('docker', composeArgs('stop', '-t', '3', 'bootstrap'), { cwd: root, env });
   const stoppedBootstrap = dockerInspection(bootstrapId, root, commandRunner);
   if (stoppedBootstrap?.State?.Status !== 'exited' || Number(stoppedBootstrap?.State?.ExitCode) !== 0) throw new Error('Bootstrap agent did not exit successfully; API will not be started.');
-  commandRunner('docker', composeArgs('up', '-d', 'api'), { cwd: root, env });
+  commandRunner('docker', composeArgs('up', '-d', '--no-deps', 'api'), { cwd: root, env });
 
   const apiResult = await pollComposeService({
     root, service: 'api', commandRunner, attempts: maxHealthAttempts, interval: healthIntervalMs, sleep,

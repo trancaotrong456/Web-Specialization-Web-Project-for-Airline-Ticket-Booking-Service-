@@ -157,6 +157,10 @@ test('first run applies only missing demo rows and rerun is idempotent; API star
       return '';
     }
     if (args.includes('up') && args.includes('api')) {
+      if (!args.includes('--no-deps')) {
+        running.bootstrap = true;
+        throw new Error('Compose restarted the stopped bootstrap dependency');
+      }
       if (running.bootstrap) throw new Error('API attempted to start before bootstrap completed');
       running.api = true;
       return '';
@@ -188,7 +192,7 @@ test('first run applies only missing demo rows and rerun is idempotent; API star
   assert.ok(commands.findIndex((command) => command.includes('verify-demo-db.js')) < commands.findIndex((command) => command.includes('db:migrate')));
   assert.ok(commands.findIndex((command) => command.includes('db:migrate')) < commands.findIndex((command) => command.includes('scripts/seed-demo-local.js --start-date')));
   assert.ok(commands.findIndex((command) => command.includes('demo-bootstrap-state.js mark')) < commands.findIndex((command) => command.includes('stop -t 3 bootstrap')));
-  assert.ok(commands.findIndex((command) => command.includes('stop -t 3 bootstrap')) < commands.findIndex((command) => command.includes('up -d api')));
+  assert.ok(commands.findIndex((command) => command.includes('stop -t 3 bootstrap')) < commands.findIndex((command) => command.includes('up -d --no-deps api')));
   assert.equal(commands.filter((command) => command.includes('scripts/seed-demo-local.js --start-date') && command.includes('--apply')).length, 1);
   assert.equal(running.api, true);
 
