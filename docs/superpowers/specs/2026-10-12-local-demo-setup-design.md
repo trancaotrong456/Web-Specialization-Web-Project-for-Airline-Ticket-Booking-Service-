@@ -2,7 +2,7 @@
 
 ## Goal
 
-Provide a repeatable local onboarding path for the Serene Flightways demo using the existing Docker Compose stack and existing safe demo seeder. A contributor should be able to start the local services, review a read-only seed plan, explicitly confirm additive seed writes, and run the frontend without manually entering fixture rows or credentials.
+Provide a repeatable local onboarding path for the Serene Flightways demo using the existing Docker Compose stack and a committed, shared fixture seeder. A contributor should start local services, review a read-only seed plan, explicitly confirm additive seed writes, and run the frontend without manually entering rows or credentials.
 
 ## Scope and constraints
 
@@ -10,15 +10,17 @@ Provide a repeatable local onboarding path for the Serene Flightways demo using 
 - Keep Auth/User/Role behavior unchanged except for the existing demo fixture seeder. Do not modify Flight, Booking, Payment, GPS, database schema, or the submitted Word report.
 - Never run the 100,000-user seeder, `db:seed:all`, database reset, volume deletion, or destructive cleanup.
 - Demo data is additive and idempotent. Existing users and their passwords, existing schedules, promotion usage counts, bookings, and payments must remain unchanged.
-- Public demo passwords are intentionally test-only fixtures, must be bcrypt-hashed, and may only be used after Docker/Compose identity and database safety checks establish the dedicated local `airline_booking_docker` target.
+- These exact public test-only credentials are fixed shared fixtures: Admin `admin@airline-booking.local` / `DemoAdmin@2026!`; Staff `staff.demo@airline-booking.local` / `DemoStaff@2026!`; Customer `customer.demo@airline-booking.local` / `DemoCustomer@2026!`.
+- Demo passwords are bcrypt-hashed using the existing Auth mechanism. They are never updated for existing users and may only be seeded after Docker/Compose identity and database safety checks establish the dedicated local `airline_booking_docker` target. They must never be used on staging or production.
+- All shared demo rows are committed fixtures/seeders: roles, airlines, airports, flights, fare classes, promotions, and the three accounts. No member-specific password entry or random password generation is required.
 
 ## Recommended approach
 
-1. Add a small `scripts/demo-setup.js` orchestrator and `npm run demo:setup` entrypoint. It validates the local Docker socket and Compose configuration, starts only the project’s `api` and `db` services, waits for health/migrations, and invokes the existing seeder rather than duplicating seed logic.
-2. Run the seeder in dry-run mode first. Print the verified Compose project/database identity and existing/planned counts. Before any seed transaction, require an interactive confirmation phrase. Non-interactive runs stop safely and explain how to rerun interactively; no implicit `--yes` mode is added.
-3. Keep fixtures in a dedicated source module consumed by the existing demo seed core. Define the three documented local accounts there; hash passwords with the current bcrypt mechanism. Existing accounts are skipped without password or profile updates. Continue using current airline/airport prerequisites and route/fare/promotion plan, with no Booking/Payment creation. Derive a future schedule date on first safe plan; detect and preserve a complete existing schedule on reruns, and refuse partial/conflicting schedules.
-4. Replace the tracked machine-local `docker.env` with a tracked `docker.env.example`; add `docker.env` to `.gitignore`. The setup command may create a missing local copy from the example, but must never overwrite an existing local file. README instructions explain backing up a local file before pulling the removal commit and copying the example only when no local file exists.
-5. Add isolated unit tests for orchestration decisions, confirmation behavior, credentials/fixture safety, idempotency/conflict behavior, target rejection, and no Booking/Payment writes. Test with injected Docker/process/model adapters; do not touch the real demo database in unit tests.
+1. Add a small `scripts/demo-setup.js` orchestrator and `npm run demo:setup` entrypoint. Validate the local Docker socket and Compose configuration, start only the project’s `api` and `db` services, and wait for health/migrations before any seeding.
+2. Run the seed plan read-only first. Print the verified Compose project/database identity and existing/planned counts. Before any seed transaction, require an interactive confirmation phrase. Non-interactive runs stop safely; no implicit `--yes` mode is added.
+3. Keep all fixed shared fixture data in committed seeders/fixture code. Reuse the existing roles, airlines, and airports seeders only if they pass idempotency review; otherwise add a narrowly scoped safe bootstrap path rather than invoking all seeders. Seed fixed demo users with bcrypt, and skip existing users without password/profile/role mutation. Seed flights/fare classes/promotions via the existing guarded transaction, derive a future Vietnam date for a new schedule, preserve complete existing schedules, and refuse partial/conflicting schedules. Never create Booking/Payment rows.
+4. Replace the tracked `docker.env` with tracked `docker.env.example`; add local `docker.env` to `.gitignore`. The setup command may copy the example only when the local file is absent, never overwrite it. README must explain backing up an existing `docker.env` before pulling the removal commit, restoring it after pull, or creating it from the example when no local copy exists.
+5. Add isolated tests for orchestration decisions, confirmation behavior, fixed credentials and hashing, idempotency/conflict behavior, target rejection, and no Booking/Payment writes. Use injected Docker/process/model adapters; never touch the real demo DB from unit tests.
 
 ## Alternatives considered
 
@@ -29,17 +31,17 @@ Provide a repeatable local onboarding path for the Serene Flightways demo using 
 
 - Reject remote Docker contexts, wrong Compose project/service labels, non-development API config, non-local DB host, any database other than `airline_booking_docker`, or a non-writable/read-only/unhealthy database.
 - Do not stop unrelated processes when host ports are occupied; report the conflict.
-- Do not overwrite ignored local environment files or print password values.
+- Do not overwrite local environment files or print password values. The only committed passwords are the exact public test-only demo fixtures listed above; Docker/payment/API secrets are not added to source.
 - Reuse the current transaction-wrapped seeder and its structural conflict checks. Any conflict aborts the transaction and reports the reason without deleting or repairing existing data.
 - If Docker host access is unavailable, source/unit-test work can proceed, but no integration result may be reported as verified.
 
 ## Validation
 
-- Unit tests cover first run, rerun, partial state, collisions, wrong environment, password hashing/skip-existing semantics, and proof that Booking/Payment tables are not written.
+- Unit tests cover first run, rerun, partial state, collisions, wrong environment, exact fixture identities/roles, password hashing and skip-existing semantics, and proof that Booking/Payment tables are not written.
 - Run backend tests, demo-seeder safety tests, frontend tests/build, and `git diff --check`.
 - Where Docker access is approved, run Compose health checks and seeder dry-run first; apply only after the user’s explicit runtime confirmation, then verify counts and rerun dry-run.
-- Review the final diff for exact scope and public demo-only fixture credentials before any commit/push to `feature/auth`.
+- Review the final diff for exact scope and only the public demo-only fixture credentials before commit/push to the existing `feature/auth` branch.
 
 ## Known implementation gate
 
-Docker access from the current Codex sandbox was denied by the Windows named-pipe permission boundary. This design does not treat that as a Docker Engine failure. Host-backed integration must remain blocked until an approved local execution path is available.
+Docker access from the current Codex sandbox was denied by the Windows named-pipe permission boundary, and HTTPS access to GitHub was unavailable. This does not establish that Docker Engine or GitHub is unhealthy. Source changes and isolated tests can proceed; Docker integration and push must be reported blocked unless a permitted host/remote path becomes available.
