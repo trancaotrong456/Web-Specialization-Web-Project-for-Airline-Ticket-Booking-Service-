@@ -2,7 +2,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { assertSafeDockerTarget, runDemoSeed } = require('./demo-seed-core');
+const { assertSafeDockerTarget } = require('./demo-seed-core');
+const { runDemoSeed } = require('../seeders/demo/DatabaseSeeder');
 
 function parseSeedArgs(argv = []) {
   let apply = false;

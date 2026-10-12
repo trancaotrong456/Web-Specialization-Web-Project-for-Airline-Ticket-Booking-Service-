@@ -1,31 +1,11 @@
 'use strict';
 
-const bcrypt = require('bcryptjs');
-const DEMO_FIXTURES = require('../seeders/demo-fixtures');
-const { planDemoPrerequisites, ensureDemoPrerequisites } = require('./demo-seed-prerequisites');
+const DEMO_ACCOUNTS = require('../seeders/demo/UserSeeder').demoUsers;
+const { buildPromotions } = require('../seeders/demo/PromotionSeeder');
+const { planFlights, TOTAL_SEATS } = require('../seeders/demo/FlightSeeder');
+const { planForFlights } = require('../seeders/demo/FareClassSeeder');
 
 const TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
-const TOTAL_SEATS = 180;
-const DEMO_ACCOUNTS = DEMO_FIXTURES.demoAccounts;
-const ROUTES = [
-  { from: 'HAN', to: 'SGN', minutes: 130 }, { from: 'SGN', to: 'HAN', minutes: 130 },
-  { from: 'HAN', to: 'DAD', minutes: 85 }, { from: 'DAD', to: 'HAN', minutes: 85 },
-  { from: 'SGN', to: 'DAD', minutes: 85 }, { from: 'DAD', to: 'SGN', minutes: 85 },
-  { from: 'SGN', to: 'CXR', minutes: 65 }, { from: 'CXR', to: 'SGN', minutes: 65 },
-  { from: 'HAN', to: 'PQC', minutes: 125 }, { from: 'PQC', to: 'HAN', minutes: 125 },
-];
-const PROMOTION_SPECS = [
-  { code: 'WELCOME10', discount_type: 'percent', discount_value: 10 },
-  { code: 'HANSGN15', discount_type: 'percent', discount_value: 15 },
-  { code: 'TRIP20', discount_type: 'percent', discount_value: 20 },
-  { code: 'SKY25', discount_type: 'percent', discount_value: 25 },
-  { code: 'WEEKDAY30', discount_type: 'percent', discount_value: 30 },
-  { code: 'FLY50K', discount_type: 'amount', discount_value: 50000 },
-  { code: 'ROUTE100K', discount_type: 'amount', discount_value: 100000 },
-  { code: 'CABIN150K', discount_type: 'amount', discount_value: 150000 },
-  { code: 'TRAVEL200K', discount_type: 'amount', discount_value: 200000 },
-  { code: 'SKY250K', discount_type: 'amount', discount_value: 250000 },
-];
 
 const valueOf = (row, key) => (typeof row?.get === 'function' ? row.get(key) : row?.[key]);
 const codeDate = (value) => {
@@ -69,55 +49,9 @@ function assertSafeDockerTarget(env, runtime) {
 
 function buildDemoPlan({ airlines, airports, startDate, now = new Date() }) {
   const start = codeDate(startDate);
-  const fixtureAirlineCodes = new Set(DEMO_FIXTURES.airlines.map((airline) => airline.iata_code));
-  const sortedAirlines = airlines
-    .filter((airline) => fixtureAirlineCodes.has(valueOf(airline, 'iata_code')))
-    .sort((a, b) => String(valueOf(a, 'iata_code')).localeCompare(String(valueOf(b, 'iata_code'))));
-  if (!sortedAirlines.length) throw new Error('No shared demo airline records are available; seed prerequisites are missing.');
-  const airportByCode = new Map((airports || []).map((airport) => [valueOf(airport, 'iata_code'), airport]));
-  for (const route of ROUTES) {
-    if (!airportByCode.has(route.from) || !airportByCode.has(route.to)) {
-      throw new Error(`Required demo route airport data is missing: ${route.from} / ${route.to}.`);
-    }
-  }
-
-  const flights = [];
-  const fareClasses = [];
-  ROUTES.forEach((route, routeIndex) => {
-    const fromAirport = airportByCode.get(route.from);
-    const toAirport = airportByCode.get(route.to);
-    for (let dayIndex = 0; dayIndex < 5; dayIndex += 1) {
-      const slotIndex = routeIndex * 5 + dayIndex;
-      const date = plusDays(start, dayIndex);
-      const hour = String(6 + routeIndex).padStart(2, '0');
-      const departure = new Date(`${date}T${hour}:00:00+07:00`);
-      const arrival = new Date(departure.getTime() + route.minutes * 60_000);
-      const airline = sortedAirlines[slotIndex % sortedAirlines.length];
-      const slot = `demo-${route.from}-${route.to}-${date}-${hour}`;
-      const flight = {
-        slot,
-        airline_id: valueOf(airline, 'id'),
-        departure_airport_id: valueOf(fromAirport, 'id'),
-        arrival_airport_id: valueOf(toAirport, 'id'),
-        departure_time: departure,
-        arrival_time: arrival,
-        total_seats: TOTAL_SEATS,
-        available_seats: TOTAL_SEATS,
-        status: 'scheduled',
-      };
-      flights.push(flight);
-      fareClasses.push(
-        { slot, class_name: 'Economy', price: 1_250_000, seat_quota: 144 },
-        { slot, class_name: 'Business', price: 3_600_000, seat_quota: 36 },
-      );
-    }
-  });
-
-  const validFrom = new Date(now.getTime() - 60_000);
-  const validTo = new Date(now.getTime() + 90 * 86_400_000);
-  const promotions = PROMOTION_SPECS.map((promotion) => ({
-    ...promotion, valid_from: validFrom, valid_to: validTo, max_uses: 100, used_count: 0,
-  }));
+  const flights = planFlights({ airlines, airports: airports || [], startDate: start });
+  const fareClasses = planForFlights(flights);
+  const promotions = buildPromotions(now);
   return { startDate: start, flights, fareClasses, promotions, totalSeats: TOTAL_SEATS };
 }
 
@@ -161,12 +95,8 @@ async function loadSnapshot(models, transaction) {
     models.FareClass.findAll({ ...options, attributes: ['id', 'flight_id', 'class_name', 'price', 'seat_quota'] }),
   ]);
   const roles = {};
-  const existingUsers = {};
-  const existingPromotions = {};
   for (const name of ['admin', 'staff', 'customer']) roles[name] = await models.Role.findOne({ where: { name }, ...options });
-  for (const account of DEMO_ACCOUNTS) existingUsers[account.email] = await models.User.findOne({ where: { email: account.email }, ...options });
-  for (const promotion of PROMOTION_SPECS) existingPromotions[promotion.code] = await models.Promotion.findOne({ where: { code: promotion.code }, ...options });
-  return { airlines, airports, flights, fareClasses, roles, existingUsers, existingPromotions };
+  return { airlines, airports, flights, fareClasses, roles };
 }
 
 function makeExecutionPlan(snapshot, now, requestedStartDate) {
@@ -218,76 +148,15 @@ function makeExecutionPlan(snapshot, now, requestedStartDate) {
   };
 }
 
-async function runDemoSeed({ models, sequelize, startDate, apply = false, now = new Date() }) {
-  const analyze = async (transaction) => {
-    const prerequisitePlan = await planDemoPrerequisites({ models, transaction });
-    if (apply) await ensureDemoPrerequisites({ models, transaction });
-    const snapshot = await loadSnapshot(models, transaction);
-    if (!apply) {
-      const virtualRows = (kind) => prerequisitePlan[kind].missing.map((row, index) => ({
-        ...row,
-        id: `planned-${kind}-${index + 1}`,
-      }));
-      snapshot.roles = Object.fromEntries(['admin', 'staff', 'customer'].map((name) => [
-        name,
-        snapshot.roles[name] || virtualRows('roles').find((row) => row.name === name) || null,
-      ]));
-      snapshot.airlines = [...snapshot.airlines, ...virtualRows('airlines')];
-      snapshot.airports = [...snapshot.airports, ...virtualRows('airports')];
-    }
-    const execution = makeExecutionPlan(snapshot, now, startDate);
-    const seedRows = {
-      roles: prerequisitePlan.roles.missing.length,
-      airlines: prerequisitePlan.airlines.missing.length,
-      airports: prerequisitePlan.airports.missing.length,
-      users: execution.accountsToCreate.length,
-      flights: execution.flightsToCreate.length,
-      fareClasses: execution.fareClassesToCreate.length,
-      promotions: execution.promotionsToCreate.length,
-    };
-    const existing = {
-      roles: prerequisitePlan.roles.existing,
-      airlines: prerequisitePlan.airlines.existing,
-      airports: prerequisitePlan.airports.existing,
-      users: DEMO_ACCOUNTS.length - execution.accountsToCreate.length,
-      flights: execution.flightScheduleExists ? execution.plan.flights.length : 0,
-      fareClasses: execution.flightScheduleExists ? execution.plan.fareClasses.length : 0,
-      promotions: execution.plan.promotions.length - execution.promotionsToCreate.length,
-    };
-    if (!apply) return { mode: 'dry-run', scheduleStartDate: execution.plan.startDate, flightScheduleExists: execution.flightScheduleExists, existing, wouldCreate: { ...seedRows, users: execution.accountsToCreate.length, flights: execution.flightsToCreate.length, fareClasses: execution.fareClassesToCreate.length, promotions: execution.promotionsToCreate.length } };
-
-    for (const account of execution.accountsToCreate) {
-      const password_hash = await bcrypt.hash(account.password, 10);
-      await models.User.create({
-        role_id: valueOf(execution.roles[account.role], 'id'),
-        full_name: account.full_name,
-        email: account.email,
-        password_hash,
-        phone: null,
-        status: 'active',
-      }, { transaction });
-    }
-    for (const promotion of execution.promotionsToCreate) {
-      const { code, discount_type, discount_value, valid_from, valid_to, max_uses } = promotion;
-      await models.Promotion.create({ code, discount_type, discount_value, valid_from, valid_to, max_uses, used_count: 0 }, { transaction });
-    }
-    if (!execution.flightScheduleExists) {
-      const idsBySlot = new Map();
-      for (const flight of execution.flightsToCreate) {
-        const { slot, ...fields } = flight;
-        const created = await models.Flight.create(fields, { transaction });
-        idsBySlot.set(slot, valueOf(created, 'id'));
-      }
-      for (const fareClass of execution.fareClassesToCreate) {
-        const { slot, ...fields } = fareClass;
-        await models.FareClass.create({ ...fields, flight_id: idsBySlot.get(slot) }, { transaction });
-      }
-    }
-    return { mode: 'apply', scheduleStartDate: execution.plan.startDate, flightScheduleExists: execution.flightScheduleExists, existing, created: { ...seedRows, users: execution.accountsToCreate.length, flights: execution.flightsToCreate.length, fareClasses: execution.fareClassesToCreate.length, promotions: execution.promotionsToCreate.length } };
-  };
-
-  if (!apply) return analyze(null);
-  return sequelize.transaction((transaction) => analyze(transaction));
+function runDemoSeed(options) {
+  return require('../seeders/demo/DatabaseSeeder').runDemoSeed(options);
 }
 
-module.exports = { assertSafeDockerTarget, buildDemoPlan, defaultDemoStartDate, runDemoSeed };
+module.exports = {
+  assertSafeDockerTarget,
+  buildDemoPlan,
+  defaultDemoStartDate,
+  loadSnapshot,
+  makeExecutionPlan,
+  runDemoSeed,
+};

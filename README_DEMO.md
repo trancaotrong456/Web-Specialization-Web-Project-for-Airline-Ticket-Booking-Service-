@@ -30,7 +30,11 @@ API Compose đợi bootstrap thành công và kiểm tra marker gắn với đú
 
 ## Phạm vi dữ liệu và rerun
 
-Fixtures trong repository định nghĩa Roles, 20 Airlines, 40 Airports, ba users và kế hoạch Flights/Fare Classes/Promotions. Database mới nhận tối đa 50 flights tương lai, 100 fare classes và 10 promotions. Ngày đầu tiên là ngày mai theo giờ Việt Nam, được chọn trong phiên setup và hiển thị trước khi xác nhận. Lịch đầy đủ được nhận diện và giữ nguyên khi chạy lại ở ngày khác. Seeder dừng nếu lịch partial/xung đột, mã airport/airline xung đột hoặc fare classes hiện có khác fixture; nó không tự sửa dữ liệu.
+Demo Seeder được tổ chức theo nhóm như Laravel tại `seeders/demo/`: `DatabaseSeeder.js` điều phối một transaction theo thứ tự Role → Airline → Airport → User → Flight → Fare Class → Promotion. Mỗi file `*Seeder.js` chỉ chịu trách nhiệm cho nhóm dữ liệu của mình. Danh mục Role/Airline/Airport dùng dữ liệu trong `seeders/demo-fixtures.js`; lịch bay, hạng vé và khuyến mãi được khai báo trong Seeder tương ứng. `UserSeeder.js` đặt ba tài khoản và role ngay cạnh nhau để dễ kiểm tra.
+
+Các file timestamp ở `seeders/` là Seeder legacy của Sequelize CLI. `DatabaseSeeder.js` không gọi Seeder performance tạo 100.000 users (`20260915184726-seed-users.js`) và không gọi Booking/Payment Seeder. Không dùng `db:seed:all` cho dữ liệu demo.
+
+Database mới nhận tối đa 50 flights tương lai, 100 fare classes và 10 promotions. Ngày đầu tiên là ngày mai theo giờ Việt Nam, được chọn trong phiên setup và giữ nguyên lịch đó khi chạy lại. Lịch đầy đủ được nhận diện và giữ nguyên kể cả khi ngày hệ thống đổi. Seeder dừng nếu lịch partial/xung đột, mã airport/airline xung đột hoặc fare classes hiện có khác fixture; nó không tự sửa dữ liệu.
 
 Seeder không tạo Booking/Payment, không sửa `used_count`, không reset mật khẩu account cũ và không gọi seeder tạo 100.000 users. Apply chạy trong transaction; dry-run sau setup phải báo 0 bản ghi thiếu mới được xem là idempotent.
 

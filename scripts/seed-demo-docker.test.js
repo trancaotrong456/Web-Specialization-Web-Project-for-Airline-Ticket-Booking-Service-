@@ -48,10 +48,12 @@ test('execution payload stages the setup dependency tree and contains no member-
   assert.match(payload.localSource, /assertSafeDockerTarget/);
   assert.match(payload.coreSource, /runDemoSeed/);
   assert.match(payload.prerequisiteSource, /ensureDemoPrerequisites/);
-  assert.match(payload.fixturesSource, /airline-booking\.local/);
+  assert.match(payload.demoSeederSources['UserSeeder.js'], /DemoAdmin@2026!/);
+  assert.match(payload.demoSeederSources['DatabaseSeeder.js'], /PromotionSeeder/);
+  assert.match(payload.fixturesSource, /Vietnam Airlines/);
   assert.equal(payload.apply, true);
   assert.equal(payload.startDate, null);
-  assert.equal(Object.keys(payload).sort().join(','), 'apply,coreSource,fixturesSource,localSource,prerequisiteSource,startDate');
+  assert.equal(Object.keys(payload).sort().join(','), 'apply,coreSource,demoSeederSources,fixturesSource,localSource,prerequisiteSource,startDate');
 });
 
 test('Docker seeder accepts only a valid internal schedule anchor and apply flag', () => {
@@ -78,9 +80,9 @@ test('container bootstrap resolves dependencies from the app node_modules when s
   fs.writeFileSync(path.join(packageDirectory, 'index.js'), "module.exports = { resolvedFromApp: true };\n");
 
   try {
-    const localSource = "exports.main=async()=>{const bcrypt=require('bcryptjs');const fixture=require('../seeders/demo-fixtures');if(!bcrypt.resolvedFromApp||!fixture.demoAccounts)throw new Error('Wrong staged import');process.stdout.write(require.resolve('bcryptjs'));};";
+    const localSource = "exports.main=async()=>{const bcrypt=require('bcryptjs');const fixture=require('../seeders/demo-fixtures');const {demoUsers}=require('../seeders/demo/UserSeeder');if(!bcrypt.resolvedFromApp||!fixture.airlines||!demoUsers)throw new Error('Wrong staged import');process.stdout.write(require.resolve('bcryptjs'));};";
     const child = spawnSync(process.execPath, ['-e', buildContainerBootstrap({ nodeModulesPath: nodeModules })], {
-      input: JSON.stringify({ coreSource: 'module.exports = {};', localSource, prerequisiteSource: 'module.exports = {};', fixturesSource: 'exports.demoAccounts=[];', apply: false }),
+      input: JSON.stringify({ coreSource: 'module.exports = {};', localSource, prerequisiteSource: 'module.exports = {};', fixturesSource: 'exports.airlines=[];', demoSeederSources: { 'UserSeeder.js': "exports.demoUsers=[];" }, apply: false }),
       encoding: 'utf8',
       windowsHide: true,
       env: { ...process.env, NODE_PATH: '' },
@@ -91,6 +93,20 @@ test('container bootstrap resolves dependencies from the app node_modules when s
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('Docker payload can load the complete Laravel-style DatabaseSeeder dependency tree from its private temp directory', () => {
+  const root = path.resolve(__dirname, '..');
+  const payload = buildExecutionPayload({ root });
+  payload.localSource = "exports.main=async()=>{require('../seeders/demo/DatabaseSeeder');process.stdout.write('demo seeder tree loaded');};";
+  const child = spawnSync(process.execPath, ['-e', buildContainerBootstrap({ nodeModulesPath: path.join(root, 'node_modules') })], {
+    input: JSON.stringify(payload),
+    encoding: 'utf8',
+    windowsHide: true,
+  });
+
+  assert.equal(child.status, 0, child.stderr);
+  assert.equal(child.stdout, 'demo seeder tree loaded');
 });
 
 test('container bootstrap reads its source payload from stdin and removes staged files after execution', () => {

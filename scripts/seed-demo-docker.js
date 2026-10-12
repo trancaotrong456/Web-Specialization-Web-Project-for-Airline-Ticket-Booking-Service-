@@ -9,6 +9,10 @@ const DEMO_FIXTURE_FILES = [
   ['prerequisiteSource', 'scripts', 'demo-seed-prerequisites.js'],
   ['fixturesSource', 'seeders', 'demo-fixtures.js'],
 ];
+const DEMO_SEEDER_FILES = [
+  'DatabaseSeeder.js', 'RoleSeeder.js', 'UserSeeder.js', 'AirlineSeeder.js',
+  'AirportSeeder.js', 'FlightSeeder.js', 'FareClassSeeder.js', 'PromotionSeeder.js', 'seederUtils.js',
+];
 const COMPOSE_PREFIX = ['compose', '--env-file', 'docker.env'];
 
 const LOCAL_DOCKER_ENDPOINTS = new Set([
@@ -82,7 +86,17 @@ function buildExecutionPayload({ root = process.cwd(), apply = false, startDate 
     }
     sources[key] = fs.readFileSync(filePath, 'utf8');
   }
-  return { ...sources, apply: Boolean(apply), startDate: startDate || null };
+  const demoSeederSources = {};
+  for (const fileName of DEMO_SEEDER_FILES) {
+    const sourceDirectory = path.join(rootPath, 'seeders', 'demo');
+    const filePath = path.join(sourceDirectory, fileName);
+    const metadata = fs.lstatSync(filePath);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || path.dirname(fs.realpathSync(filePath)) !== sourceDirectory) {
+      throw new Error(`Refusing unsafe demo-seeder source path: seeders/demo/${fileName}`);
+    }
+    demoSeederSources[fileName] = fs.readFileSync(filePath, 'utf8');
+  }
+  return { ...sources, demoSeederSources, apply: Boolean(apply), startDate: startDate || null };
 }
 
 function buildContainerBootstrap({ nodeModulesPath = '/app/node_modules' } = {}) {
@@ -91,7 +105,7 @@ function buildContainerBootstrap({ nodeModulesPath = '/app/node_modules' } = {})
     "const fs=require('fs'),os=require('os'),path=require('path');",
     "async function readInput(){let raw='';process.stdin.setEncoding('utf8');for await(const chunk of process.stdin)raw+=chunk;return JSON.parse(raw);}",
     `async function run(){process.env.NODE_PATH=[${JSON.stringify(nodeModulesPath)},process.env.NODE_PATH].filter(Boolean).join(path.delimiter);require('module').Module._initPaths();const payload=await readInput();const tempDirectory=fs.mkdtempSync(path.join(os.tmpdir(),'airline-demo-seed-'));`,
-    "try{const scripts=path.join(tempDirectory,'scripts'),seeders=path.join(tempDirectory,'seeders');fs.mkdirSync(scripts,{mode:0o700});fs.mkdirSync(seeders,{mode:0o700});fs.writeFileSync(path.join(scripts,'demo-seed-core.js'),payload.coreSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(scripts,'seed-demo-local.js'),payload.localSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(scripts,'demo-seed-prerequisites.js'),payload.prerequisiteSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(seeders,'demo-fixtures.js'),payload.fixturesSource,{encoding:'utf8',mode:0o600});const {main}=require(path.join(scripts,'seed-demo-local.js'));const argv=payload.apply?['--apply']:[];if(payload.startDate)argv.push('--start-date',payload.startDate);await main({argv,env:process.env});}",
+    "try{const scripts=path.join(tempDirectory,'scripts'),seeders=path.join(tempDirectory,'seeders'),demoSeeders=path.join(seeders,'demo');fs.mkdirSync(scripts,{mode:0o700});fs.mkdirSync(seeders,{mode:0o700});fs.mkdirSync(demoSeeders,{mode:0o700});fs.writeFileSync(path.join(scripts,'demo-seed-core.js'),payload.coreSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(scripts,'seed-demo-local.js'),payload.localSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(scripts,'demo-seed-prerequisites.js'),payload.prerequisiteSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(seeders,'demo-fixtures.js'),payload.fixturesSource,{encoding:'utf8',mode:0o600});for(const [name,source] of Object.entries(payload.demoSeederSources||{})){if(!/^[A-Za-z]+Seeder\\.js$/.test(name)&&name!=='seederUtils.js')throw new Error('Unexpected staged demo seeder filename.');fs.writeFileSync(path.join(demoSeeders,name),source,{encoding:'utf8',mode:0o600});}const {main}=require(path.join(scripts,'seed-demo-local.js'));const argv=payload.apply?['--apply']:[];if(payload.startDate)argv.push('--start-date',payload.startDate);await main({argv,env:process.env});}",
     "finally{const tempRoot=path.resolve(os.tmpdir());const resolved=path.resolve(tempDirectory);if(path.dirname(resolved)!==tempRoot||!path.basename(resolved).startsWith('airline-demo-seed-'))throw new Error('Refusing unsafe temporary seed-script cleanup path.');fs.rmSync(tempDirectory,{recursive:true,force:true});}}",
     "run().catch(error=>{console.error('Seed demo bị từ chối hoặc thất bại an toàn:',error.message);process.exitCode=1;});",
   ].join('\n');

@@ -6,13 +6,6 @@ const roles = Object.freeze([
   Object.freeze({ name: 'customer', description: 'Khách hàng đặt vé trực tuyến' }),
 ]);
 
-// Public test credentials for the Docker-local demo only; never use on shared or production environments.
-const demoAccounts = Object.freeze([
-  Object.freeze({ role: 'admin', email: 'admin@airline-booking.local', password: 'DemoAdmin@2026!', full_name: 'Demo Admin' }),
-  Object.freeze({ role: 'staff', email: 'staff.demo@airline-booking.local', password: 'DemoStaff@2026!', full_name: 'Demo Staff' }),
-  Object.freeze({ role: 'customer', email: 'customer.demo@airline-booking.local', password: 'DemoCustomer@2026!', full_name: 'Demo Customer' }),
-]);
-
 const airlines = Object.freeze([
   { name: 'Vietnam Airlines', iata_code: 'VN', logo_url: 'https://images.unsplash.com/photo-1436491865332-7a61a109cc05' },
   { name: 'Vietjet Air', iata_code: 'VJ', logo_url: 'https://images.unsplash.com/photo-1540959733332-eab4deabeeaf' },
@@ -79,4 +72,4 @@ const airports = Object.freeze([
   { iata_code: 'SYD', name: 'Sân bay Sydney Kingsford Smith', city: 'Sydney', country: 'Úc' },
 ].map(Object.freeze));
 
-module.exports = Object.freeze({ roles, airlines, airports, demoAccounts });
+module.exports = Object.freeze({ roles, airlines, airports });

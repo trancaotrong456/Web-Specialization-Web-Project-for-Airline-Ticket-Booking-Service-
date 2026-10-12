@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
 const { assertSafeDockerTarget, buildDemoPlan, runDemoSeed } = require('./demo-seed-core');
 const { assertConnectedDatabase } = require('./seed-demo-local');
-const { demoAccounts, airlines: airlineFixtures, airports: airportFixtures } = require('../seeders/demo-fixtures');
+const { demoUsers: demoAccounts } = require('../seeders/demo/UserSeeder');
+const { airlines: airlineFixtures, airports: airportFixtures } = require('../seeders/demo-fixtures');
 
 const now = new Date('2026-10-09T03:00:00.000Z');
 const safeEnv = { NODE_ENV: 'development', DB_HOST: 'db', DB_NAME: 'airline_booking_docker', DB_SSL: 'false' };
@@ -18,7 +19,7 @@ function fixtures() {
   return { airlines, airports };
 }
 
-function modelStore(initial = []) {
+function modelStore(initial = [], name = 'Model', createTrace = []) {
   const rows = [...initial];
   return {
     rows,
@@ -29,26 +30,30 @@ function modelStore(initial = []) {
       return found;
     },
     async findOne({ where = {} } = {}) { return rows.find((row) => Object.entries(where).every(([key, value]) => row[key] === value)) || null; },
-    async create(values) { const row = { id: rows.length + 1, ...values }; rows.push(row); return row; },
+    async create(values) {
+      createTrace.push(name);
+      const row = { id: rows.length + 1, ...values };
+      rows.push(row);
+      return row;
+    },
   };
 }
 
 function makeDatabase({ existingUser, includePrerequisites = true, failPromotionCreate = false } = {}) {
   const base = fixtures();
-  const roles = modelStore(includePrerequisites ? [{ id: 3, name: 'customer' }, { id: 9, name: 'staff' }, { id: 14, name: 'admin' }] : []);
-  const users = modelStore(existingUser ? [existingUser] : []);
-  const flights = modelStore();
-  const fareClasses = modelStore();
-  const promotions = modelStore();
+  const createTrace = [];
   const bookings = modelStore([{ id: 1, status: 'holding', total_amount: 42 }]);
   const payments = modelStore([{ id: 1, status: 'pending', amount: 42 }]);
-  if (failPromotionCreate) promotions.create = async () => { throw new Error('simulated promotion insert failure'); };
   let transactions = 0;
   const models = {
-    Role: modelStore(roles.rows), User: users,
-    Airline: modelStore(includePrerequisites ? base.airlines : []), Airport: modelStore(includePrerequisites ? base.airports : []),
-    Flight: flights, FareClass: fareClasses, Promotion: promotions, Booking: bookings, Payment: payments,
+    Role: modelStore(includePrerequisites ? [{ id: 3, name: 'customer' }, { id: 9, name: 'staff' }, { id: 14, name: 'admin' }] : [], 'Role', createTrace),
+    User: modelStore(existingUser ? [existingUser] : [], 'User', createTrace),
+    Airline: modelStore(includePrerequisites ? base.airlines : [], 'Airline', createTrace),
+    Airport: modelStore(includePrerequisites ? base.airports : [], 'Airport', createTrace),
+    Flight: modelStore([], 'Flight', createTrace), FareClass: modelStore([], 'FareClass', createTrace),
+    Promotion: modelStore([], 'Promotion', createTrace), Booking: bookings, Payment: payments,
   };
+  if (failPromotionCreate) models.Promotion.create = async () => { throw new Error('simulated promotion insert failure'); };
   const sequelize = { async transaction(callback) {
     transactions += 1;
     const snapshots = Object.values(models).map((model) => [model.rows, structuredClone(model.rows)]);
@@ -61,7 +66,7 @@ function makeDatabase({ existingUser, includePrerequisites = true, failPromotion
   return {
     sequelize, models,
     transactions: () => transactions,
-    users, flights, fareClasses, promotions, bookings, payments,
+    users: models.User, flights: models.Flight, fareClasses: models.FareClass, promotions: models.Promotion, bookings, payments, createTrace,
   };
 }
 
@@ -170,6 +175,13 @@ test('empty database preview and apply initialize all shared prerequisites befor
     assert.equal(await bcrypt.compare(account.password, user.password_hash), true);
   }
   assert.equal(demoAccounts.some((account) => JSON.stringify(applied).includes(account.password)), false);
+});
+
+test('DatabaseSeeder creates demo data in the documented Laravel-style dependency order', async () => {
+  const db = makeDatabase({ includePrerequisites: false });
+  await runDemoSeed({ models: db.models, sequelize: db.sequelize, apply: true, now });
+
+  assert.deepEqual([...new Set(db.createTrace)], ['Role', 'Airline', 'Airport', 'User', 'Flight', 'FareClass', 'Promotion']);
 });
 
 test('apply hashes passwords and preserves an existing account instead of changing its role or password', async () => {
