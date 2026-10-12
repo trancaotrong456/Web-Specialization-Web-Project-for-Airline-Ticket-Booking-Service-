@@ -101,6 +101,63 @@ test('#24 – getById contract verifies flight association and 404', () => {
   assert.ok(serviceCode.includes("statusCode = 404"), 'getById must throw 404 if fare class not found');
 });
 
+test('#24 – createFareClassValidator blocks out-of-contract fields', async () => {
+  const { validationResult } = require('express-validator');
+  const { createFareClassValidator } = require('../validators/fareClass.validator');
 
+  const invalidReq = {
+    body: {
+      flight_id: 1,
+      class_name: 'Economy',
+      price: 1500000,
+      seat_quota: 100,
+      discount_rate: 0.1, // out of contract
+    },
+  };
+  for (const middleware of createFareClassValidator) {
+    await middleware(invalidReq, {}, () => {});
+  }
+  const result = validationResult(invalidReq);
+  assert.ok(!result.isEmpty(), 'Out of contract fields must fail validator');
+});
 
+test('#24 – FareClassService.create validates contract and blocks out-of-contract fields', async () => {
+  const fareClassService = require('../services/fareClass.service');
 
+  // Payload with out-of-contract fields
+  await assert.rejects(
+    async () => {
+      await fareClassService.create({
+        flight_id: 1,
+        class_name: 'Economy',
+        price: 1000000,
+        extra_key: 'invalid',
+      });
+    },
+    (err) => err.statusCode === 400 && err.message.includes('ngoài hợp đồng')
+  );
+
+  // Missing or negative flight_id
+  await assert.rejects(
+    async () => {
+      await fareClassService.create({
+        flight_id: -1,
+        class_name: 'Economy',
+        price: 1000000,
+      });
+    },
+    (err) => err.statusCode === 400
+  );
+
+  // Negative price
+  await assert.rejects(
+    async () => {
+      await fareClassService.create({
+        flight_id: 1,
+        class_name: 'Economy',
+        price: -50000,
+      });
+    },
+    (err) => err.statusCode === 400
+  );
+});
