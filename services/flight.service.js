@@ -154,11 +154,26 @@ class FlightService {
    * Update flight info (Admin/Staff)
    */
   async updateFlight(flightId, data) {
-    // Remaining seats are changed only by booking/payment workflows, each of
-    // which holds a transaction row lock. Do not permit an admin update to
-    // bypass that invariant through the generic flight update endpoint.
-    if (Object.prototype.hasOwnProperty.call(data, 'available_seats')) {
-      const error = new Error('available_seats is managed by booking and payment workflows');
+    if (!data || typeof data !== 'object') {
+      const error = new Error('Dữ liệu cập nhật không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const payloadKeys = Object.keys(data);
+    if (payloadKeys.length === 0) {
+      const error = new Error('Vui lòng cung cấp ít nhất một trường cần cập nhật');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    // Server-side allowlist: chỉ cho sửa departure_time, arrival_time, status
+    // Ngăn client sửa available_seats, total_seats, airline_id, airport IDs, ID/timestamps
+    const ALLOWED_FIELDS = ['departure_time', 'arrival_time', 'status'];
+    const disallowedFields = payloadKeys.filter((key) => !ALLOWED_FIELDS.includes(key));
+
+    if (disallowedFields.length > 0) {
+      const error = new Error(`Không được phép chỉnh sửa các trường: ${disallowedFields.join(', ')}`);
       error.statusCode = 400;
       throw error;
     }
@@ -170,15 +185,33 @@ class FlightService {
       throw error;
     }
 
-    const newDep = data.departure_time ? new Date(data.departure_time) : new Date(flight.departure_time);
-    const newArr = data.arrival_time ? new Date(data.arrival_time) : new Date(flight.arrival_time);
+    const newDep = data.departure_time !== undefined ? new Date(data.departure_time) : new Date(flight.departure_time);
+    const newArr = data.arrival_time !== undefined ? new Date(data.arrival_time) : new Date(flight.arrival_time);
+
+    if (Number.isNaN(newDep.getTime()) || Number.isNaN(newArr.getTime())) {
+      const error = new Error('Thời gian bay không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
+
     if (newArr <= newDep) {
       const error = new Error('Thời gian đến phải sau thời gian khởi hành');
       error.statusCode = 400;
       throw error;
     }
 
-    await flight.update(data);
+    if (data.status !== undefined && !['scheduled', 'cancelled', 'completed'].includes(data.status)) {
+      const error = new Error('Trạng thái chuyến bay không hợp lệ');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const safeUpdate = {};
+    if (data.departure_time !== undefined) safeUpdate.departure_time = data.departure_time;
+    if (data.arrival_time !== undefined) safeUpdate.arrival_time = data.arrival_time;
+    if (data.status !== undefined) safeUpdate.status = data.status;
+
+    await flight.update(safeUpdate);
     const updated = await this.getFlightById(flightId);
 
     // Broadcast update via WebSocket
