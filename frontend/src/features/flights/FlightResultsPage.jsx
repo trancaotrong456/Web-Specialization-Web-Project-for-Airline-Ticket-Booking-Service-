@@ -3,6 +3,7 @@ import { Link, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
 import { LoadingView } from '../../components/LoadingView';
+import { getSocket } from '../../lib/socket';
 import { createFlightDiscoveryApi } from './flightDiscoveryApi';
 
 const pageSize = 20;
@@ -12,7 +13,50 @@ const formatDay = (value) => value ? new Intl.DateTimeFormat('vi-VN', { day: 'nu
 const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price);
 const flightStatusLabel = (status) => ({ scheduled: 'Theo lịch', cancelled: 'Đã hủy', completed: 'Đã hoàn thành' })[status] || 'Thông tin chuyến bay';
 
-function FlightCard({ flight, passengerCount }) {
+function FlightCard({ flight: initialFlight, passengerCount }) {
+  const [flight, setFlight] = useState(initialFlight);
+  const [seatWarning, setSeatWarning] = useState(null);
+  const flightId = initialFlight.id;
+
+  useEffect(() => { setFlight(initialFlight); }, [initialFlight]);
+
+  useEffect(() => {
+    if (!flightId) return undefined;
+    const socket = getSocket();
+    const id = Number(flightId);
+
+    const handleSeatsUpdated = (data) => {
+      if (data && Number(data.flight_id) === id) {
+        setFlight((current) => ({ ...current, available_seats: data.available_seats }));
+      }
+    };
+    const handleFlightUpdated = (data) => {
+      if (data && (Number(data.flight_id) === id || Number(data.id) === id)) {
+        setFlight((current) => ({ ...current, ...data, id: current.id }));
+      }
+    };
+    const handleSeatWarning = (data) => {
+      if (data && (Number(data.flightId) === id || Number(data.flight_id) === id)) {
+        setSeatWarning(data);
+      }
+    };
+    const joinRoom = () => socket.emit('join_flight', id);
+
+    socket.on('flight_seats_updated', handleSeatsUpdated);
+    socket.on('flight_updated', handleFlightUpdated);
+    socket.on('seat-warning', handleSeatWarning);
+    socket.on('connect', joinRoom);
+    if (socket.connected) { socket.emit('join_flight', id); } else { socket.connect(); }
+
+    return () => {
+      socket.emit('leave_flight', id);
+      socket.off('flight_seats_updated', handleSeatsUpdated);
+      socket.off('flight_updated', handleFlightUpdated);
+      socket.off('seat-warning', handleSeatWarning);
+      socket.off('connect', joinRoom);
+    };
+  }, [flightId]);
+
   const farePrices = Array.isArray(flight.fareClasses)
     ? flight.fareClasses
       .map((fare) => fare.price)
@@ -32,7 +76,10 @@ function FlightCard({ flight, passengerCount }) {
         <div className="flight-duration" aria-hidden="true"><span /><small>Chặng bay</small></div>
         <div><time>{formatTime(flight.arrival_time)}</time><strong>{to.iata_code || to.city || to.name || '—'}</strong><small>{to.city || to.name || ''}</small></div>
       </div>
-      <div className="flight-availability"><strong>{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span></div>
+      <div className="flight-availability">
+        <strong>{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span>
+        {seatWarning ? <span className="seat-warning-tag" role="alert">⚠ {seatWarning.message || `Chỉ còn ${seatWarning.availableSeats} ghế`}</span> : null}
+      </div>
       <div className="flight-fare">{lowestFare !== undefined ? <><small>Giá từ</small><strong>{formatPrice(lowestFare)} ₫</strong></> : <span>Chưa có thông tin giá</span>}</div>
       <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}>Chọn chuyến bay</Link>
     </article>

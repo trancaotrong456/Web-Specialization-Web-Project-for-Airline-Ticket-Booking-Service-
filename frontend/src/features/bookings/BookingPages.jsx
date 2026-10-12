@@ -8,6 +8,7 @@ import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
 import { StatusBadge, statusLabel } from '../../components/StatusBadge';
+import { useFlightSocket } from '../../lib/socket';
 import { createBookingsApi, isValidEmail } from './bookingsApi';
 
 const bookingStatuses = ['holding', 'pending_payment', 'confirmed', 'cancelled', 'expired'];
@@ -67,6 +68,18 @@ export function BookingCreatePage() {
   const [formErrors, setFormErrors] = useState({});
   const [state, setState] = useState({ loadingAirports: true, searching: false, loadingFares: false, submitting: false, error: '', stage: 'flight' });
   const presetFlight = urlParams.get('flight_id');
+
+  // WebSocket: subscribe to flight room when a flight is selected
+  const { lastWarning, clearWarning } = useFlightSocket({
+    flightId: flight?.id,
+    enabled: !!flight?.id,
+    onFlightUpdated: (data) => {
+      setFlight((current) => current ? { ...current, ...data, id: current.id } : current);
+    },
+    onSeatsUpdated: (data) => {
+      setFlight((current) => current ? { ...current, available_seats: data.available_seats } : current);
+    },
+  });
 
   useEffect(() => {
     let active = true;
@@ -170,6 +183,7 @@ export function BookingCreatePage() {
 
   return <BookingShell><PageHeading title="Tạo đặt chỗ" description="Chọn chuyến bay và hạng vé, sau đó nhập thông tin hành khách." actions={<Link className="button button-outline" to="/bookings/lookup">Đã có mã đặt chỗ?</Link>} />
     {state.error ? <Notice type="error">{state.error}</Notice> : null}
+    {lastWarning ? <Notice type="warning">{lastWarning.message || `Chỉ còn ${lastWarning.availableSeats} ghế!`} <button type="button" style={{ marginLeft: 8, fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={clearWarning}>Bỏ qua</button></Notice> : null}
     <div className="booking-steps" aria-label="Các bước đặt vé"><span className={state.stage === 'flight' ? 'is-current' : 'is-done'}>1 <b>Chuyến bay</b></span><span className={state.stage === 'fare' ? 'is-current' : state.stage === 'passenger' ? 'is-done' : ''}>2 <b>Hạng vé</b></span><span className={state.stage === 'passenger' ? 'is-current' : ''}>3 <b>Hành khách</b></span></div>
     <section className="surface-card booking-panel">
       {state.stage === 'flight' ? <>

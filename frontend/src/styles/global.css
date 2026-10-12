@@ -418,6 +418,24 @@ a {
   background: #edf4fb;
 }
 
+.notice-warning {
+  color: #8c5b00;
+  background: #fff8e6;
+  border-left: 4px solid #e5a000;
+}
+
+.seat-warning-tag {
+  display: inline-block;
+  margin-top: 4px;
+  padding: 2px 8px;
+  background: #fff0ef;
+  color: #c92a2a;
+  border: 1px solid #ffc9c9;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
 .auth-switch {
   margin: var(--space-5) 0 0;
   text-align: center;
