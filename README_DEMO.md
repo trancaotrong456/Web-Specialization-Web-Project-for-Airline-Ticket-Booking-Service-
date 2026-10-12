@@ -6,15 +6,17 @@ Tài liệu này dành riêng cho database Docker local `airline_booking_docker`
 
 1. Cài Docker Desktop (local context), Node.js 20+ và npm.
 2. Nếu repository hiện có `docker.env` đã được tùy chỉnh trước khi pull commit xóa file tracked cũ, hãy sao lưu nó trước khi pull và khôi phục sau pull chỉ khi chưa có `docker.env`. Xem mục “Safe docker.env migration” trong README. Không thay file local bằng template nếu đã có cấu hình.
-3. Chạy từ PowerShell/CMD/terminal tương tác:
+3. Chuẩn bị backend và dữ liệu demo bằng lệnh chạy trên host:
 
 ```powershell
-npm run demo:setup
+npm run demo:up
 ```
 
-Lệnh chỉ tạo `docker.env` từ `docker.env.example` nếu file local chưa tồn tại. Nó xác minh Docker socket local, cấu hình Compose development, database đích, API/DB container, health và migrations; sau đó preview rows hiện có và sẽ tạo. Seeder mặc định chỉ đọc. Chỉ nhập `CHO PHÉP APPLY DEMO SEED` sau khi đã kiểm tra đúng target và số lượng. EOF, terminal không tương tác hoặc câu khác sẽ không apply.
+Lệnh chỉ tạo `docker.env` từ `docker.env.example` nếu file local chưa tồn tại. Wrapper trên host xác minh Docker context/endpoint hiệu lực và các biến override, từ chối SSH/TCP hoặc endpoint không xác định, kiểm tra Compose cùng database `airline_booking_docker`, khởi động MySQL, chờ healthy, chạy migrations, preview rồi tự bổ sung fixture còn thiếu. Sau đó nó xác minh bootstrap, khởi động API và kiểm tra health. Đây là thao tác ghi demo được chủ động gọi bằng `demo:up`; không chạy Seeder riêng và không nhập xác nhận lần hai. Tài khoản, mật khẩu, lịch bay hiện có, Booking và Payment không bị sửa.
 
-Compose chạy migrations khi API khởi động trước khi health check báo healthy. Setup không dừng process nào khác nếu port đang bận, không xóa volume và không chạy `db:seed:all`.
+API Compose đợi bootstrap thành công và kiểm tra marker gắn với đúng MySQL container trước khi mở cổng/health. Chạy `docker compose up` trực tiếp trên stack chưa khởi tạo sẽ để API chưa sẵn sàng; chạy `npm run demo:up`. Lệnh không tự dừng process khác khi cổng bận, không xóa volume và không chạy `db:seed:all`. Production không phụ thuộc seed demo.
+
+`npm run demo:setup` vẫn là công cụ bảo trì tương tác sau lần bootstrap đầu: nó hiển thị preview và chỉ apply khi nhập chính xác `CHO PHÉP APPLY DEMO SEED`. Không dùng lệnh này cho lần khởi động đầu tiên.
 
 ## Tài khoản demo local cố định
 
@@ -38,7 +40,7 @@ Preview thủ công (không khởi động service) khi Compose đã chạy và 
 npm run seed:demo:docker
 ```
 
-Lệnh diagnostic cũ `npm run seed:demo:docker -- --apply` bị giữ để tương thích; nó là thao tác ghi trực tiếp có kiểm tra target, nên thành viên nên dùng `npm run demo:setup` để xem preview và nhập xác nhận tương tác.
+Lệnh diagnostic cũ `npm run seed:demo:docker -- --apply` bị giữ để tương thích; đây là thao tác ghi trực tiếp có guard target. Thành viên nên dùng `npm run demo:up` cho startup bình thường.
 
 Frontend chạy riêng:
 

@@ -2,11 +2,11 @@
 
 ## Goal
 
-Provide a repeatable local onboarding path for the Serene Flightways demo using the existing Docker Compose stack and a committed, shared fixture seeder. A contributor should start local services, review a read-only seed plan, explicitly confirm additive seed writes, and run the frontend without manually entering rows or credentials.
+Provide one safe host-controlled local onboarding command for the Serene Flightways demo using the existing Docker Compose stack and committed shared fixtures. Contributors run `npm run demo:up`; it verifies local Docker, migrates, additively seeds missing fixtures, and only then starts a ready API, without separate Seeder commands or an interactive confirmation prompt.
 
 ## Scope and constraints
 
-- Work only on the existing `feature/auth` branch, based on `origin/develop` at `2b03e44938f650b4295487befed0e7f8258ee3bd`; do not create a branch.
+- The current implementation is on the existing `feature/local-demo-setup` branch, based on fetched `origin/develop`; do not create another branch.
 - Keep Auth/User/Role behavior unchanged except for the existing demo fixture seeder. Do not modify Flight, Booking, Payment, GPS, database schema, or the submitted Word report.
 - Never run the 100,000-user seeder, `db:seed:all`, database reset, volume deletion, or destructive cleanup.
 - Demo data is additive and idempotent. Existing users and their passwords, existing schedules, promotion usage counts, bookings, and payments must remain unchanged.
@@ -14,18 +14,20 @@ Provide a repeatable local onboarding path for the Serene Flightways demo using 
 - Demo passwords are bcrypt-hashed using the existing Auth mechanism. They are never updated for existing users and may only be seeded after Docker/Compose identity and database safety checks establish the dedicated local `airline_booking_docker` target. They must never be used on staging or production.
 - All shared demo rows are committed fixtures/seeders: roles, airlines, airports, flights, fare classes, promotions, and the three accounts. No member-specific password entry or random password generation is required.
 
-## Recommended approach
+## Approved host-side architecture
 
-1. Add a small `scripts/demo-setup.js` orchestrator and `npm run demo:setup` entrypoint. Validate the local Docker socket and Compose configuration, start only the project’s `api` and `db` services, and wait for health/migrations before any seeding.
-2. Run the seed plan read-only first. Print the verified Compose project/database identity and existing/planned counts. Before any seed transaction, require an interactive confirmation phrase. Non-interactive runs stop safely; no implicit `--yes` mode is added.
-3. Keep all fixed shared fixture data in committed seeders/fixture code. Reuse the existing roles, airlines, and airports seeders only if they pass idempotency review; otherwise add a narrowly scoped safe bootstrap path rather than invoking all seeders. Seed fixed demo users with bcrypt, and skip existing users without password/profile/role mutation. Seed flights/fare classes/promotions via the existing guarded transaction, derive a future Vietnam date for a new schedule, preserve complete existing schedules, and refuse partial/conflicting schedules. Never create Booking/Payment rows.
-4. Replace the tracked `docker.env` with tracked `docker.env.example`; add local `docker.env` to `.gitignore`. The setup command may copy the example only when the local file is absent, never overwrite it. README must explain backing up an existing `docker.env` before pulling the removal commit, restoring it after pull, or creating it from the example when no local copy exists.
-5. Add isolated tests for orchestration decisions, confirmation behavior, fixed credentials and hashing, idempotency/conflict behavior, target rejection, and no Booking/Payment writes. Use injected Docker/process/model adapters; never touch the real demo DB from unit tests.
+1. `scripts/demo-up.js` owns Docker context verification and Compose orchestration on the host. It checks the effective context endpoint plus `DOCKER_HOST`, `DOCKER_CONTEXT`, TLS and Compose configuration overrides; only known local Docker sockets are accepted.
+2. The host starts only the verified Compose DB and a private bootstrap agent, waits for MySQL health, validates service/project labels and the exact demo DB, then runs migrations and the existing guarded Seeder inside the bootstrap container. It reads a dry-run first and automatically applies only missing fixtures; a second dry-run must report zero missing records.
+3. Compose API depends on bootstrap `service_completed_successfully`. The host marks a durable non-secret state file in a dedicated named volume only after migration/seed verification, then cleanly stops the bootstrap agent and starts API. API checks the marker against live MySQL DB name, container identity and read-only status before listening. Direct `docker compose up` on an uninitialized stack therefore cannot report a healthy/ready API.
+4. No Docker socket is mounted in containers. Bootstrap has no published ports and cannot access Docker Engine. Production startup continues through the Dockerfile/default server path and does not require the demo marker or fixtures.
+5. Keep `demo:setup` as an interactive maintenance/review helper for an already bootstrapped stack. Normal first setup is the explicitly invoked `npm run demo:up`; it does not ask for a second confirmation prompt.
+6. Retain fixed shared credentials and fixtures, bcrypt hashing, skip-existing semantics, date-stable schedules, conflict checks and transaction guards. Never create Booking/Payment rows or invoke the 100,000-user Seeder.
+7. `docker.env` remains local and ignored; create it from `docker.env.example` only when absent and never overwrite it. Keep migration guidance for members who previously had a tracked `docker.env`.
+8. Unit tests inject Docker/process adapters and exercise local/remote/unknown contexts, engine unavailable, invalid DB config, migration/seed failures, first run/rerun, API start ordering, marker validation and additive/idempotent Seeder behavior. They never access the existing demo DB.
 
-## Alternatives considered
+## Explicit tradeoff
 
-- Keep `demo:setup` dry-run only and require a separate `seed:demo:docker -- --apply` command. This is safest but does not meet the requested one-command onboarding experience.
-- Automatically apply on every `demo:setup` invocation. This is simpler but removes a clear review point before database writes and is not recommended.
+Invoking `npm run demo:up` is the user's explicit intent to prepare the local demo DB. The command still refuses unless the host socket, Compose service identities and MySQL target are positively verified. This removes the extra interactive prompt while retaining fail-closed runtime identity checks. `demo:setup` remains available when a human wants to inspect a preview and separately confirm maintenance apply.
 
 ## Error and safety behavior
 
@@ -39,9 +41,10 @@ Provide a repeatable local onboarding path for the Serene Flightways demo using 
 
 - Unit tests cover first run, rerun, partial state, collisions, wrong environment, exact fixture identities/roles, password hashing and skip-existing semantics, and proof that Booking/Payment tables are not written.
 - Run backend tests, demo-seeder safety tests, frontend tests/build, and `git diff --check`.
-- Where Docker access is approved, run Compose health checks and seeder dry-run first; apply only after the user’s explicit runtime confirmation, then verify counts and rerun dry-run.
-- Review the final diff for exact scope and only the public demo-only fixture credentials before commit/push to the existing `feature/auth` branch.
+- Run Compose host-verification tests, bootstrap gating tests, Seeder safety tests, backend tests, frontend tests/build, and `git diff --check`.
+- Where a real local Docker engine is available, run the read-only DB identity preflight, migrations and dry-run before additive apply, then verify counts and rerun dry-run. Never run this sequence against the user's existing database during code-only validation.
+- Review the final diff for exact Demo Setup scope and only the public demo-only fixture credentials before commit/push to the existing `feature/local-demo-setup` branch.
 
-## Known implementation gate
+## Environment note
 
-Docker access from the current Codex sandbox was denied by the Windows named-pipe permission boundary, and HTTPS access to GitHub was unavailable. This does not establish that Docker Engine or GitHub is unhealthy. Source changes and isolated tests can proceed; Docker integration and push must be reported blocked unless a permitted host/remote path becomes available.
+The earlier implementation attempt could not access the Windows Docker named pipe from the Codex sandbox. This does not establish that Docker Engine is unhealthy. Source changes and isolated tests can proceed; report real Docker integration as blocked unless a subsequent permitted host check succeeds. GitHub push likewise requires a working remote credential and fast-forward preflight.

@@ -57,12 +57,12 @@ function assertSafeDockerTarget(env, runtime) {
   if (env.DB_HOST !== 'db') throw new Error('Demo seeding requires DB_HOST=db (the local Compose database service).');
   if (env.DB_NAME !== 'airline_booking_docker') throw new Error('Demo seeding requires DB_NAME=airline_booking_docker.');
   if (String(env.DB_SSL).toLowerCase() !== 'false') throw new Error('Demo seeding requires DB_SSL=false.');
-  if (!runtime?.isDockerContainer) throw new Error('Demo seeding must run inside the API Docker container.');
+  if (!runtime?.isDockerContainer) throw new Error('Demo seeding must run inside the verified Docker container for the local Compose API/bootstrap service.');
   if (!runtime.composeProject || !/^[a-f0-9]{12,64}$/i.test(runtime.apiContainerId || '') || !/^[a-f0-9]{12,64}$/i.test(runtime.dbContainerId || '')) {
-    throw new Error('Demo seeding requires verified API and DB container identities from one Docker Compose project.');
+    throw new Error('Demo seeding requires verified Compose bootstrap/API and DB container identities from one local Compose project.');
   }
   if (!String(runtime.hostname || '').startsWith(runtime.apiContainerId.slice(0, 12))) {
-    throw new Error('The running container does not match the verified Compose API container.');
+    throw new Error('The running container does not match the verified Compose API container or bootstrap container.');
   }
   return true;
 }
