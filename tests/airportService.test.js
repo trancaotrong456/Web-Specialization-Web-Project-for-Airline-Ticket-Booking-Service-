@@ -249,3 +249,28 @@ test('airport deletion succeeds when no flights are assigned', async () => {
     Flight.count = originalCount;
   }
 });
+
+test('airport deletion maps foreign key constraint error to HTTP 400', async () => {
+  const originalFindByPk = Airport.findByPk;
+  const originalCount = Flight.count;
+  Airport.findByPk = async () => ({
+    id: 50,
+    async destroy() {
+      const err = new Error('foreign key constraint fail');
+      err.name = 'SequelizeForeignKeyConstraintError';
+      throw err;
+    },
+  });
+  Flight.count = async () => 0;
+
+  try {
+    await assert.rejects(
+      airportService.delete(50),
+      (error) => error.statusCode === 400 && error.message.includes('Invalid referenced resource ID'),
+    );
+  } finally {
+    Airport.findByPk = originalFindByPk;
+    Flight.count = originalCount;
+  }
+});
+
