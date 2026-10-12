@@ -1,6 +1,14 @@
 const { body, param } = require('express-validator');
 
 const createFareClassValidator = [
+  body().custom((value, { req }) => {
+    const ALLOWED_FIELDS = ['flight_id', 'class_name', 'price', 'seat_quota'];
+    const extraFields = Object.keys(req.body || {}).filter((k) => !ALLOWED_FIELDS.includes(k));
+    if (extraFields.length > 0) {
+      throw new Error(`Các trường không hợp lệ ngoài hợp đồng: ${extraFields.join(', ')}`);
+    }
+    return true;
+  }),
   body('flight_id')
     .notEmpty()
     .isInt({ min: 1 })
@@ -14,7 +22,7 @@ const createFareClassValidator = [
     .isFloat({ min: 0 })
     .withMessage('price is required and must be non-negative'),
   body('seat_quota')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 0 })
     .withMessage('seat_quota must be a non-negative integer'),
 ];
