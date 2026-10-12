@@ -88,6 +88,14 @@ test('airport validation rejects empty update payload or invalid id', async () =
       body: JSON.stringify({ id: 2, name: 'Valid Name' }),
     });
     assert.equal(resProhibited.status, 422);
+
+    // Valid partial updates
+    const resValidUpdate = await fetch(`http://127.0.0.1:${server.address().port}/airports/1`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Valid Updated Name' }),
+    });
+    assert.equal(resValidUpdate.status, 200);
   } finally {
     await new Promise((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
   }
