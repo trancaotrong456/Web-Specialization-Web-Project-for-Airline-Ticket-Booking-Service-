@@ -114,8 +114,12 @@ const updateAirportValidator = [
 ];
 
 module.exports = {
+  FORBIDDEN_FIELDS,
+  checkForbiddenFields,
+  iataCodeField,
   airportIdValidator,
   listAirportValidator,
   createAirportValidator,
   updateAirportValidator,
 };
+
