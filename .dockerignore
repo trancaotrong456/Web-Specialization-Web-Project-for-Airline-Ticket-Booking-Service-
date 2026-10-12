@@ -19,6 +19,7 @@ coverage
 .env
 .env.*
 !.env.example
+docker.env
 demo-seed.local.env
 demo-seed.local.env.example
 certs

@@ -3,18 +3,18 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const bcrypt = require('bcryptjs');
-const { assertSafeDockerTarget, assertSeedPasswords, buildDemoPlan, runDemoSeed } = require('./demo-seed-core');
+const { assertSafeDockerTarget, buildDemoPlan, runDemoSeed } = require('./demo-seed-core');
 const { assertConnectedDatabase } = require('./seed-demo-local');
+const { demoAccounts, airlines: airlineFixtures, airports: airportFixtures } = require('../seeders/demo-fixtures');
 
 const now = new Date('2026-10-09T03:00:00.000Z');
 const safeEnv = { NODE_ENV: 'development', DB_HOST: 'db', DB_NAME: 'airline_booking_docker', DB_SSL: 'false' };
 const safeRuntime = { isDockerContainer: true, composeProject: 'airline-demo', apiContainerId: 'a'.repeat(64), dbContainerId: 'b'.repeat(64), hostname: 'aaaaaaaaaaaa' };
-const passwords = { SEED_ADMIN_PASSWORD: 'Admin-demo-10!', SEED_STAFF_PASSWORD: 'Staff-demo-10!', SEED_CUSTOMER_PASSWORD: 'Customer-demo-10!', SEED_FLIGHT_START_DATE: '2026-10-10' };
+const demoConfig = {};
 
 function fixtures() {
-  const airlines = Array.from({ length: 20 }, (_, index) => ({ id: index + 10, iata_code: `A${String(index).padStart(2, '0')}`, name: `Airline ${index}` }));
-  const codes = ['HAN', 'SGN', 'DAD', 'CXR', 'PQC', 'HPH', 'VCA', 'VII', 'HUI', 'THD', 'VDO', 'PXU', 'UIH', 'TBB', 'BMV', 'DLI', 'DIN', 'VCS', 'VKG', 'CAH', 'VCL', 'VDH', 'SIN', 'BKK', 'DMK', 'KUL', 'ICN', 'NRT', 'HND', 'KIX', 'HKG', 'TPE', 'DXB', 'DOH', 'CDG', 'LHR', 'FRA', 'JFK', 'LAX', 'SYD'];
-  const airports = codes.map((iata_code, index) => ({ id: index + 100, iata_code, name: `${iata_code} Airport`, city: iata_code, country: 'Việt Nam' }));
+  const airlines = airlineFixtures.map((row, index) => ({ id: index + 10, ...row }));
+  const airports = airportFixtures.map((row, index) => ({ id: index + 100, ...row }));
   return { airlines, airports };
 }
 
@@ -33,24 +33,34 @@ function modelStore(initial = []) {
   };
 }
 
-function makeDatabase({ existingUser } = {}) {
+function makeDatabase({ existingUser, includePrerequisites = true, failPromotionCreate = false } = {}) {
   const base = fixtures();
-  const roles = modelStore([{ id: 3, name: 'customer' }, { id: 9, name: 'staff' }, { id: 14, name: 'admin' }]);
+  const roles = modelStore(includePrerequisites ? [{ id: 3, name: 'customer' }, { id: 9, name: 'staff' }, { id: 14, name: 'admin' }] : []);
   const users = modelStore(existingUser ? [existingUser] : []);
   const flights = modelStore();
   const fareClasses = modelStore();
   const promotions = modelStore();
   const bookings = modelStore([{ id: 1, status: 'holding', total_amount: 42 }]);
   const payments = modelStore([{ id: 1, status: 'pending', amount: 42 }]);
+  if (failPromotionCreate) promotions.create = async () => { throw new Error('simulated promotion insert failure'); };
   let transactions = 0;
-  const sequelize = { async transaction(callback) { transactions += 1; return callback({ transactionId: transactions }); } };
+  const models = {
+    Role: modelStore(roles.rows), User: users,
+    Airline: modelStore(includePrerequisites ? base.airlines : []), Airport: modelStore(includePrerequisites ? base.airports : []),
+    Flight: flights, FareClass: fareClasses, Promotion: promotions, Booking: bookings, Payment: payments,
+  };
+  const sequelize = { async transaction(callback) {
+    transactions += 1;
+    const snapshots = Object.values(models).map((model) => [model.rows, structuredClone(model.rows)]);
+    try { return await callback({ transactionId: transactions }); }
+    catch (error) {
+      for (const [rows, before] of snapshots) rows.splice(0, rows.length, ...before);
+      throw error;
+    }
+  } };
   return {
-    sequelize,
+    sequelize, models,
     transactions: () => transactions,
-    models: {
-      Role: modelStore(roles.rows), User: users, Airline: modelStore(base.airlines), Airport: modelStore(base.airports),
-      Flight: flights, FareClass: fareClasses, Promotion: promotions, Booking: bookings, Payment: payments,
-    },
     users, flights, fareClasses, promotions, bookings, payments,
   };
 }
@@ -73,8 +83,12 @@ test('connected database identity must match the verified local DB container and
   await assert.rejects(assertConnectedDatabase({ query: async () => [[{ database_name: 'airline_booking_docker', server_hostname: 'remote-mysql', server_port: 3306, read_only: 0 }]] }, dbContainerId), /does not match/i);
 });
 
-test('apply requires all three demo passwords and never returns their values', () => {
-  assert.throws(() => assertSeedPasswords({ ...passwords, SEED_STAFF_PASSWORD: '' }), /staff/i);
+test('shared committed demo accounts contain the fixed local-only credentials', () => {
+  assert.deepEqual(demoAccounts.map(({ email, password }) => [email, password]), [
+    ['admin@airline-booking.local', 'DemoAdmin@2026!'],
+    ['staff.demo@airline-booking.local', 'DemoStaff@2026!'],
+    ['customer.demo@airline-booking.local', 'DemoCustomer@2026!'],
+  ]);
 });
 
 test('demo plan uses database IDs, required real airport codes, 50 scheduled future flights and two balanced fare classes', () => {
@@ -101,11 +115,24 @@ test('demo plan refuses to invent missing route airports', () => {
   assert.throws(() => buildDemoPlan({ airlines, airports: airports.filter((airport) => airport.iata_code !== 'DAD'), startDate: '2026-10-10', now }), /DAD/i);
 });
 
+test('demo plan rejects an impossible calendar date instead of normalizing it', () => {
+  const { airlines, airports } = fixtures();
+  assert.throws(() => buildDemoPlan({ airlines, airports, startDate: '2026-02-31', now }), /valid calendar date/i);
+});
+
+test('adding unrelated airlines does not change the shared demo flight schedule', () => {
+  const { airlines, airports } = fixtures();
+  const baseline = buildDemoPlan({ airlines, airports, startDate: '2026-10-10', now });
+  const extended = buildDemoPlan({ airlines: [{ id: 999, iata_code: 'AA', name: 'Unrelated airline' }, ...airlines], airports, startDate: '2026-10-10', now });
+  assert.deepEqual(extended.flights.map((flight) => flight.airline_id), baseline.flights.map((flight) => flight.airline_id));
+});
+
 test('dry-run performs read-only analysis and does not open a transaction or write rows', async () => {
   const db = makeDatabase();
-  const result = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: false, now });
+  const result = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: false, now });
   assert.equal(result.mode, 'dry-run');
-  assert.equal(result.wouldCreate.users, 3);
+  assert.deepEqual(result.wouldCreate, { roles: 0, airlines: 0, airports: 0, users: 3, flights: 50, fareClasses: 100, promotions: 10 });
+  assert.equal(result.scheduleStartDate, '2026-10-10');
   assert.equal(result.wouldCreate.flights, 50);
   assert.equal(result.wouldCreate.fareClasses, 100);
   assert.equal(result.wouldCreate.promotions, 10);
@@ -116,49 +143,85 @@ test('dry-run performs read-only analysis and does not open a transaction or wri
   assert.equal(db.promotions.rows.length, 0);
 });
 
+test('the orchestrator-selected Vietnam date anchor is accepted for the same reviewed seed run', async () => {
+  const db = makeDatabase();
+  const result = await runDemoSeed({ models: db.models, sequelize: db.sequelize, startDate: '2026-10-11', apply: false, now });
+  assert.equal(result.scheduleStartDate, '2026-10-11');
+  assert.equal(result.wouldCreate.flights, 50);
+});
+
+test('empty database preview and apply initialize all shared prerequisites before dependent rows', async () => {
+  const db = makeDatabase({ includePrerequisites: false });
+  const preview = await runDemoSeed({ models: db.models, sequelize: db.sequelize, apply: false, now });
+  assert.deepEqual(preview.wouldCreate, { roles: 3, airlines: 20, airports: 40, users: 3, flights: 50, fareClasses: 100, promotions: 10 });
+  assert.equal(db.transactions(), 0);
+  assert.equal(db.models.Role.rows.length, 0);
+
+  const applied = await runDemoSeed({ models: db.models, sequelize: db.sequelize, apply: true, now });
+  assert.deepEqual(applied.created, preview.wouldCreate);
+  assert.equal(db.models.Role.rows.length, 3);
+  assert.equal(db.models.Airline.rows.length, 20);
+  assert.equal(db.models.Airport.rows.length, 40);
+  for (const account of demoAccounts) {
+    const user = db.users.rows.find((row) => row.email === account.email);
+    const roleId = db.models.Role.rows.find((role) => role.name === account.role).id;
+    assert.equal(user.role_id, roleId);
+    assert.equal(user.password_hash === account.password, false);
+    assert.equal(await bcrypt.compare(account.password, user.password_hash), true);
+  }
+  assert.equal(demoAccounts.some((account) => JSON.stringify(applied).includes(account.password)), false);
+});
+
 test('apply hashes passwords and preserves an existing account instead of changing its role or password', async () => {
   const existing = { id: 101, email: 'admin@airline-booking.local', role_id: 3, full_name: 'Existing account', password_hash: 'existing-hash', status: 'locked' };
   const db = makeDatabase({ existingUser: existing });
-  const result = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: true, now });
+  const result = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: true, now });
   assert.equal(result.created.users, 2);
   assert.deepEqual(existing, { id: 101, email: 'admin@airline-booking.local', role_id: 3, full_name: 'Existing account', password_hash: 'existing-hash', status: 'locked' });
   const createdStaff = db.users.rows.find((user) => user.email === 'staff.demo@airline-booking.local');
   assert.equal(createdStaff.role_id, 9);
   assert.equal(createdStaff.status, 'active');
-  assert.equal(await bcrypt.compare(passwords.SEED_STAFF_PASSWORD, createdStaff.password_hash), true);
-  assert.equal(JSON.stringify(result).includes(passwords.SEED_STAFF_PASSWORD), false);
+  assert.equal(await bcrypt.compare('DemoStaff@2026!', createdStaff.password_hash), true);
+  assert.notEqual(createdStaff.password_hash, 'DemoStaff@2026!');
+  assert.equal(JSON.stringify(result).includes('DemoStaff@2026!'), false);
 });
 
 test('rerunning with the fixed schedule anchor is idempotent and leaves bookings/payments untouched', async () => {
   const db = makeDatabase();
-  await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: true, now });
+  await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: true, now });
   const before = { bookings: structuredClone(db.bookings.rows), payments: structuredClone(db.payments.rows) };
-  const rerun = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: true, now: new Date('2026-10-12T03:00:00.000Z') });
-  assert.deepEqual(rerun.created, { users: 0, flights: 0, fareClasses: 0, promotions: 0 });
+  const rerun = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: true, now: new Date('2026-10-12T03:00:00.000Z') });
+  assert.deepEqual(rerun.created, { roles: 0, airlines: 0, airports: 0, users: 0, flights: 0, fareClasses: 0, promotions: 0 });
   assert.equal(db.flights.rows.length, 50);
   assert.equal(db.fareClasses.rows.length, 100);
   assert.deepEqual(db.bookings.rows, before.bookings);
   assert.deepEqual(db.payments.rows, before.payments);
 });
 
-test('a changed seed date cannot silently create a second demo flight set', async () => {
+test('rerun infers and preserves the existing schedule date without local date configuration', async () => {
   const db = makeDatabase();
-  await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: true, now });
-  await assert.rejects(runDemoSeed({ models: db.models, sequelize: db.sequelize, config: { ...passwords, SEED_FLIGHT_START_DATE: '2026-10-11' }, apply: true, now }), /existing demo flight schedule/i);
+  await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: true, now });
+  const preview = await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: false, now: new Date('2026-10-12T03:00:00.000Z') });
+  assert.equal(preview.scheduleStartDate, '2026-10-10');
+  assert.equal(preview.wouldCreate.flights, 0);
   assert.equal(db.flights.rows.length, 50);
 });
 
-test('new accounts require passwords before opening the transaction', async () => {
+test('partial schedule from an earlier date is refused rather than reseeding a new calendar week', async () => {
   const db = makeDatabase();
-  await assert.rejects(runDemoSeed({ models: db.models, sequelize: db.sequelize, config: { ...passwords, SEED_CUSTOMER_PASSWORD: '' }, apply: true, now }), /customer/i);
-  assert.equal(db.transactions(), 0);
+  const oldPlan = buildDemoPlan({ airlines: fixtures().airlines, airports: fixtures().airports, startDate: '2026-10-10', now }).flights[0];
+  const { slot: _slot, ...flight } = oldPlan;
+  db.flights.rows.push({ id: 501, ...flight });
+  await assert.rejects(runDemoSeed({ models: db.models, sequelize: db.sequelize, apply: true, now: new Date('2026-10-12T03:00:00.000Z') }), /partial.*schedule/i);
+  assert.equal(db.flights.rows.length, 1);
+  assert.equal(db.fareClasses.rows.length, 0);
 });
 
 test('the seeder never mutates Booking or Payment and has no destructive model operation', async () => {
   const db = makeDatabase();
   const beforeBookings = structuredClone(db.bookings.rows);
   const beforePayments = structuredClone(db.payments.rows);
-  await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: true, now });
+  await runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: true, now });
   assert.deepEqual(db.bookings.rows, beforeBookings);
   assert.deepEqual(db.payments.rows, beforePayments);
   assert.equal(typeof db.models.Booking.create, 'function');
@@ -167,11 +230,26 @@ test('the seeder never mutates Booking or Payment and has no destructive model o
   assert.equal(db.models.Payment.destroy, undefined);
 });
 
+test('a mid-transaction write failure rolls back demo changes and leaves bookings/payments untouched', async () => {
+  const db = makeDatabase({ includePrerequisites: false, failPromotionCreate: true });
+  const before = { bookings: structuredClone(db.bookings.rows), payments: structuredClone(db.payments.rows) };
+  await assert.rejects(runDemoSeed({ models: db.models, sequelize: db.sequelize, apply: true, now }), /simulated promotion insert failure/);
+  assert.equal(db.models.Role.rows.length, 0);
+  assert.equal(db.models.Airline.rows.length, 0);
+  assert.equal(db.models.Airport.rows.length, 0);
+  assert.equal(db.users.rows.length, 0);
+  assert.equal(db.flights.rows.length, 0);
+  assert.deepEqual(db.bookings.rows, before.bookings);
+  assert.deepEqual(db.payments.rows, before.payments);
+});
+
 test('an existing conflicting flight slot aborts safely without overwriting it', async () => {
   const db = makeDatabase();
-  db.flights.rows.push({ id: 88, airline_id: 10, departure_airport_id: 100, arrival_airport_id: 101, departure_time: new Date('2026-10-09T23:00:00.000Z'), arrival_time: new Date('2026-10-10T01:10:00.000Z'), total_seats: 123, available_seats: 70, status: 'scheduled' });
+  const planned = buildDemoPlan({ airlines: fixtures().airlines, airports: fixtures().airports, startDate: '2026-10-10', now }).flights[0];
+  const { slot: _slot, ...flight } = planned;
+  db.flights.rows.push({ id: 88, ...flight, total_seats: 123, available_seats: 70 });
   const original = structuredClone(db.flights.rows[0]);
-  await assert.rejects(runDemoSeed({ models: db.models, sequelize: db.sequelize, config: passwords, apply: true, now }), /conflict|existing flight/i);
+  await assert.rejects(runDemoSeed({ models: db.models, sequelize: db.sequelize, config: {}, apply: true, now }), /conflict|existing flight/i);
   assert.deepEqual(db.flights.rows[0], original);
   assert.equal(db.flights.rows.length, 1);
 });

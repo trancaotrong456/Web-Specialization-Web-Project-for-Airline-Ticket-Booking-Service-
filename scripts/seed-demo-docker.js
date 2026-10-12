@@ -3,9 +3,13 @@
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const dotenv = require('dotenv');
-const { assertSeedPasswords } = require('./demo-seed-core');
-const SEED_CONFIG_KEYS = ['SEED_ADMIN_PASSWORD', 'SEED_STAFF_PASSWORD', 'SEED_CUSTOMER_PASSWORD', 'SEED_FLIGHT_START_DATE'];
+const DEMO_FIXTURE_FILES = [
+  ['coreSource', 'scripts', 'demo-seed-core.js'],
+  ['localSource', 'scripts', 'seed-demo-local.js'],
+  ['prerequisiteSource', 'scripts', 'demo-seed-prerequisites.js'],
+  ['fixturesSource', 'seeders', 'demo-fixtures.js'],
+];
+const COMPOSE_PREFIX = ['compose', '--env-file', 'docker.env'];
 
 const LOCAL_DOCKER_ENDPOINTS = new Set([
   'npipe:////./pipe/docker_engine',
@@ -42,8 +46,11 @@ function assertComposeContainers(apiId, dbId, apiInspection, dbInspection) {
   if (!apiProject || apiProject !== dbProject || apiLabels['com.docker.compose.service'] !== 'api' || dbLabels['com.docker.compose.service'] !== 'db') {
     throw new Error('API and DB containers are not the api/db services of the same Compose project.');
   }
-  if (!apiInspection?.State?.Running || !dbInspection?.State?.Running || dbInspection?.State?.Health?.Status !== 'healthy') {
-    throw new Error('The verified local Compose API must be running and its DB service must be healthy.');
+  if (!apiInspection?.State?.Running || apiInspection?.State?.Health?.Status !== 'healthy') {
+    throw new Error('The verified local Compose API must be running and healthy (migrations complete).');
+  }
+  if (!dbInspection?.State?.Running || dbInspection?.State?.Health?.Status !== 'healthy') {
+    throw new Error('The verified local Compose DB service must be running and healthy.');
   }
   return { project: apiProject };
 }
@@ -55,78 +62,78 @@ function run(command, args, { input, cwd = process.cwd() } = {}) {
   return result.stdout.trim();
 }
 
-function dockerJson(format, id, cwd = process.cwd()) {
-  return JSON.parse(run('docker', ['inspect', '--format', format, id], { cwd }));
+function dockerJson(format, id, cwd = process.cwd(), dockerRun = run) {
+  return JSON.parse(dockerRun('docker', ['inspect', '--format', format, id], { cwd }));
 }
 
-function resolveDemoConfig({ apply, root = process.cwd(), envFile = 'demo-seed.local.env', exampleFile = 'demo-seed.local.env.example' }) {
-  const configPath = path.join(root, envFile);
-  if (apply) {
-    if (!fs.existsSync(configPath)) throw new Error(`Missing ${envFile}; copy ${exampleFile} and configure demo passwords before --apply.`);
-    const parsed = dotenv.parse(fs.readFileSync(configPath));
-    const config = Object.fromEntries(SEED_CONFIG_KEYS.filter((key) => parsed[key] !== undefined).map((key) => [key, parsed[key]]));
-    assertSeedPasswords(config);
-    return config;
-  }
-  if (!fs.existsSync(configPath)) return {};
-  const parsed = dotenv.parse(fs.readFileSync(configPath));
-  return parsed.SEED_FLIGHT_START_DATE ? { SEED_FLIGHT_START_DATE: parsed.SEED_FLIGHT_START_DATE } : {};
+function resolveDemoConfig() {
+  return {};
 }
 
-function buildExecutionPayload({ root = process.cwd(), config = {}, apply = false }) {
+function buildExecutionPayload({ root = process.cwd(), apply = false, startDate }) {
   const rootPath = fs.realpathSync(root);
-  const scriptsPath = path.join(rootPath, 'scripts');
   const sources = {};
-  for (const [key, fileName] of [['coreSource', 'demo-seed-core.js'], ['localSource', 'seed-demo-local.js']]) {
-    const filePath = path.join(scriptsPath, fileName);
+  for (const [key, directory, fileName] of DEMO_FIXTURE_FILES) {
+    const sourceDirectory = path.join(rootPath, directory);
+    const filePath = path.join(sourceDirectory, fileName);
     const metadata = fs.lstatSync(filePath);
-    if (!metadata.isFile() || metadata.isSymbolicLink() || path.dirname(fs.realpathSync(filePath)) !== scriptsPath) {
-      throw new Error(`Refusing unsafe demo-seed source path: ${fileName}`);
+    if (!metadata.isFile() || metadata.isSymbolicLink() || path.dirname(fs.realpathSync(filePath)) !== sourceDirectory) {
+      throw new Error(`Refusing unsafe demo-seed source path: ${directory}/${fileName}`);
     }
     sources[key] = fs.readFileSync(filePath, 'utf8');
   }
-  const safeConfig = Object.fromEntries(SEED_CONFIG_KEYS.filter((key) => config[key] !== undefined).map((key) => [key, config[key]]));
-  return { ...sources, config: safeConfig, apply: Boolean(apply) };
+  return { ...sources, apply: Boolean(apply), startDate: startDate || null };
 }
 
 function buildContainerBootstrap({ nodeModulesPath = '/app/node_modules' } = {}) {
   return [
     "'use strict';",
-    "const fs=require('fs'),os=require('os'),path=require('path'),{Readable}=require('stream');",
+    "const fs=require('fs'),os=require('os'),path=require('path');",
     "async function readInput(){let raw='';process.stdin.setEncoding('utf8');for await(const chunk of process.stdin)raw+=chunk;return JSON.parse(raw);}",
     `async function run(){process.env.NODE_PATH=[${JSON.stringify(nodeModulesPath)},process.env.NODE_PATH].filter(Boolean).join(path.delimiter);require('module').Module._initPaths();const payload=await readInput();const tempDirectory=fs.mkdtempSync(path.join(os.tmpdir(),'airline-demo-seed-'));`,
-    "try{fs.writeFileSync(path.join(tempDirectory,'demo-seed-core.js'),payload.coreSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(tempDirectory,'seed-demo-local.js'),payload.localSource,{encoding:'utf8',mode:0o600});const {main}=require(path.join(tempDirectory,'seed-demo-local.js'));await main({argv:payload.apply?['--apply']:[],stdin:Readable.from([JSON.stringify(payload.config)]),env:process.env});}",
+    "try{const scripts=path.join(tempDirectory,'scripts'),seeders=path.join(tempDirectory,'seeders');fs.mkdirSync(scripts,{mode:0o700});fs.mkdirSync(seeders,{mode:0o700});fs.writeFileSync(path.join(scripts,'demo-seed-core.js'),payload.coreSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(scripts,'seed-demo-local.js'),payload.localSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(scripts,'demo-seed-prerequisites.js'),payload.prerequisiteSource,{encoding:'utf8',mode:0o600});fs.writeFileSync(path.join(seeders,'demo-fixtures.js'),payload.fixturesSource,{encoding:'utf8',mode:0o600});const {main}=require(path.join(scripts,'seed-demo-local.js'));const argv=payload.apply?['--apply']:[];if(payload.startDate)argv.push('--start-date',payload.startDate);await main({argv,env:process.env});}",
     "finally{const tempRoot=path.resolve(os.tmpdir());const resolved=path.resolve(tempDirectory);if(path.dirname(resolved)!==tempRoot||!path.basename(resolved).startsWith('airline-demo-seed-'))throw new Error('Refusing unsafe temporary seed-script cleanup path.');fs.rmSync(tempDirectory,{recursive:true,force:true});}}",
     "run().catch(error=>{console.error('Seed demo bị từ chối hoặc thất bại an toàn:',error.message);process.exitCode=1;});",
   ].join('\n');
 }
 
 function prepareDockerTarget({ root = process.cwd(), dockerRun = run } = {}) {
-  const services = dockerRun('docker', ['compose', 'config', '--services'], { cwd: root }).split(/\r?\n/).filter(Boolean);
+  const services = dockerRun('docker', [...COMPOSE_PREFIX, 'config', '--services'], { cwd: root }).split(/\r?\n/).filter(Boolean);
   if (!services.includes('api') || !services.includes('db')) throw new Error('Current Compose project must define both api and db services.');
-  const compose = JSON.parse(dockerRun('docker', ['compose', 'config', '--format', 'json'], { cwd: root }));
+  const compose = JSON.parse(dockerRun('docker', [...COMPOSE_PREFIX, 'config', '--format', 'json'], { cwd: root }));
   assertSafeComposeConfig(compose);
   const contextName = dockerRun('docker', ['context', 'show'], { cwd: root });
   const endpoint = dockerRun('docker', ['context', 'inspect', contextName, '--format', '{{json .Endpoints.docker.Host}}'], { cwd: root });
   assertLocalDockerEndpoint(JSON.parse(endpoint));
 
-  const apiId = dockerRun('docker', ['compose', 'ps', '-q', 'api'], { cwd: root });
-  const dbId = dockerRun('docker', ['compose', 'ps', '-q', 'db'], { cwd: root });
-  const apiInspection = dockerJson('{{json .}}', apiId, root);
-  const dbInspection = dockerJson('{{json .}}', dbId, root);
+  const apiId = dockerRun('docker', [...COMPOSE_PREFIX, 'ps', '-q', 'api'], { cwd: root });
+  const dbId = dockerRun('docker', [...COMPOSE_PREFIX, 'ps', '-q', 'db'], { cwd: root });
+  const apiInspection = dockerJson('{{json .}}', apiId, root, dockerRun);
+  const dbInspection = dockerJson('{{json .}}', dbId, root, dockerRun);
   const identities = assertComposeContainers(apiId, dbId, apiInspection, dbInspection);
   return { project: identities.project, apiId, dbId };
 }
 
+function parseDockerSeedArgs(argv = []) {
+  let apply = false;
+  let startDate;
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--apply' && !apply) apply = true;
+    else if (argv[index] === '--start-date' && !startDate && /^\d{4}-\d{2}-\d{2}$/.test(argv[index + 1] || '')) {
+      startDate = argv[index + 1];
+      index += 1;
+    } else throw new Error('Usage: npm run seed:demo:docker [-- --apply]');
+  }
+  return { apply, startDate };
+}
+
 function main(argv = process.argv.slice(2), root = process.cwd()) {
-  if (argv.some((arg) => arg !== '--apply')) throw new Error('Usage: npm run seed:demo:docker [-- --apply]');
-  const apply = argv.includes('--apply');
-  const config = resolveDemoConfig({ apply, root });
+  const { apply, startDate } = parseDockerSeedArgs(argv);
   const target = prepareDockerTarget({ root });
-  const payload = buildExecutionPayload({ root, config, apply });
+  const payload = buildExecutionPayload({ root, apply, startDate });
   const bootstrap = buildContainerBootstrap();
-  const args = ['compose', 'exec', '-T', '-e', `DEMO_SEED_COMPOSE_PROJECT=${target.project}`, '-e', `DEMO_SEED_API_CONTAINER_ID=${target.apiId}`, '-e', `DEMO_SEED_DB_CONTAINER_ID=${target.dbId}`, '-e', 'DEMO_SEED_PROJECT_ROOT=/app', 'api', 'node', '-e', bootstrap];
-  // Current workspace seed code and allowlisted secrets travel in stdin, never in CLI args or logs.
+  const args = [...COMPOSE_PREFIX, 'exec', '-T', '-e', `DEMO_SEED_COMPOSE_PROJECT=${target.project}`, '-e', `DEMO_SEED_API_CONTAINER_ID=${target.apiId}`, '-e', `DEMO_SEED_DB_CONTAINER_ID=${target.dbId}`, '-e', 'DEMO_SEED_PROJECT_ROOT=/app', 'api', 'node', '-e', bootstrap];
+  // Fixed public demo fixtures travel through stdin; no private/local environment credentials are forwarded.
   const result = spawnSync('docker', args, { cwd: root, input: JSON.stringify(payload), encoding: 'utf8', windowsHide: true, maxBuffer: 2 * 1024 * 1024 });
   if (result.error) throw new Error(`Could not start the demo seed command: ${result.error.message}`);
   if (result.stdout) process.stdout.write(result.stdout);
@@ -142,4 +149,4 @@ if (require.main === module) {
   }
 }
 
-module.exports = { assertLocalDockerEndpoint, assertSafeComposeConfig, assertComposeContainers, resolveDemoConfig, buildExecutionPayload, buildContainerBootstrap, prepareDockerTarget, main };
+module.exports = { assertLocalDockerEndpoint, assertSafeComposeConfig, assertComposeContainers, resolveDemoConfig, parseDockerSeedArgs, buildExecutionPayload, buildContainerBootstrap, prepareDockerTarget, main };

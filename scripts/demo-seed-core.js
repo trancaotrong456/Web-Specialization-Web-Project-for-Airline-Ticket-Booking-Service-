@@ -1,14 +1,12 @@
 'use strict';
 
 const bcrypt = require('bcryptjs');
+const DEMO_FIXTURES = require('../seeders/demo-fixtures');
+const { planDemoPrerequisites, ensureDemoPrerequisites } = require('./demo-seed-prerequisites');
 
 const TZ_OFFSET_MS = 7 * 60 * 60 * 1000;
 const TOTAL_SEATS = 180;
-const DEMO_ACCOUNTS = [
-  { role: 'admin', email: 'admin@airline-booking.local', passwordKey: 'SEED_ADMIN_PASSWORD', full_name: 'Demo Admin' },
-  { role: 'staff', email: 'staff.demo@airline-booking.local', passwordKey: 'SEED_STAFF_PASSWORD', full_name: 'Demo Staff' },
-  { role: 'customer', email: 'customer.demo@airline-booking.local', passwordKey: 'SEED_CUSTOMER_PASSWORD', full_name: 'Demo Customer' },
-];
+const DEMO_ACCOUNTS = DEMO_FIXTURES.demoAccounts;
 const ROUTES = [
   { from: 'HAN', to: 'SGN', minutes: 130 }, { from: 'SGN', to: 'HAN', minutes: 130 },
   { from: 'HAN', to: 'DAD', minutes: 85 }, { from: 'DAD', to: 'HAN', minutes: 85 },
@@ -31,8 +29,11 @@ const PROMOTION_SPECS = [
 
 const valueOf = (row, key) => (typeof row?.get === 'function' ? row.get(key) : row?.[key]);
 const codeDate = (value) => {
-  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  throw new Error('SEED_FLIGHT_START_DATE must use YYYY-MM-DD format.');
+  if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const parsed = new Date(`${value}T00:00:00Z`);
+    if (!Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value) return value;
+  }
+  throw new Error('Demo flight start date must be a valid calendar date in YYYY-MM-DD format.');
 };
 const vietnamDate = (date) => new Date(new Date(date).getTime() + TZ_OFFSET_MS).toISOString().slice(0, 10);
 const daysFromTodayVietnam = (date, now) => {
@@ -40,6 +41,7 @@ const daysFromTodayVietnam = (date, now) => {
   return Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000);
 };
 const plusDays = (date, days) => new Date(Date.parse(`${date}T00:00:00Z`) + days * 86_400_000).toISOString().slice(0, 10);
+const defaultDemoStartDate = (now = new Date()) => plusDays(vietnamDate(now), 1);
 const sameInstant = (left, right) => new Date(left).getTime() === new Date(right).getTime();
 const flightKey = (flight) => [
   valueOf(flight, 'airline_id'), valueOf(flight, 'departure_airport_id'), valueOf(flight, 'arrival_airport_id'),
@@ -65,19 +67,13 @@ function assertSafeDockerTarget(env, runtime) {
   return true;
 }
 
-function assertSeedPasswords(config) {
-  for (const account of DEMO_ACCOUNTS) {
-    if (typeof config?.[account.passwordKey] !== 'string' || !config[account.passwordKey].trim()) {
-      throw new Error(`Missing password configuration for ${account.role} demo account.`);
-    }
-  }
-  return true;
-}
-
 function buildDemoPlan({ airlines, airports, startDate, now = new Date() }) {
   const start = codeDate(startDate);
-  if (!Array.isArray(airlines) || airlines.length === 0) throw new Error('No airline records are available; seed prerequisites are missing.');
-  const sortedAirlines = [...airlines].sort((a, b) => String(valueOf(a, 'iata_code')).localeCompare(String(valueOf(b, 'iata_code'))));
+  const fixtureAirlineCodes = new Set(DEMO_FIXTURES.airlines.map((airline) => airline.iata_code));
+  const sortedAirlines = airlines
+    .filter((airline) => fixtureAirlineCodes.has(valueOf(airline, 'iata_code')))
+    .sort((a, b) => String(valueOf(a, 'iata_code')).localeCompare(String(valueOf(b, 'iata_code'))));
+  if (!sortedAirlines.length) throw new Error('No shared demo airline records are available; seed prerequisites are missing.');
   const airportByCode = new Map((airports || []).map((airport) => [valueOf(airport, 'iata_code'), airport]));
   for (const route of ROUTES) {
     if (!airportByCode.has(route.from) || !airportByCode.has(route.to)) {
@@ -138,14 +134,20 @@ function inferExistingStart({ airlines, airports, flights, now }) {
     for (let offset = 0; offset < 5; offset += 1) candidateDates.add(plusDays(departureDate, -offset));
   }
   const matches = [];
+  const partialStarts = new Set();
   for (const startDate of candidateDates) {
     let plan;
     try { plan = buildDemoPlan({ airlines, airports, startDate, now }); } catch (_error) { continue; }
     const result = exactExistingPlan(plan, flights);
     if (result.complete) matches.push({ startDate, plan, matches: result.matches });
+    else if (result.count > 0) partialStarts.add(startDate);
   }
   if (matches.length > 1) throw new Error('Multiple possible demo flight schedules were found; refusing to guess the seed identity.');
-  return matches[0] || null;
+  if (matches.length) return matches[0];
+  if (partialStarts.size) {
+    throw new Error(`A partial existing demo flight schedule may start on ${[...partialStarts].sort()[0]}; refusing to create a second schedule.`);
+  }
+  return null;
 }
 
 async function loadSnapshot(models, transaction) {
@@ -167,21 +169,13 @@ async function loadSnapshot(models, transaction) {
   return { airlines, airports, flights, fareClasses, roles, existingUsers, existingPromotions };
 }
 
-function makeExecutionPlan(snapshot, config, now, apply) {
+function makeExecutionPlan(snapshot, now, requestedStartDate) {
   for (const name of ['admin', 'staff', 'customer']) {
     if (!snapshot.roles[name]) throw new Error(`Required role '${name}' was not found; refusing to create demo accounts.`);
   }
   if (!snapshot.airlines.length) throw new Error('Airline data is missing; no demo data was created.');
   const inferred = inferExistingStart({ airlines: snapshot.airlines, airports: snapshot.airports, flights: snapshot.flights, now });
-  const configuredStart = config?.SEED_FLIGHT_START_DATE || '';
-  let startDate = configuredStart ? codeDate(configuredStart) : inferred?.startDate;
-  if (!startDate) {
-    if (apply) throw new Error('Set SEED_FLIGHT_START_DATE once before the first apply; keep it unchanged for all reruns.');
-    startDate = plusDays(vietnamDate(now), 1);
-  }
-  if (inferred && configuredStart && inferred.startDate !== configuredStart) {
-    throw new Error(`An existing demo flight schedule starts on ${inferred.startDate}; refusing to create a second schedule. Keep SEED_FLIGHT_START_DATE unchanged.`);
-  }
+  const startDate = inferred?.startDate || codeDate(requestedStartDate || defaultDemoStartDate(now));
   const plan = buildDemoPlan({ airlines: snapshot.airlines, airports: snapshot.airports, startDate, now });
   const current = exactExistingPlan(plan, snapshot.flights);
   const matchingRouteTimes = plan.flights.filter((planned) => snapshot.flights.some((existing) => flightRouteTimeKey(existing) === flightRouteTimeKey(planned)));
@@ -208,11 +202,10 @@ function makeExecutionPlan(snapshot, config, now, apply) {
 
   if (!existingSchedule) {
     const daysAhead = daysFromTodayVietnam(startDate, now);
-    if (daysAhead < 1 || daysAhead > 30) throw new Error('For a new demo schedule, SEED_FLIGHT_START_DATE must be 1–30 days in the future.');
+    if (daysAhead < 1 || daysAhead > 30) throw new Error('The automatically selected demo schedule date is not within the allowed future range.');
     if (daysAhead > 7) throw new Error('Choose a start date within the next 7 days so the demo includes near-term flights.');
   }
   const accountsToCreate = DEMO_ACCOUNTS.filter((account) => !snapshot.existingUsers[account.email]);
-  if (apply) assertSeedPasswords(config);
   const promoToCreate = plan.promotions.filter((promotion) => !snapshot.existingPromotions[promotion.code]);
   return {
     plan,
@@ -225,26 +218,46 @@ function makeExecutionPlan(snapshot, config, now, apply) {
   };
 }
 
-async function runDemoSeed({ models, sequelize, config = {}, apply = false, now = new Date() }) {
+async function runDemoSeed({ models, sequelize, startDate, apply = false, now = new Date() }) {
   const analyze = async (transaction) => {
+    const prerequisitePlan = await planDemoPrerequisites({ models, transaction });
+    if (apply) await ensureDemoPrerequisites({ models, transaction });
     const snapshot = await loadSnapshot(models, transaction);
-    const execution = makeExecutionPlan(snapshot, config, now, apply);
-    const wouldCreate = {
+    if (!apply) {
+      const virtualRows = (kind) => prerequisitePlan[kind].missing.map((row, index) => ({
+        ...row,
+        id: `planned-${kind}-${index + 1}`,
+      }));
+      snapshot.roles = Object.fromEntries(['admin', 'staff', 'customer'].map((name) => [
+        name,
+        snapshot.roles[name] || virtualRows('roles').find((row) => row.name === name) || null,
+      ]));
+      snapshot.airlines = [...snapshot.airlines, ...virtualRows('airlines')];
+      snapshot.airports = [...snapshot.airports, ...virtualRows('airports')];
+    }
+    const execution = makeExecutionPlan(snapshot, now, startDate);
+    const seedRows = {
+      roles: prerequisitePlan.roles.missing.length,
+      airlines: prerequisitePlan.airlines.missing.length,
+      airports: prerequisitePlan.airports.missing.length,
       users: execution.accountsToCreate.length,
       flights: execution.flightsToCreate.length,
       fareClasses: execution.fareClassesToCreate.length,
       promotions: execution.promotionsToCreate.length,
     };
     const existing = {
-      users: DEMO_ACCOUNTS.length - wouldCreate.users,
+      roles: prerequisitePlan.roles.existing,
+      airlines: prerequisitePlan.airlines.existing,
+      airports: prerequisitePlan.airports.existing,
+      users: DEMO_ACCOUNTS.length - execution.accountsToCreate.length,
       flights: execution.flightScheduleExists ? execution.plan.flights.length : 0,
       fareClasses: execution.flightScheduleExists ? execution.plan.fareClasses.length : 0,
-      promotions: execution.plan.promotions.length - wouldCreate.promotions,
+      promotions: execution.plan.promotions.length - execution.promotionsToCreate.length,
     };
-    if (!apply) return { mode: 'dry-run', scheduleStartDate: execution.plan.startDate, flightScheduleExists: execution.flightScheduleExists, existing, wouldCreate };
+    if (!apply) return { mode: 'dry-run', scheduleStartDate: execution.plan.startDate, flightScheduleExists: execution.flightScheduleExists, existing, wouldCreate: { ...seedRows, users: execution.accountsToCreate.length, flights: execution.flightsToCreate.length, fareClasses: execution.fareClassesToCreate.length, promotions: execution.promotionsToCreate.length } };
 
     for (const account of execution.accountsToCreate) {
-      const password_hash = await bcrypt.hash(config[account.passwordKey], 12);
+      const password_hash = await bcrypt.hash(account.password, 10);
       await models.User.create({
         role_id: valueOf(execution.roles[account.role], 'id'),
         full_name: account.full_name,
@@ -270,12 +283,11 @@ async function runDemoSeed({ models, sequelize, config = {}, apply = false, now 
         await models.FareClass.create({ ...fields, flight_id: idsBySlot.get(slot) }, { transaction });
       }
     }
-    return { mode: 'apply', scheduleStartDate: execution.plan.startDate, flightScheduleExists: execution.flightScheduleExists, existing, created: wouldCreate };
+    return { mode: 'apply', scheduleStartDate: execution.plan.startDate, flightScheduleExists: execution.flightScheduleExists, existing, created: { ...seedRows, users: execution.accountsToCreate.length, flights: execution.flightsToCreate.length, fareClasses: execution.fareClassesToCreate.length, promotions: execution.promotionsToCreate.length } };
   };
 
   if (!apply) return analyze(null);
-  assertSeedPasswords(config);
   return sequelize.transaction((transaction) => analyze(transaction));
 }
 
-module.exports = { assertSafeDockerTarget, assertSeedPasswords, buildDemoPlan, runDemoSeed };
+module.exports = { assertSafeDockerTarget, buildDemoPlan, defaultDemoStartDate, runDemoSeed };
