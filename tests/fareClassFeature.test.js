@@ -49,7 +49,7 @@ test('#24 – createFareClassValidator validates input', async () => {
   assert.ok(validResult.isEmpty(), 'Valid payload must pass validation');
 });
 
-test('#24 – updateFareClassValidator validates edit payload', async () => {
+test('#24 – updateFareClassValidator validates edit payload and enforces allowlist', async () => {
   const { validationResult } = require('express-validator');
   const { updateFareClassValidator } = require('../validators/fareClass.validator');
 
@@ -65,6 +65,18 @@ test('#24 – updateFareClassValidator validates edit payload', async () => {
   const result = validationResult(invalidReq);
   assert.ok(!result.isEmpty(), 'Negative price/seats must fail validation');
 
+  const flightIdReq = {
+    body: {
+      flight_id: 10,
+      class_name: 'Business',
+    },
+  };
+  for (const middleware of updateFareClassValidator) {
+    await middleware(flightIdReq, {}, () => {});
+  }
+  const flightIdResult = validationResult(flightIdReq);
+  assert.ok(!flightIdResult.isEmpty(), 'Attempting to change flight_id must fail validation');
+
   const validReq = {
     body: {
       price: 2000000,
@@ -77,6 +89,42 @@ test('#24 – updateFareClassValidator validates edit payload', async () => {
   const validResult = validationResult(validReq);
   assert.ok(validResult.isEmpty(), 'Valid update payload must pass');
 });
+
+test('#24 – update in fareClass.service enforces allowlist and rejects changing flight_id', async () => {
+  const fareClassService = require('../services/fareClass.service');
+
+  await assert.rejects(
+    async () => {
+      await fareClassService.update(1, { flight_id: 99 });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('flight_id'));
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    async () => {
+      await fareClassService.update(1, { unknown_field: 'value' });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    async () => {
+      await fareClassService.update(1, { price: -100 });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      return true;
+    }
+  );
+});
+
 
 test('#24 – delete fare class checks bookings and throws 409', () => {
   const fs = require('fs');
