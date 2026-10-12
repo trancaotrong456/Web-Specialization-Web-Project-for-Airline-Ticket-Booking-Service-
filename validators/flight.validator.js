@@ -73,8 +73,32 @@ const createFlightValidator = [
 ];
 
 const updateFlightValidator = [
+  body().custom((value, { req }) => {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      throw new Error('Dữ liệu cập nhật phải là object');
+    }
+    const keys = Object.keys(req.body);
+    if (keys.length === 0) {
+      throw new Error('Vui lòng cung cấp ít nhất một trường cần cập nhật');
+    }
+    const ALLOWED = ['departure_time', 'arrival_time', 'status'];
+    const disallowed = keys.filter((key) => !ALLOWED.includes(key));
+    if (disallowed.length > 0) {
+      throw new Error(`Không được phép chỉnh sửa các trường: ${disallowed.join(', ')}`);
+    }
+    return true;
+  }),
   body('departure_time').optional().isISO8601().withMessage('departure_time must be a valid ISO8601 datetime'),
-  body('arrival_time').optional().isISO8601().withMessage('arrival_time must be a valid ISO8601 datetime'),
+  body('arrival_time')
+    .optional()
+    .isISO8601()
+    .withMessage('arrival_time must be a valid ISO8601 datetime')
+    .custom((val, { req }) => {
+      if (req.body.departure_time && new Date(val) <= new Date(req.body.departure_time)) {
+        throw new Error('arrival_time must be after departure_time');
+      }
+      return true;
+    }),
   body('status')
     .optional()
     .isIn(['scheduled', 'cancelled', 'completed'])
