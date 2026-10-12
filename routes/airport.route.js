@@ -11,11 +11,8 @@ const {
   updateAirportValidator,
 } = require('../validators/airport.validator');
 
-// ─── Public routes ─────────────────────────────────────────────────────────────
 router.get('/', listAirportValidator, validate, c.getAll);
 router.get('/:id', airportIdValidator, validate, c.getById);
-
-// ─── Admin-only routes ─────────────────────────────────────────────────────────
 router.post('/', authenticate, authorize('admin'), createAirportValidator, validate, c.create);
 router.put('/:id', authenticate, authorize('admin'), updateAirportValidator, validate, c.update);
 router.delete('/:id', authenticate, authorize('admin'), airportIdValidator, validate, c.delete);

@@ -6,14 +6,22 @@ const optionalAuth = require('../middlewares/optionalAuth.middleware');
 const authorize = require('../middlewares/rbac.middleware');
 const validate = require('../middlewares/validate.middleware');
 const {
-  initiatePaymentValidator,
-  refundValidator,
-  paymentListValidator,
-  paymentIdValidator,
+    initiatePaymentValidator,
+    refundValidator,
+    paymentListValidator,
+    paymentIdValidator,
+    revenueValidator,
 } = require('../validators/payment.validator');
 
 // Administrative payment history and detail (report Table 2.1).
-router.get('/', authenticate, authorize('admin'), paymentListValidator, validate, paymentController.getAllPayments);
+router.get(
+    '/',
+    authenticate,
+    authorize('admin'),
+    paymentListValidator,
+    validate,
+    paymentController.getAllPayments
+);
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);
@@ -28,6 +36,16 @@ router.get('/vnpay/ipn', paymentController.vnpayIpn);
 router.get('/payos/return', paymentController.payosReturn);
 router.post('/payos/webhook', paymentController.payosWebhook);
 router.post('/payos/demo-webhook', paymentController.payosDemoWebhook);
+
+// Admin only: Revenue statistics by day/month
+router.get(
+    '/revenue',
+    authenticate,
+    authorize('admin'),
+    revenueValidator,
+    validate,
+    paymentController.getRevenue
+);
 
 // Keep this parameter route after named gateway routes so, for example,
 // `/vnpay/return` is never interpreted as a payment id.

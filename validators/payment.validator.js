@@ -1,4 +1,26 @@
 const { body, param, query } = require('express-validator');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
+
+const paymentGuestEmailValidator = [
+  body('guest_email').custom((value, { req }) => {
+    if ((value === undefined || value === null) && !req.user) {
+      throw new Error('guest_email is required for guest payment');
+    }
+    return true;
+  }),
+  body('guest_email')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('guest_email must be a valid email if provided')
+    .bail()
+    .trim()
+    .isEmail()
+    .withMessage('guest_email must be a valid email if provided')
+    .bail()
+    .isLength({ max: 191 })
+    .withMessage('guest_email must not exceed 191 characters')
+    .customSanitizer(normalizeGuestEmail),
+];
 
 const initiatePaymentValidator = [
   body('booking_id')
@@ -15,11 +37,7 @@ const initiatePaymentValidator = [
     .optional()
     .isURL()
     .withMessage('return_url must be a valid URL'),
-  body('guest_email')
-    .optional({ nullable: true })
-    .trim()
-    .isEmail()
-    .withMessage('guest_email must be a valid email if provided'),
+  ...paymentGuestEmailValidator,
 ];
 
 const refundValidator = [
@@ -53,9 +71,42 @@ const paymentIdValidator = [
   param('id').isInt({ min: 1 }).withMessage('Payment ID must be a positive integer'),
 ];
 
+const revenueValidator = [
+  query('from_date')
+    .notEmpty()
+    .withMessage('from_date is required')
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('from_date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true, strictSeparator: true })
+    .withMessage('from_date must be a valid date'),
+
+  query('to_date')
+    .notEmpty()
+    .withMessage('to_date is required')
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('to_date must be in YYYY-MM-DD format')
+    .isISO8601({ strict: true, strictSeparator: true })
+    .withMessage('to_date must be a valid date')
+    .bail()
+    .custom((toDate, { req }) => {
+      const fromDate = req.query.from_date;
+      const datePattern = /^\d{4}-\d{2}-\d{2}$/;
+      if (!datePattern.test(fromDate || '') || !datePattern.test(toDate || '')) return true;
+      return fromDate <= toDate;
+    })
+    .withMessage('from_date must be before or equal to to_date'),
+
+  query('group_by')
+    .notEmpty()
+    .withMessage('group_by is required')
+    .isIn(['day', 'month'])
+    .withMessage('group_by must be either day or month'),
+];
+
 module.exports = {
   initiatePaymentValidator,
   refundValidator,
   paymentListValidator,
   paymentIdValidator,
+  revenueValidator,
 };

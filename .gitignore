@@ -4,8 +4,14 @@ certs/
 node_modules/
 .env.*
 !.env.example
+/demo-seed.local.env
 *.log
 dist/
 build/
 .vscode/
 .DS_Store
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local

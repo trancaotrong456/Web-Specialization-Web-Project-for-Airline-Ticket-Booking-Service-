@@ -10,6 +10,25 @@ const {
 } = require('../utils/jwt.util');
 
 class AuthService {
+  _hashRefreshToken(rawToken) {
+    return crypto.createHash('sha256').update(rawToken).digest('hex');
+  }
+
+  _matchesRefreshTokenDigest(storedValue, presentedDigest) {
+    if (typeof storedValue !== 'string' || !/^[a-f0-9]{64}$/i.test(storedValue)) return false;
+
+    const storedBuffer = Buffer.from(storedValue, 'hex');
+    const presentedBuffer = Buffer.from(presentedDigest, 'hex');
+    return storedBuffer.length === presentedBuffer.length
+      && crypto.timingSafeEqual(storedBuffer, presentedBuffer);
+  }
+
+  _invalidRefreshTokenError() {
+    const error = new Error('Refresh token has been revoked or is invalid');
+    error.statusCode = 401;
+    return error;
+  }
+
   _passwordResetUrl(rawToken) {
     const configuredUrl = process.env.PASSWORD_RESET_URL
       || (process.env.CLIENT_URL
@@ -87,7 +106,7 @@ class AuthService {
     };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
-    await newUser.update({ refresh_token: refreshToken });
+    await newUser.update({ refresh_token: this._hashRefreshToken(refreshToken) });
 
     return {
       user: {
@@ -139,7 +158,7 @@ class AuthService {
     };
     const accessToken = generateAccessToken(tokenPayload);
     const refreshToken = generateRefreshToken(tokenPayload);
-    await user.update({ refresh_token: refreshToken });
+    await user.update({ refresh_token: this._hashRefreshToken(refreshToken) });
 
     return {
       user: {
@@ -171,16 +190,45 @@ class AuthService {
       include: [{ model: Role, as: 'role', attributes: ['id', 'name'] }],
     });
 
-    if (!user || user.refresh_token !== oldRefreshToken) {
-      const error = new Error('Refresh token has been revoked or is invalid');
-      error.statusCode = 401;
-      throw error;
-    }
+    if (!user) throw this._invalidRefreshTokenError();
+
+    const presentedDigest = this._hashRefreshToken(oldRefreshToken);
+    const storedValue = user.refresh_token;
+    const isLegacyRawToken = storedValue === oldRefreshToken;
+    const isStoredDigest = this._matchesRefreshTokenDigest(storedValue, presentedDigest);
+    if (!isLegacyRawToken && !isStoredDigest) throw this._invalidRefreshTokenError();
 
     if (user.status === 'locked') {
       const error = new Error('Account has been locked. Please contact support.');
       error.statusCode = 403;
       throw error;
+    }
+
+    // Existing raw tokens remain valid until their normal expiry/revocation.
+    // Upgrade only the presented session, and only if it is still current.
+    if (isLegacyRawToken) {
+      const [updatedRows] = await User.update(
+        { refresh_token: presentedDigest },
+        {
+          where: {
+            id: user.id,
+            [Op.and]: User.sequelize.where(
+              User.sequelize.fn('BINARY', User.sequelize.col('refresh_token')),
+              oldRefreshToken,
+            ),
+          },
+        },
+      );
+
+      if (updatedRows !== 1) {
+        // Another request may have upgraded this same token concurrently. Accept
+        // only if it is now stored as the matching digest; logout/revoke remains
+        // fail-closed because the latest value will be null or different.
+        const latestUser = await User.findByPk(user.id);
+        if (!latestUser || !this._matchesRefreshTokenDigest(latestUser.refresh_token, presentedDigest)) {
+          throw this._invalidRefreshTokenError();
+        }
+      }
     }
 
     const roleName = user.role ? user.role.name : 'customer';
@@ -283,9 +331,6 @@ class AuthService {
     const normalizedEmail = email.trim().toLowerCase();
     const user = await User.findOne({ where: { email: normalizedEmail } });
 
-    // Keep the response identical for unknown and locked accounts to prevent
-    // account enumeration and avoid restoring access to an administratively
-    // locked account through the password-reset flow.
     if (!user || user.status === 'locked') return genericResult;
 
     const rawToken = crypto.randomBytes(32).toString('hex');
@@ -298,55 +343,61 @@ class AuthService {
       ? configuredMinutes
       : 30;
 
+    let resetUrl;
+    try {
+      resetUrl = this._passwordResetUrl(rawToken);
+    } catch (error) {
+      console.error(`[AUTH] Password reset URL configuration failed: ${error.message}`);
+      return genericResult;
+    }
+
     user.reset_token = tokenHash;
     user.reset_token_expires_at = new Date(Date.now() + expiresMinutes * 60 * 1000);
     await user.save();
 
-    try {
-      const resetUrl = this._passwordResetUrl(rawToken);
-      await emailService.sendMail({
-        to: user.email,
-        subject: '[Airline Booking] Đặt lại mật khẩu',
-        html: `
-          <h2>Đặt lại mật khẩu</h2>
-          <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
-          <p><a href="${resetUrl}">Đặt lại mật khẩu</a></p>
-          <p>Liên kết này hết hạn sau ${expiresMinutes} phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
-        `,
-      });
-    } catch (error) {
-      user.reset_token = null;
-      user.reset_token_expires_at = null;
-      await user.save();
-      throw error;
-    }
+    void emailService.sendMail({
+      to: user.email,
+      subject: '[Airline Booking] Đặt lại mật khẩu',
+      html: `
+        <h2>Đặt lại mật khẩu</h2>
+        <p>Chúng tôi nhận được yêu cầu đặt lại mật khẩu cho tài khoản của bạn.</p>
+        <p><a href="${resetUrl}">Đặt lại mật khẩu</a></p>
+        <p>Liên kết này hết hạn sau ${expiresMinutes} phút. Nếu bạn không yêu cầu, hãy bỏ qua email này.</p>
+      `,
+    }).catch((error) => {
+      // Never expose provider availability only for registered accounts.
+      // Operational failures remain server-side while the public response is uniform.
+      console.error(`[AUTH] Password reset email failed: ${error.message}`);
+    });
 
     return genericResult;
   }
 
   async resetPassword(rawToken, newPassword) {
     const tokenHash = crypto.createHash('sha256').update(rawToken).digest('hex');
-    const user = await User.findOne({
+    const passwordHash = await bcrypt.hash(newPassword, 10);
+    const [updatedRows] = await User.update({
+      password_hash: passwordHash,
+      reset_token: null,
+      reset_token_expires_at: null,
+      refresh_token: null,
+    }, {
       where: {
         reset_token: tokenHash,
         reset_token_expires_at: { [Op.gt]: new Date() },
+        status: 'active',
       },
     });
 
-    if (!user) {
+    if (updatedRows !== 1) {
       const error = new Error('Reset token is invalid or has expired');
       error.statusCode = 400;
       throw error;
     }
 
-    user.password_hash = await bcrypt.hash(newPassword, 10);
-    user.reset_token = null;
-    user.reset_token_expires_at = null;
-    user.refresh_token = null;
-    await user.save();
-
     return { message: 'Password reset successfully. Please log in again.' };
   }
+
 }
 
 module.exports = new AuthService();

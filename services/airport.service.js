@@ -1,9 +1,6 @@
-'use strict';
-
 const { Op } = require('sequelize');
 const { Airport, Flight } = require('../models');
 
-/** Các trường được phép trả về trong response */
 const AIRPORT_ATTRIBUTES = [
   'id',
   'iata_code',
@@ -14,10 +11,23 @@ const AIRPORT_ATTRIBUTES = [
   'updated_at',
 ];
 
+const FORBIDDEN_FIELDS = ['id', 'created_at', 'updated_at', 'createdAt', 'updatedAt'];
+
+const assertNoForbiddenFields = (data) => {
+  if (data && typeof data === 'object') {
+    for (const field of FORBIDDEN_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(data, field)) {
+        const error = new Error(`Field '${field}' cannot be modified or supplied`);
+        error.statusCode = 400;
+        throw error;
+      }
+    }
+  }
+};
+
 class AirportService {
   /**
-   * Lấy danh sách sân bay có phân trang và tìm kiếm.
-   * Tìm kiếm theo name, iata_code, city, country.
+   * Lấy danh sách sân bay có phân trang và tìm kiếm (theo tên, city, iata_code).
    */
   async getAll({ page = 1, limit = 20, search } = {}) {
     const pageNumber = Math.max(1, parseInt(page, 10) || 1);
@@ -31,7 +41,6 @@ class AirportService {
         { name: { [Op.like]: term } },
         { iata_code: { [Op.like]: term } },
         { city: { [Op.like]: term } },
-        { country: { [Op.like]: term } },
       ];
     }
 
@@ -69,14 +78,22 @@ class AirportService {
 
   /**
    * Thêm sân bay mới.
-   * Kiểm tra trùng IATA code trước khi tạo.
+   * Kiểm tra trùng IATA code trước khi tạo. Chống mass assignment.
    */
   async create(data) {
+    assertNoForbiddenFields(data);
+
+    if (!data.iata_code || !data.name || !data.city) {
+      const error = new Error('Missing required airport fields');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const payload = {
-      iata_code: data.iata_code.trim().toUpperCase(),
-      name: data.name.trim(),
-      city: data.city.trim(),
-      country: data.country ? data.country.trim() : null,
+      iata_code: String(data.iata_code).trim().toUpperCase(),
+      name: String(data.name).trim(),
+      city: String(data.city).trim(),
+      country: data.country ? String(data.country).trim() : null,
     };
 
     // Kiểm tra IATA code đã tồn tại chưa
@@ -91,7 +108,6 @@ class AirportService {
 
     try {
       const airport = await Airport.create(payload);
-      // Trả về với attributes đã chọn
       return await this.getById(airport.id);
     } catch (err) {
       if (err.name === 'SequelizeUniqueConstraintError') {
@@ -108,11 +124,13 @@ class AirportService {
    * Kiểm tra trùng IATA code với các sân bay khác (không phải chính nó).
    */
   async update(id, data) {
+    assertNoForbiddenFields(data);
+
     const airport = await this.getById(id);
     const payload = {};
 
     if (data.iata_code !== undefined) {
-      const normalizedIata = data.iata_code.trim().toUpperCase();
+      const normalizedIata = String(data.iata_code).trim().toUpperCase();
       if (normalizedIata !== airport.iata_code) {
         const existing = await Airport.findOne({
           where: {
@@ -130,15 +148,15 @@ class AirportService {
     }
 
     if (data.name !== undefined) {
-      payload.name = data.name.trim();
+      payload.name = String(data.name).trim();
     }
 
     if (data.city !== undefined) {
-      payload.city = data.city.trim();
+      payload.city = String(data.city).trim();
     }
 
     if (data.country !== undefined) {
-      payload.country = data.country ? data.country.trim() : null;
+      payload.country = data.country ? String(data.country).trim() : null;
     }
 
     try {
@@ -177,8 +195,17 @@ class AirportService {
       throw error;
     }
 
-    await airport.destroy();
-    return { id: Number(id), message: 'Airport deleted' };
+    try {
+      await airport.destroy();
+      return { id: Number(id), message: 'Airport deleted' };
+    } catch (err) {
+      if (err.name === 'SequelizeForeignKeyConstraintError') {
+        const error = new Error('Invalid referenced resource ID');
+        error.statusCode = 400;
+        throw error;
+      }
+      throw err;
+    }
   }
 }
 
