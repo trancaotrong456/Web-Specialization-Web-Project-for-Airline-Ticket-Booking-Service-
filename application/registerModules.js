@@ -13,11 +13,15 @@ const routeDefinitions = [
   ['promotions', '/promotions', '../routes/promotion.route'],
 ];
 
-const loadDefaultRouteModules = () => Object.fromEntries(
-  routeDefinitions.map(([name, , modulePath]) => [name, require(modulePath)]),
+const loadDefaultRouteModules = (overrides = {}) => Object.fromEntries(
+  routeDefinitions.map(([name, , modulePath]) => [
+    name,
+    overrides[name] || require(modulePath),
+  ]),
 );
 
-function registerModules({ expressModule = express, routeModules = loadDefaultRouteModules() } = {}) {
+function registerModules({ expressModule = express, routeModules = {} } = {}) {
+  const resolvedRouteModules = loadDefaultRouteModules(routeModules);
   const router = expressModule.Router();
 
   router.get('/health', (req, res) => {
@@ -29,18 +33,18 @@ function registerModules({ expressModule = express, routeModules = loadDefaultRo
   });
 
   for (const [name, mountPath] of routeDefinitions) {
-    if (!routeModules[name]) {
+    if (!resolvedRouteModules[name]) {
       throw new Error(`Missing route module: ${name}`);
     }
-    router.use(mountPath, routeModules[name]);
+    router.use(mountPath, resolvedRouteModules[name]);
   }
 
   return router;
 }
 
 let defaultApiRouter;
-function getDefaultApiRouter() {
-  if (!defaultApiRouter) defaultApiRouter = registerModules();
+function getDefaultApiRouter({ routeModules = {} } = {}) {
+  if (!defaultApiRouter) defaultApiRouter = registerModules({ routeModules });
   return defaultApiRouter;
 }
 

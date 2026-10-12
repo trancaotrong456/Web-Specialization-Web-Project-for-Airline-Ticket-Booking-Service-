@@ -117,7 +117,6 @@
 - `tests/airlineRepository.test.js` — exact Sequelize options and model delegation with fake models.
 - `tests/airlineModuleDI.test.js` — fake repository, controller/service isolation, old/new object identity.
 - `tests/airlineHttpParity.test.js` — route, auth, validator, response and status contract.
-- `tests/airlineControllerHttp.test.js` — actual HTTP requests through the DI-created Express router and ephemeral HTTP server, including controller binding/context; always close the server.
 
 **Files to modify:**
 
@@ -125,6 +124,7 @@
 - `services/airline.service.js` — replace implementation with thin forwarder exporting the canonical default `service` object.
 - `routes/airline.route.js` — replace implementation with thin forwarder exporting the canonical default `router` object.
 - `application/buildContainer.js`, `application/registerModules.js`, route aggregator — wire and mount the canonical default module once at current `/api/v1/airlines`.
+- `controllers/airline.controller.js` — replace implementation with a thin forwarder to the canonical default controller, preserving import identity.
 - `tests/airlineService.test.js`, `tests/airlineRouteContract.test.js`, `tests/airlineValidation.test.js` — preserve these tests and add assertions only; do not weaken or delete existing expectations.
 
 **Required repository semantics:**
@@ -150,7 +150,7 @@
 **Tests:**
 
 ```powershell
-node --test tests/airlineService.test.js tests/airlineRepository.test.js tests/airlineModuleDI.test.js tests/airlineModuleFactory.test.js tests/airlineControllerHttp.test.js tests/airlineRouteContract.test.js tests/airlineValidation.test.js tests/airlineHttpParity.test.js
+node --test tests/airlineService.test.js tests/airlineRepository.test.js tests/airlineModuleDI.test.js tests/airlineModuleFactory.test.js tests/airlineRouteContract.test.js tests/airlineValidation.test.js tests/airlineHttpParity.test.js
 npm test
 git diff --check
 ```

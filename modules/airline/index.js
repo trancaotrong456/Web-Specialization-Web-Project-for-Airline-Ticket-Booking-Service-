@@ -1,8 +1,24 @@
 const express = require('express');
+const AirlineService = require('./airline.service');
+const AirlineController = require('./airline.controller');
 
-function createAirlineModule({ expressModule = express, controller, guards, validation, validators } = {}) {
+function createAirlineModule({
+  expressModule = express,
+  repository,
+  service,
+  controller,
+  guards,
+  validation,
+  validators,
+  apiResponse,
+} = {}) {
+  const resolvedService = service || (repository ? new AirlineService({ repository }) : undefined);
+  const resolvedController = controller || (
+    resolvedService ? new AirlineController({ service: resolvedService, apiResponse }) : undefined
+  );
+
   if (
-    !controller ||
+    !resolvedController ||
     typeof guards?.authenticate !== 'function' ||
     typeof guards?.authorize !== 'function' ||
     typeof validation?.validate !== 'function' ||
@@ -15,13 +31,13 @@ function createAirlineModule({ expressModule = express, controller, guards, vali
   }
 
   for (const method of ['getAll', 'getById', 'create', 'update', 'delete']) {
-    if (typeof controller[method] !== 'function') {
+    if (typeof resolvedController[method] !== 'function') {
       throw new TypeError(`controller.${method} must be a function`);
     }
   }
 
   const router = expressModule.Router();
-  const bind = (method) => controller[method].bind(controller);
+  const bind = (method) => resolvedController[method].bind(resolvedController);
 
   router.get('/', validators.listAirlineValidator, validation.validate, bind('getAll'));
   router.get('/:id', validators.airlineIdValidator, validation.validate, bind('getById'));
@@ -50,7 +66,11 @@ function createAirlineModule({ expressModule = express, controller, guards, vali
     bind('delete'),
   );
 
-  return { router, controller };
+  return { router, repository, service: resolvedService, controller: resolvedController };
 }
 
-module.exports = { createAirlineModule };
+function getDefaultAirlineModule() {
+  return require('../../application/buildContainer').getDefaultAirlineModule();
+}
+
+module.exports = { createAirlineModule, getDefaultAirlineModule };
