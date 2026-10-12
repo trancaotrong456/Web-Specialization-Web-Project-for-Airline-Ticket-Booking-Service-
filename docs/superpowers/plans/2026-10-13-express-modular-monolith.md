@@ -27,7 +27,7 @@
 
 ## Stage 0 — Reconfirm baseline and characterize current behavior
 
-**Files:** no production files. Add only narrowly scoped characterization tests if existing coverage does not already pin a required behavior.
+**Files:** no production files. Add only narrowly scoped characterization tests if existing coverage does not already pin a required behavior. The verified suite contains `tests/runtimeValidation.test.js`, `tests/rbacMiddleware.test.js`, `tests/rbacRouteMatrix.test.js`, `tests/authHeader.test.js`, `tests/authRouteContract.test.js`, and `tests/authSecurity.test.js`; there is no `tests/errorHandler.test.js` yet.
 
 **Actions:**
 
@@ -37,11 +37,11 @@
 4. Run the existing backend suite and record actual count/result before touching runtime source.
 5. Add missing characterization assertions only for behaviors already present; do not change the implementation to make characterization easier.
 
-**Tests:** `npm test`; `node --test tests/airlineRouteContract.test.js tests/airlineService.test.js tests/airlineValidation.test.js`; `git diff --check`.
+**Tests:** first run `npm test` to capture the baseline. Add `tests/errorHandler.test.js` because no equivalent focused error-handler test exists, covering current Sequelize validation/unique/FK, custom `statusCode`, and fallback responses. Reuse existing `tests/runtimeValidation.test.js`, `tests/rbacMiddleware.test.js`, `tests/rbacRouteMatrix.test.js`, `tests/authHeader.test.js`, `tests/authRouteContract.test.js`, and `tests/authSecurity.test.js`; do not create duplicate tests under guessed names. Focused Airline suites: `node --test tests/airlineRouteContract.test.js tests/airlineService.test.js tests/airlineValidation.test.js`. Always run `git diff --check`.
 
 **Acceptance:** source baseline is known; current tests pass or pre-existing failures are documented; no data-writing command was used; exact Airline contract in the specification matches source and tests.
 
-**Commit:** `test(backend): characterize modular refactor baseline` (only if tests were added; otherwise keep this as an audit checkpoint, no empty commit).
+**Commit:** `test(backend): characterize modular refactor baseline` (the missing error-handler characterization is expected here; no production code changes).
 
 ## Stage 1 — Foundation: composition root and safe app construction
 
@@ -72,13 +72,13 @@
 6. Convert `app.js` to safe composition only. Keep `server.js` as the only owner of runtime initialization and listening; retain lifecycle ordering and existing startup failure behavior.
 7. Run all existing app/runtime/socket/job tests and full backend tests.
 
-**Tests:** `node --test tests/errorHandler.test.js tests/applicationComposition.test.js tests/appImportSafety.test.js tests/runtimeConfig.test.js`; full `npm test`; `git diff --check`.
+**Tests:** `node --test tests/errorHandler.test.js tests/applicationComposition.test.js tests/appImportSafety.test.js tests/runtimeValidation.test.js`; full `npm test`; `git diff --check`.
 
 **Acceptance:** importing app for tests has no process side effects; the default production startup still initializes DB, Socket.IO, cron and listener exactly once in the existing order; API 404/error responses are byte-for-byte equivalent in tested cases; the pre-existing API route tree is mounted once and no endpoint duplicates.
 
 **Commit:** `refactor(backend): add explicit application composition foundation`.
 
-## Stage 2 — Shared Express adapters and AirlineModule seam
+## Stage 2 — Shared Express adapters and AirlineModule DI seam
 
 **Files to add:**
 
@@ -86,7 +86,8 @@
 - `shared/http/validation/validationAdapter.js` — thin injectable wrapper around current express-validator `validate` middleware.
 - `modules/airline/index.js` — `createAirlineModule(deps)` and module-local lazy `getDefaultAirlineModule()`; returns one router, service, controller and repository.
 - `modules/airline/airline.validators.js` — initially forwards/reuses existing validator definitions without duplicating rules.
-- `tests/httpAdapterCompatibility.test.js` — exact guard/validation behavior parity.
+- `tests/httpAdapterCompatibility.test.js` — exact guard/validation behavior parity, using existing RBAC/Auth tests as baseline contracts.
+- `tests/airlineModuleFactory.test.js` — isolated module-factory construction with a fake repository and injected middleware/validation dependencies; no MySQL.
 
 **Files to modify:**
 
@@ -97,14 +98,13 @@
 **Implementation sequence (test-first):**
 
 1. Pin middleware response behavior: unauthenticated read/write, staff write, admin write, optional auth, invalid body and error ordering.
-2. Add a fake-dependency module-factory test proving separate module instances can be constructed without Sequelize or MySQL.
-3. Add default-module identity tests: `services/airline.service.js`, `routes/airline.route.js`, composition root and the canonical getter all resolve the same respective service/router objects.
-4. Implement only the factories/adapters needed by Airline. Do not migrate other route files in this stage.
-5. Assert each current Airline method/path and middleware sequence has one registration.
+2. Add a module-factory test proving a router can be constructed with fake injected controller/guard/validation dependencies without Sequelize or MySQL. This test router is not mounted in the running app during Stage 2.
+3. Implement the factory/DI seam only; do not move the old route/controller/service or create a second active implementation in this stage.
+4. Assert the factory route definitions and middleware sequence once. Production continues to mount only the existing Airline router until Stage 3 replaces it atomically.
 
-**Tests:** focused adapter/application tests; existing `tests/airlineRouteContract.test.js`; `tests/auth.test.js`, `tests/rbac.test.js`; full `npm test`; `git diff --check`.
+**Tests:** `node --test tests/httpAdapterCompatibility.test.js tests/airlineModuleFactory.test.js tests/airlineRouteContract.test.js tests/rbacMiddleware.test.js tests/rbacRouteMatrix.test.js tests/authHeader.test.js tests/authRouteContract.test.js`; full `npm test`; `git diff --check`.
 
-**Acceptance:** no new permission semantics; adapters preserve old imports; router registration is unique; factory tests need no live DB; pre-existing middleware exports remain compatible.
+**Acceptance:** no new permission semantics; existing middleware exports remain compatible; factory uses injected fakes and needs no live DB; production still has only its original Airline service/controller/router active; the test-created factory router is not mounted. Legacy identity assertions are deferred until Stage 3 converts both old paths to forwarders.
 
 **Commit:** `refactor(backend): add injectable HTTP adapters for Airline`.
 
@@ -118,6 +118,7 @@
 - `tests/airlineRepository.test.js` — exact Sequelize options and model delegation with fake models.
 - `tests/airlineModuleDI.test.js` — fake repository, controller/service isolation, old/new object identity.
 - `tests/airlineHttpParity.test.js` — route, auth, validator, response and status contract.
+- `tests/airlineControllerHttp.test.js` — actual HTTP requests through the DI-created Express router and ephemeral HTTP server, including controller binding/context; always close the server.
 
 **Files to modify:**
 
@@ -140,21 +141,22 @@
 
 1. Add repository tests first for exact list query options and each model operation.
 2. Add service tests with a mocked repository for all existing rules: defaults/clamps/search, trim/uppercase/logo null, duplicate create/update, unique-race error mapping, 404, update allowlist, flight delete conflict and successful delete result.
-3. Add controller isolation tests using a fake service and response helper.
+3. Add controller isolation tests using a fake service and response helper, and invoke injected handlers through Express over an ephemeral HTTP server so binding/context defects surface as HTTP failures.
 4. Implement repository, service and controller classes; then wire module factory.
 5. Convert old service/router paths to identity-preserving forwarders. Ensure old direct consumers do not instantiate another service or router.
-6. Mount the canonical router once; assert effective `/api/v1/airlines` URLs and middleware stack are unchanged.
-7. Run focused API/route tests and full backend tests. No integration against non-isolated MySQL.
+6. Test that requiring `services/airline.service.js` equals the canonical default service, requiring `routes/airline.route.js` equals the canonical default router, and the composition root resolves those same instances.
+7. Mount the canonical router once; assert effective `/api/v1/airlines` URLs, no legacy+new double mount, exact middleware order, and one endpoint registration per method/path.
+8. Run focused API/route/HTTP tests and full backend tests. No integration against non-isolated MySQL.
 
 **Tests:**
 
 ```powershell
-node --test tests/airlineService.test.js tests/airlineRepository.test.js tests/airlineModuleDI.test.js tests/airlineRouteContract.test.js tests/airlineValidation.test.js tests/airlineHttpParity.test.js
+node --test tests/airlineService.test.js tests/airlineRepository.test.js tests/airlineModuleDI.test.js tests/airlineModuleFactory.test.js tests/airlineControllerHttp.test.js tests/airlineRouteContract.test.js tests/airlineValidation.test.js tests/airlineHttpParity.test.js
 npm test
 git diff --check
 ```
 
-**Acceptance:** existing three Airline test suites continue unchanged and pass; all added contract/DI/isolation/identity/registration tests pass; GET remains public and mutation remains Admin-only; no duplicated endpoint; no response, validation, query, status or business-rule drift; only `modules/airline`, minimal shared/application wiring, adapters and tests are changed.
+**Acceptance:** existing three Airline test suites continue unchanged and pass; all added contract/DI/isolation/identity/registration/real-HTTP tests pass; controller methods work when Express invokes them; GET remains public and mutation remains Admin-only; no duplicated endpoint or legacy+canonical double mount; exact middleware order remains; no response, validation, query, status or business-rule drift; only `modules/airline`, minimal shared/application wiring, adapters and tests are changed. Stage 3 is independently runnable from a clean install and full backend regression.
 
 **Commit:** `refactor(backend): migrate Airline to injected module layers`.
 
