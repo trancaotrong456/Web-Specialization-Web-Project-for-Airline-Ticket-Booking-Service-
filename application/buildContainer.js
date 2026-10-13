@@ -26,6 +26,8 @@ const { createPaymentModule } = require('../modules/payment');
 const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
+const { getEmailProvider } = require('../infrastructure/email/emailProvider');
+const { getSocket } = require('../infrastructure/realtime/socketProvider');
 
 let defaultAirlineModule;
 function getDefaultAirlineModule() {
@@ -117,7 +119,7 @@ function getDefaultFlightModule() {
   const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
   defaultFlightModule = createFlightModule({
     repository: new SequelizeFlightRepository({ sequelize, Flight, Airline, Airport, FareClass, Booking, Op }),
-    guards, validation, validators: require('../validators/flight.validator'),
+    guards, validation, validators: require('../validators/flight.validator'), getIO: getSocket,
   });
   return defaultFlightModule;
 }
@@ -170,7 +172,7 @@ function getDefaultAuthModule() {
   const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
   defaultAuthModule = createAuthModule({
     repository: new SequelizeAuthRepository({ User, Role, Op }),
-    guards, validation, validators: require('../validators/auth.validator'),
+    guards, validation, validators: require('../validators/auth.validator'), emailProvider: getEmailProvider(),
   });
   return defaultAuthModule;
 }
@@ -193,6 +195,7 @@ function getDefaultBookingModule() {
     repository: new SequelizeBookingRepository(models),
     transactionManager: models.sequelize,
     ticketController: getDefaultTicketModule().controller,
+    socket: getSocket,
   });
   return defaultBookingModule;
 }
@@ -204,6 +207,8 @@ function getDefaultPaymentModule() {
   defaultPaymentModule = createPaymentModule({
     repository: new SequelizePaymentRepository(models),
     transactionManager: models.sequelize,
+    socket: getSocket,
+    emailProvider: getEmailProvider(),
   });
   return defaultPaymentModule;
 }
