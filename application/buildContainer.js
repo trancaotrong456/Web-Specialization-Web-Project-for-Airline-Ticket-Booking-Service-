@@ -6,6 +6,8 @@ const { createAirlineModule } = require('../modules/airline');
 const { SequelizeAirlineRepository } = require('../modules/airline/airline.repository');
 const { createAirportModule } = require('../modules/airport');
 const { SequelizeAirportRepository } = require('../modules/airport/airport.repository');
+const { createPromotionModule } = require('../modules/promotion');
+const { SequelizePromotionRepository } = require('../modules/promotion/promotion.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -53,10 +55,27 @@ function getDefaultAirportModule() {
   return defaultAirportModule;
 }
 
+let defaultPromotionModule;
+function getDefaultPromotionModule() {
+  if (defaultPromotionModule) return defaultPromotionModule;
+  const { Promotion } = require('../models');
+  const { Op } = require('sequelize');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  defaultPromotionModule = createPromotionModule({
+    repository: new SequelizePromotionRepository({ Promotion, Op }), guards,
+  });
+  return defaultPromotionModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
   airportModule,
+  promotionModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -64,11 +83,13 @@ function buildContainer({
 } = {}) {
   const resolvedAirlineModule = airlineModule || (apiRouter ? undefined : getDefaultAirlineModule());
   const resolvedAirportModule = airportModule || (apiRouter ? undefined : getDefaultAirportModule());
+  const resolvedPromotionModule = promotionModule || (apiRouter ? undefined : getDefaultPromotionModule());
   const routeModules = {
     ...(resolvedAirlineModule ? { airlines: resolvedAirlineModule.router } : {}),
     ...(resolvedAirportModule ? { airports: resolvedAirportModule.router } : {}),
+    ...(resolvedPromotionModule ? { promotions: resolvedPromotionModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -77,6 +98,7 @@ function buildContainer({
     apiRouter: resolvedApiRouter,
     ...(resolvedAirlineModule ? { airlineModule: resolvedAirlineModule } : {}),
     ...(resolvedAirportModule ? { airportModule: resolvedAirportModule } : {}),
+    ...(resolvedPromotionModule ? { promotionModule: resolvedPromotionModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -85,4 +107,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule };
