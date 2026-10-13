@@ -16,6 +16,8 @@ const { createUserModule } = require('../modules/user');
 const { SequelizeUserRepository } = require('../modules/user/user.repository');
 const { createRoleModule } = require('../modules/role');
 const { SequelizeRoleRepository } = require('../modules/role/role.repository');
+const { createAuthModule } = require('../modules/auth');
+const { SequelizeAuthRepository } = require('../modules/auth/auth.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -149,6 +151,24 @@ function getDefaultRoleModule() {
   return defaultRoleModule;
 }
 
+let defaultAuthModule;
+function getDefaultAuthModule() {
+  if (defaultAuthModule) return defaultAuthModule;
+  const { User, Role } = require('../models');
+  const { Op } = require('sequelize');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  defaultAuthModule = createAuthModule({
+    repository: new SequelizeAuthRepository({ User, Role, Op }),
+    guards, validation, validators: require('../validators/auth.validator'),
+  });
+  return defaultAuthModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
@@ -158,6 +178,7 @@ function buildContainer({
   flightModule,
   userModule,
   roleModule,
+  authModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -170,7 +191,9 @@ function buildContainer({
   const resolvedFlightModule = flightModule || (apiRouter ? undefined : getDefaultFlightModule());
   const resolvedUserModule = userModule || (apiRouter ? undefined : getDefaultUserModule());
   const resolvedRoleModule = roleModule || (apiRouter ? undefined : getDefaultRoleModule());
+  const resolvedAuthModule = authModule || (apiRouter ? undefined : getDefaultAuthModule());
   const routeModules = {
+    ...(resolvedAuthModule ? { auth: resolvedAuthModule.router } : {}),
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
     ...(resolvedRoleModule ? { roles: resolvedRoleModule.router } : {}),
     ...(resolvedAirlineModule ? { airlines: resolvedAirlineModule.router } : {}),
@@ -179,7 +202,7 @@ function buildContainer({
     ...(resolvedFareClassModule ? { fareClasses: resolvedFareClassModule.router } : {}),
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -193,6 +216,7 @@ function buildContainer({
     ...(resolvedFlightModule ? { flightModule: resolvedFlightModule } : {}),
     ...(resolvedUserModule ? { userModule: resolvedUserModule } : {}),
     ...(resolvedRoleModule ? { roleModule: resolvedRoleModule } : {}),
+    ...(resolvedAuthModule ? { authModule: resolvedAuthModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -201,4 +225,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule };
