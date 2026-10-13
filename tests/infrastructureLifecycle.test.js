@@ -55,6 +55,42 @@ test('failed DB authentication never starts cron or HTTP and preserves exit beha
   assert.deepEqual(events, ['socket', ['exit', 1]]);
 });
 
+test('runtime verifies bootstrap after DB authentication and before cron or HTTP', async () => {
+  const { createRuntime } = require('../application/createRuntime');
+  const events = [];
+  const server = { listen(_port, callback) { events.push('listen'); callback(); } };
+  const runtime = createRuntime({
+    app: {}, createServer: () => server,
+    initSocket: () => events.push('socket'),
+    authenticate: async () => { events.push('database'); },
+    verifyReadiness: async () => { events.push('readiness'); },
+    initJob: () => events.push('cron'), validate() {},
+    logger: { log() {}, error() {} }, environment: {}, exit() {},
+  });
+
+  await runtime.start();
+
+  assert.deepEqual(events, ['socket', 'database', 'readiness', 'cron', 'listen']);
+});
+
+test('failed bootstrap readiness prevents cron and HTTP listen', async () => {
+  const { createRuntime } = require('../application/createRuntime');
+  const events = [];
+  const failure = Error('bootstrap marker missing');
+  const runtime = createRuntime({
+    app: {}, createServer: () => ({ listen() { events.push('listen'); } }),
+    initSocket: () => events.push('socket'), authenticate: async () => { events.push('database'); },
+    verifyReadiness: async () => { events.push('readiness'); throw failure; },
+    initJob: () => events.push('cron'), validate() {},
+    logger: { log() {}, error(_message, error) { assert.equal(error, failure.message); } },
+    environment: {}, exit: (code) => { events.push(['exit', code]); },
+  });
+
+  await runtime.start();
+
+  assert.deepEqual(events, ['socket', 'database', 'readiness', ['exit', 1]]);
+});
+
 test('cron-disabled runtime does not register a job', async () => {
   const { createRuntime } = require('../application/createRuntime');
   let jobs = 0;

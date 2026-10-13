@@ -2,7 +2,7 @@ const http = require('http');
 const { validateRuntimeConfiguration } = require('../config/runtimeValidation');
 
 // Importing the factory does not start any runtime provider.
-function createRuntime({ app, createServer = http.createServer, initSocket, authenticate, initJob,
+function createRuntime({ app, createServer = http.createServer, initSocket, authenticate, verifyReadiness = async () => {}, initJob,
   validate = validateRuntimeConfiguration, environment = process.env, logger = console, exit = process.exit } = {}) {
   if (!app || !initSocket || !authenticate || !initJob) throw new TypeError('Runtime providers are required');
   let startPromise;
@@ -13,8 +13,12 @@ function createRuntime({ app, createServer = http.createServer, initSocket, auth
       const port = environment.PORT || 5000;
       const server = createServer(app);
       initSocket(server);
+      let startupPhase = 'database';
       try {
         await authenticate();
+        startupPhase = 'bootstrap';
+        await verifyReadiness(environment);
+        startupPhase = 'runtime';
         logger.log('✅ Database connected successfully via Sequelize.');
         if (environment.DISABLE_CRON !== 'true') initJob();
         else logger.log('[Cron] Disabled by DISABLE_CRON=true');
@@ -24,7 +28,11 @@ function createRuntime({ app, createServer = http.createServer, initSocket, auth
         });
         return server;
       } catch (error) {
-        logger.error('❌ Failed to connect to the database:', error);
+        if (startupPhase === 'bootstrap') {
+          logger.error('❌ Server startup failed (database or demo-bootstrap readiness):', error.message || error);
+        } else {
+          logger.error('❌ Failed to connect to the database:', error);
+        }
         exit(1);
         return undefined;
       }
