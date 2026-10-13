@@ -3,7 +3,6 @@
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('path');
 
 test('#24 – fareClass routes contract', () => {
   const router = require('../routes/fareClass.route');
@@ -126,27 +125,38 @@ test('#24 – update in fareClass.service enforces allowlist and rejects changin
 });
 
 
-test('#24 – delete fare class checks bookings and throws 409', () => {
-  const fs = require('fs');
-  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/fareClass.service.js'), 'utf8');
-
-  assert.ok(serviceCode.includes('Booking.count'), 'delete must check Booking count before deleting');
-  assert.ok(serviceCode.includes('statusCode = 409'), 'delete must throw 409 if bookings exist');
+test('#24 – delete fare class checks bookings and throws 409', async () => {
+  const Service = require('../modules/fare-class/fareClass.service');
+  let deleted = false;
+  const service = new Service({ repository: {
+    findById: async () => ({ id: 4 }),
+    countBookingsByFareClassId: async (id) => { assert.equal(id, '4'); return 1; },
+    delete: async () => { deleted = true; },
+  } });
+  await assert.rejects(service.delete('4'), (error) => error.statusCode === 409);
+  assert.equal(deleted, false);
 });
 
-test('#24 – getByFlight orders by price ASC', () => {
-  const fs = require('fs');
-  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/fareClass.service.js'), 'utf8');
-
-  assert.ok(serviceCode.includes("order: [['price', 'ASC']]"), 'getByFlight must sort fare classes ascending by price');
+test('#24 – getByFlight orders by price ASC', async () => {
+  const { SequelizeFareClassRepository } = require('../modules/fare-class/fareClass.repository');
+  let options;
+  const repository = new SequelizeFareClassRepository({
+    FareClass: { findAll: async (value) => { options = value; return []; } }, Flight: {}, Booking: {},
+  });
+  await repository.findByFlight('8');
+  assert.deepEqual(options, { where: { flight_id: '8' }, order: [['price', 'ASC']] });
 });
 
-test('#24 – getById contract verifies flight association and 404', () => {
-  const fs = require('fs');
-  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/fareClass.service.js'), 'utf8');
-
-  assert.ok(serviceCode.includes("model: Flight"), 'getById must include Flight model association');
-  assert.ok(serviceCode.includes("statusCode = 404"), 'getById must throw 404 if fare class not found');
+test('#24 – getById contract verifies flight association and 404', async () => {
+  const { SequelizeFareClassRepository } = require('../modules/fare-class/fareClass.repository');
+  const Service = require('../modules/fare-class/fareClass.service');
+  const Flight = {};
+  let options;
+  const repository = new SequelizeFareClassRepository({
+    FareClass: { findByPk: async (_id, value) => { options = value; return null; } }, Flight, Booking: {},
+  });
+  await assert.rejects(new Service({ repository }).getById('404'), (error) => error.statusCode === 404);
+  assert.deepEqual(options, { include: [{ model: Flight, as: 'flight' }] });
 });
 
 test('#24 – createFareClassValidator blocks out-of-contract fields', async () => {
