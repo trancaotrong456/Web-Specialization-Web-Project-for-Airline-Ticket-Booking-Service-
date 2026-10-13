@@ -1,0 +1,134 @@
+const { Op } = require('sequelize');
+
+class SequelizeBookingRepository {
+  constructor({ Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport } = {}) {
+    if (![Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport].every(Boolean)) {
+      throw new TypeError('Booking repository requires all Booking association models');
+    }
+    Object.assign(this, { Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport });
+  }
+
+  findFlight(options) { return this.Flight.findOne(options); }
+  findFlightForUpdate(id, transaction) {
+    return this.Flight.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findFareClass(options) { return this.FareClass.findOne(options); }
+  findFareClassForFlight(id, flightId, transaction) {
+    return this.FareClass.findOne({ where: { id, flight_id: flightId }, transaction });
+  }
+  findPromotion(options) { return this.Promotion.findOne(options); }
+  findPromotionByCodeForUpdate(code, transaction) {
+    return this.Promotion.findOne({ where: { code }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findPromotionByIdForUpdate(id, transaction) {
+    return this.Promotion.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findBooking(options) { return this.Booking.findOne(options); }
+  findBookingCode(code, transaction) {
+    return this.Booking.findOne({ where: { booking_code: code }, transaction });
+  }
+  findBookingForCancellation(id, transaction) {
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }] });
+  }
+  findHoldingBookingForExpiry(id, transaction) {
+    return this.Booking.findOne({ where: { id, status: 'holding' }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findBookingForReconciliation(id, transaction) {
+    return this.Booking.findOne({ where: { id }, include: [{ model: this.BookingPassenger, as: 'passengers' }], lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findBookingByPk(id, options) { return this.Booking.findByPk(id, options); }
+  findBookingDetail(id) {
+    return this.Booking.findByPk(id, {
+      include: [
+        {
+          model: this.Flight, as: 'flight', include: [
+            { model: this.Airline, as: 'airline', attributes: ['id', 'name', 'iata_code', 'logo_url'] },
+            { model: this.Airport, as: 'departureAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
+            { model: this.Airport, as: 'arrivalAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
+          ],
+        },
+        { model: this.FareClass, as: 'fareClass' },
+        { model: this.Promotion, as: 'promotion' },
+        { model: this.BookingPassenger, as: 'passengers' },
+        { model: this.Payment, as: 'payments' },
+        { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email', 'phone'] },
+      ],
+    });
+  }
+  findBookingByCode(code) {
+    return this.Booking.findOne({
+      where: { booking_code: code },
+      include: [
+        { model: this.Flight, as: 'flight', include: [
+          { model: this.Airline, as: 'airline' },
+          { model: this.Airport, as: 'departureAirport' },
+          { model: this.Airport, as: 'arrivalAirport' },
+        ] },
+        { model: this.FareClass, as: 'fareClass' },
+        { model: this.Promotion, as: 'promotion' },
+        { model: this.BookingPassenger, as: 'passengers' },
+        { model: this.Payment, as: 'payments' },
+      ],
+    });
+  }
+  listUserBookings(userId, { status, limit, offset }) {
+    const where = { user_id: userId };
+    if (status) where.status = status;
+    return this.Booking.findAndCountAll({
+      distinct: true, where, limit, offset, order: [['created_at', 'DESC']],
+      include: [
+        { model: this.Flight, as: 'flight', include: [
+          { model: this.Airline, as: 'airline' },
+          { model: this.Airport, as: 'departureAirport' },
+          { model: this.Airport, as: 'arrivalAirport' },
+        ] },
+        { model: this.FareClass, as: 'fareClass' },
+        { model: this.BookingPassenger, as: 'passengers' },
+        { model: this.Payment, as: 'payments' },
+      ],
+    });
+  }
+  listAllBookings({ status, search, limit, offset }) {
+    const where = {};
+    if (status) where.status = status;
+    if (search) {
+      where[Op.or] = [
+        { booking_code: { [Op.like]: `%${search}%` } },
+        { guest_email: { [Op.like]: `%${search}%` } },
+      ];
+    }
+    return this.Booking.findAndCountAll({
+      distinct: true, where, limit, offset, order: [['created_at', 'DESC']],
+      include: [
+        { model: this.Flight, as: 'flight', include: [
+          { model: this.Airline, as: 'airline' },
+          { model: this.Airport, as: 'departureAirport' },
+          { model: this.Airport, as: 'arrivalAirport' },
+        ] },
+        { model: this.FareClass, as: 'fareClass' },
+        { model: this.BookingPassenger, as: 'passengers' },
+        { model: this.Payment, as: 'payments' },
+        { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'] },
+      ],
+    });
+  }
+  findBookings(options) { return this.Booking.findAll(options); }
+  findExpiredHoldingBookings(now) {
+    return this.Booking.findAll({ where: { status: 'holding', hold_expires_at: { [Op.lt]: now } }, include: [{ model: this.BookingPassenger, as: 'passengers' }] });
+  }
+  findStalePendingBookings(cutoff) {
+    return this.Booking.findAll({ where: { status: 'pending_payment', hold_expires_at: { [Op.lt]: cutoff } }, attributes: ['id'] });
+  }
+  findAndCountBookings(options) { return this.Booking.findAndCountAll(options); }
+  findPayment(options) { return this.Payment.findOne(options); }
+  findPendingPaymentForReconciliation(bookingId, transaction) {
+    return this.Payment.findOne({ where: { booking_id: bookingId, status: 'pending' }, order: [['created_at', 'DESC']], lock: transaction.LOCK.UPDATE, transaction });
+  }
+  createBooking(values, options) { return this.Booking.create(values, options); }
+  createPassengers(values, options) { return this.BookingPassenger.bulkCreate(values, options); }
+  save(instance, options) { return instance.save(options); }
+  increment(instance, field, options) { return instance.increment(field, options); }
+  decrement(instance, field, options) { return instance.decrement(field, options); }
+}
+
+module.exports = { SequelizeBookingRepository };

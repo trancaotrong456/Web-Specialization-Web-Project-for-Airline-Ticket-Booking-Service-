@@ -20,6 +20,8 @@ const { createAuthModule } = require('../modules/auth');
 const { SequelizeAuthRepository } = require('../modules/auth/auth.repository');
 const { createTicketModule } = require('../modules/ticket');
 const { SequelizeTicketRepository } = require('../modules/ticket/ticket.repository');
+const { createBookingModule } = require('../modules/booking');
+const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -181,6 +183,18 @@ function getDefaultTicketModule() {
   return defaultTicketModule;
 }
 
+let defaultBookingModule;
+function getDefaultBookingModule() {
+  if (defaultBookingModule) return defaultBookingModule;
+  const models = require('../models');
+  defaultBookingModule = createBookingModule({
+    repository: new SequelizeBookingRepository(models),
+    transactionManager: models.sequelize,
+    ticketController: getDefaultTicketModule().controller,
+  });
+  return defaultBookingModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
@@ -191,6 +205,7 @@ function buildContainer({
   userModule,
   roleModule,
   authModule,
+  bookingModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -204,6 +219,7 @@ function buildContainer({
   const resolvedUserModule = userModule || (apiRouter ? undefined : getDefaultUserModule());
   const resolvedRoleModule = roleModule || (apiRouter ? undefined : getDefaultRoleModule());
   const resolvedAuthModule = authModule || (apiRouter ? undefined : getDefaultAuthModule());
+  const resolvedBookingModule = bookingModule || (apiRouter ? undefined : getDefaultBookingModule());
   const routeModules = {
     ...(resolvedAuthModule ? { auth: resolvedAuthModule.router } : {}),
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
@@ -213,8 +229,9 @@ function buildContainer({
     ...(resolvedPromotionModule ? { promotions: resolvedPromotionModule.router } : {}),
     ...(resolvedFareClassModule ? { fareClasses: resolvedFareClassModule.router } : {}),
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
+    ...(resolvedBookingModule ? { bookings: resolvedBookingModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -229,6 +246,7 @@ function buildContainer({
     ...(resolvedUserModule ? { userModule: resolvedUserModule } : {}),
     ...(resolvedRoleModule ? { roleModule: resolvedRoleModule } : {}),
     ...(resolvedAuthModule ? { authModule: resolvedAuthModule } : {}),
+    ...(resolvedBookingModule ? { bookingModule: resolvedBookingModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -237,4 +255,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule };
