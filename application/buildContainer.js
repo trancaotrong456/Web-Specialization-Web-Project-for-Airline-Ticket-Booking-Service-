@@ -18,6 +18,8 @@ const { createRoleModule } = require('../modules/role');
 const { SequelizeRoleRepository } = require('../modules/role/role.repository');
 const { createAuthModule } = require('../modules/auth');
 const { SequelizeAuthRepository } = require('../modules/auth/auth.repository');
+const { createTicketModule } = require('../modules/ticket');
+const { SequelizeTicketRepository } = require('../modules/ticket/ticket.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -169,6 +171,16 @@ function getDefaultAuthModule() {
   return defaultAuthModule;
 }
 
+let defaultTicketModule;
+function getDefaultTicketModule() {
+  if (defaultTicketModule) return defaultTicketModule;
+  const models = require('../models');
+  defaultTicketModule = createTicketModule({
+    repository: new SequelizeTicketRepository(models),
+  });
+  return defaultTicketModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
@@ -225,4 +237,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule };
