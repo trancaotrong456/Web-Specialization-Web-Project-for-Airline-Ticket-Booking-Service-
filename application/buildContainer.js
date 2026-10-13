@@ -12,6 +12,8 @@ const { createFareClassModule } = require('../modules/fare-class');
 const { SequelizeFareClassRepository } = require('../modules/fare-class/fareClass.repository');
 const { createFlightModule } = require('../modules/flight');
 const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
+const { createUserModule } = require('../modules/user');
+const { SequelizeUserRepository } = require('../modules/user/user.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -110,6 +112,24 @@ function getDefaultFlightModule() {
   return defaultFlightModule;
 }
 
+let defaultUserModule;
+function getDefaultUserModule() {
+  if (defaultUserModule) return defaultUserModule;
+  const { User, Role } = require('../models');
+  const { Op } = require('sequelize');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  defaultUserModule = createUserModule({
+    repository: new SequelizeUserRepository({ User, Role, Op }),
+    guards, validation, validators: require('../validators/user.validator'),
+  });
+  return defaultUserModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
@@ -117,6 +137,7 @@ function buildContainer({
   promotionModule,
   fareClassModule,
   flightModule,
+  userModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -127,14 +148,16 @@ function buildContainer({
   const resolvedPromotionModule = promotionModule || (apiRouter ? undefined : getDefaultPromotionModule());
   const resolvedFareClassModule = fareClassModule || (apiRouter ? undefined : getDefaultFareClassModule());
   const resolvedFlightModule = flightModule || (apiRouter ? undefined : getDefaultFlightModule());
+  const resolvedUserModule = userModule || (apiRouter ? undefined : getDefaultUserModule());
   const routeModules = {
+    ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
     ...(resolvedAirlineModule ? { airlines: resolvedAirlineModule.router } : {}),
     ...(resolvedAirportModule ? { airports: resolvedAirportModule.router } : {}),
     ...(resolvedPromotionModule ? { promotions: resolvedPromotionModule.router } : {}),
     ...(resolvedFareClassModule ? { fareClasses: resolvedFareClassModule.router } : {}),
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -146,6 +169,7 @@ function buildContainer({
     ...(resolvedPromotionModule ? { promotionModule: resolvedPromotionModule } : {}),
     ...(resolvedFareClassModule ? { fareClassModule: resolvedFareClassModule } : {}),
     ...(resolvedFlightModule ? { flightModule: resolvedFlightModule } : {}),
+    ...(resolvedUserModule ? { userModule: resolvedUserModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -154,4 +178,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule };
