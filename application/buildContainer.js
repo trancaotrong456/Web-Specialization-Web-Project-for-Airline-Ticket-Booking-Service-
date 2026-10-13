@@ -1,5 +1,5 @@
 const ApiResponse = require('../utils/apiResponse');
-const { getDefaultApiRouter } = require('./registerModules');
+const { getDefaultApiRouter, registerModules } = require('./registerModules');
 const createErrorFilter = require('../shared/http/filters/createErrorFilter');
 const createErrorHandlerAdapter = require('../shared/http/filters/errorHandlerAdapter');
 const { createAirlineModule } = require('../modules/airline');
@@ -68,7 +68,10 @@ function buildContainer({
     ...(resolvedAirlineModule ? { airlines: resolvedAirlineModule.router } : {}),
     ...(resolvedAirportModule ? { airports: resolvedAirportModule.router } : {}),
   };
-  const resolvedApiRouter = apiRouter || getDefaultApiRouter({ routeModules });
+  const hasModuleOverrides = Boolean(airlineModule || airportModule);
+  const resolvedApiRouter = apiRouter || (hasModuleOverrides
+    ? registerModules({ routeModules })
+    : getDefaultApiRouter({ routeModules }));
 
   return {
     apiRouter: resolvedApiRouter,

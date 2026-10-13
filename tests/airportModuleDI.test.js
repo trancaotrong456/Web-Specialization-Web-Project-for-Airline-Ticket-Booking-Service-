@@ -28,3 +28,18 @@ test('Airport module accepts isolated fake dependencies without Sequelize models
   assert.equal(module.service, service);
   assert.equal(module.controller, controller);
 });
+
+test('an explicitly injected AirportModule is mounted even after the default router was cached', () => {
+  const defaultApiRouter = require('../routes');
+  const injected = createAirportModule({
+    repository: {},
+    guards: { authenticate() {}, authorize: () => () => {} },
+  });
+
+  const container = buildContainer({ airportModule: injected });
+  const mounts = container.apiRouter.stack.filter((layer) => layer.handle === injected.router);
+
+  assert.notEqual(container.apiRouter, defaultApiRouter);
+  assert.equal(container.airportModule, injected);
+  assert.equal(mounts.length, 1);
+});
