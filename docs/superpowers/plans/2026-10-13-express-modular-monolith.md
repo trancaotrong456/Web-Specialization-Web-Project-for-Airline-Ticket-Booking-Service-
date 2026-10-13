@@ -161,9 +161,9 @@ git diff --check
 
 ## Stage 4 — AirportModule
 
-**Files:** add `modules/airport/{index.js,airport.routes.js,airport.controller.js,airport.service.js,airport.repository.js,airport.validators.js}` and focused `tests/airportRepository.test.js`, `tests/airportModuleDI.test.js`, `tests/airportHttpParity.test.js`; convert existing Airport service/route paths to adapters; update only composition registration and existing Airport tests as needed.
+**Files:** add `modules/airport/{index.js,airport.controller.js,airport.service.js,airport.repository.js}` and focused `tests/airportRepository.test.js`, `tests/airportService.test.js`, `tests/airportController.test.js`, `tests/airportModuleFactory.test.js`, `tests/airportModuleDI.test.js`, and `tests/airportHttpParity.test.js`; convert existing Airport service/controller/route paths to identity-preserving adapters; update only Composition Root and route registration. The current Airport source has no validator middleware, so do not add one or introduce autocomplete/business behavior in this migration.
 
-**Test-first/acceptance:** characterize exact airport search/autocomplete/admin CRUD validators and public/auth behavior; assert Sequelize query options and Airport FK error mapping; verify old imports and single mount; run focused Airport suites and full backend tests. No Airport validator/business-rule change.
+**Test-first/acceptance:** preserve list query (`name`, `iata_code`, `city`, raw search interpolation, `city ASC`, existing pagination/coercion and response types), detail 404, raw create/update payload behavior, delete flow without a Flight precheck, public GET, Admin-only mutations, and existing foreign-key error mapping. Verify repository query options, controller response methods, injected route guards/order, real HTTP responses, adapter object identity, exactly-one endpoint/mount, app import side-effect safety, and focused plus full backend tests. Every stage remains independently testable; no new Airport validator or business rule.
 
 **Commit:** `refactor(backend): migrate Airport to module layers`.
 

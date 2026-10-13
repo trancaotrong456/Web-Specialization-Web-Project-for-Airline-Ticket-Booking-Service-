@@ -4,6 +4,8 @@ const createErrorFilter = require('../shared/http/filters/createErrorFilter');
 const createErrorHandlerAdapter = require('../shared/http/filters/errorHandlerAdapter');
 const { createAirlineModule } = require('../modules/airline');
 const { SequelizeAirlineRepository } = require('../modules/airline/airline.repository');
+const { createAirportModule } = require('../modules/airport');
+const { SequelizeAirportRepository } = require('../modules/airport/airport.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -32,22 +34,46 @@ function getDefaultAirlineModule() {
   return defaultAirlineModule;
 }
 
+let defaultAirportModule;
+function getDefaultAirportModule() {
+  if (defaultAirportModule) return defaultAirportModule;
+
+  const { Airport } = require('../models');
+  const { Op } = require('sequelize');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+
+  defaultAirportModule = createAirportModule({
+    repository: new SequelizeAirportRepository({ Airport, Op }),
+    guards,
+  });
+  return defaultAirportModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
+  airportModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
   getEnvironment = () => process.env.NODE_ENV,
 } = {}) {
   const resolvedAirlineModule = airlineModule || (apiRouter ? undefined : getDefaultAirlineModule());
-  const resolvedApiRouter = apiRouter || getDefaultApiRouter({
-    routeModules: { airlines: resolvedAirlineModule.router },
-  });
+  const resolvedAirportModule = airportModule || (apiRouter ? undefined : getDefaultAirportModule());
+  const routeModules = {
+    ...(resolvedAirlineModule ? { airlines: resolvedAirlineModule.router } : {}),
+    ...(resolvedAirportModule ? { airports: resolvedAirportModule.router } : {}),
+  };
+  const resolvedApiRouter = apiRouter || getDefaultApiRouter({ routeModules });
 
   return {
     apiRouter: resolvedApiRouter,
     ...(resolvedAirlineModule ? { airlineModule: resolvedAirlineModule } : {}),
+    ...(resolvedAirportModule ? { airportModule: resolvedAirportModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -56,4 +82,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule };
