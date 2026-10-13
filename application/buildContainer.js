@@ -14,6 +14,8 @@ const { createFlightModule } = require('../modules/flight');
 const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
 const { createUserModule } = require('../modules/user');
 const { SequelizeUserRepository } = require('../modules/user/user.repository');
+const { createRoleModule } = require('../modules/role');
+const { SequelizeRoleRepository } = require('../modules/role/role.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 
@@ -130,6 +132,23 @@ function getDefaultUserModule() {
   return defaultUserModule;
 }
 
+let defaultRoleModule;
+function getDefaultRoleModule() {
+  if (defaultRoleModule) return defaultRoleModule;
+  const { Role, User } = require('../models');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  defaultRoleModule = createRoleModule({
+    repository: new SequelizeRoleRepository({ Role, User }),
+    guards, validation, validators: require('../validators/role.validator'),
+  });
+  return defaultRoleModule;
+}
+
 function buildContainer({
   apiRouter,
   airlineModule,
@@ -138,6 +157,7 @@ function buildContainer({
   fareClassModule,
   flightModule,
   userModule,
+  roleModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -149,15 +169,17 @@ function buildContainer({
   const resolvedFareClassModule = fareClassModule || (apiRouter ? undefined : getDefaultFareClassModule());
   const resolvedFlightModule = flightModule || (apiRouter ? undefined : getDefaultFlightModule());
   const resolvedUserModule = userModule || (apiRouter ? undefined : getDefaultUserModule());
+  const resolvedRoleModule = roleModule || (apiRouter ? undefined : getDefaultRoleModule());
   const routeModules = {
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
+    ...(resolvedRoleModule ? { roles: resolvedRoleModule.router } : {}),
     ...(resolvedAirlineModule ? { airlines: resolvedAirlineModule.router } : {}),
     ...(resolvedAirportModule ? { airports: resolvedAirportModule.router } : {}),
     ...(resolvedPromotionModule ? { promotions: resolvedPromotionModule.router } : {}),
     ...(resolvedFareClassModule ? { fareClasses: resolvedFareClassModule.router } : {}),
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -170,6 +192,7 @@ function buildContainer({
     ...(resolvedFareClassModule ? { fareClassModule: resolvedFareClassModule } : {}),
     ...(resolvedFlightModule ? { flightModule: resolvedFlightModule } : {}),
     ...(resolvedUserModule ? { userModule: resolvedUserModule } : {}),
+    ...(resolvedRoleModule ? { roleModule: resolvedRoleModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -178,4 +201,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule };
