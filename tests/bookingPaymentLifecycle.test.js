@@ -144,6 +144,26 @@ test('#33/#38 initiation creates pending payment and signed VNPay sandbox URL wi
   await assert.rejects(paymentService.initiatePayment({ booking_id: 1, payment_method: 'vnpay', guest_email: 'guest@example.com' }), denied(400));
 });
 
+for (const invalidFlight of ['cancelled', 'departed']) {
+  test(`#33 initiation rejects a ${invalidFlight} flight before creating payment`, async (t) => {
+    const f = fixture(t);
+    if (invalidFlight === 'cancelled') f.flight.status = 'cancelled';
+    if (invalidFlight === 'departed') f.flight.departure_time = new Date(0);
+
+    await assert.rejects(
+      paymentService.initiatePayment({
+        booking_id: 1,
+        payment_method: 'vnpay',
+        guest_email: 'guest@example.com',
+      }),
+      denied(400),
+    );
+
+    assert.equal(f.booking.status, 'holding');
+    assert.equal(f.writes.length, 0);
+  });
+}
+
 for (const gateway of ['vnpay', 'payos']) {
   for (const outcome of ['success', 'failed-valid', 'failed-expired']) {
     test(`#33/#36/#39 ${gateway} ${outcome} callback updates states and releases resources correctly`, async (t) => {
