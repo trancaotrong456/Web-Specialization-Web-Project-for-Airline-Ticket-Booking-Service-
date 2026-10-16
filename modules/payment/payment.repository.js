@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizePaymentRepository {
-  constructor({ Payment, Booking, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, Booking, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
@@ -38,6 +38,10 @@ class SequelizePaymentRepository {
   }
   findLockedFlight(id, transaction) {
     return this.Flight.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findBookingSegments(bookingId, transaction) {
+    if (!this.BookingSegment) return Promise.resolve([]);
+    return this.BookingSegment.findAll({ where: { booking_id: bookingId }, order: [['leg_order', 'ASC']], transaction });
   }
   findLockedPromotion(id, transaction) {
     return this.Promotion.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
