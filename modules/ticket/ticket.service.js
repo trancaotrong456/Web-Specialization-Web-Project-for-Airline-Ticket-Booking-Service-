@@ -121,6 +121,23 @@ class TicketService {
         }
         doc.moveDown(0.5);
 
+        const additionalSegments = [...(booking.itinerarySegments || [])].sort((a, b) => Number(a.leg_order) - Number(b.leg_order));
+        additionalSegments.forEach((segment) => {
+          const segmentFlight = segment.flight;
+          if (!segmentFlight) return;
+          const segmentDeparture = segmentFlight.departureAirport;
+          const segmentArrival = segmentFlight.arrivalAirport;
+          doc.fontSize(12).fillColor('#1a73e8').text(`CHẶNG ${segment.leg_order}`, 50);
+          doc.fontSize(11).fillColor('#333');
+          doc.text(`Hãng hàng không: ${segmentFlight.airline?.name || '—'}`, 50);
+          doc.text(`Điểm đi: ${segmentDeparture?.name || '—'} (${segmentDeparture?.iata_code || '—'}) — ${segmentDeparture?.city || ''}`, 50);
+          doc.text(`Điểm đến: ${segmentArrival?.name || '—'} (${segmentArrival?.iata_code || '—'}) — ${segmentArrival?.city || ''}`, 50);
+          doc.text(`Giờ khởi hành: ${new Date(segmentFlight.departure_time).toLocaleString('vi-VN')}`, 50);
+          doc.text(`Giờ đến: ${new Date(segmentFlight.arrival_time).toLocaleString('vi-VN')}`, 50);
+          doc.text(`Hạng vé: ${segment.fareClass?.class_name || '—'}`, 50);
+          doc.moveDown(0.4);
+        });
+
         // ---- Passengers ----
         doc
           .fontSize(13)

@@ -44,32 +44,15 @@
       <tr>
         <th colspan="2">Thông Tin Chuyến Bay</th>
       </tr>
-      <% if (booking.flight) { %>
-      <tr>
-        <td>Hãng hàng không</td>
-        <td><%= booking.flight.airline ? booking.flight.airline.name : 'N/A' %></td>
-      </tr>
-      <tr>
-        <td>Điểm đi</td>
-        <td><%= booking.flight.departureAirport ? (booking.flight.departureAirport.city + ' (' + booking.flight.departureAirport.iata_code + ')') : 'N/A' %></td>
-      </tr>
-      <tr>
-        <td>Điểm đến</td>
-        <td><%= booking.flight.arrivalAirport ? (booking.flight.arrivalAirport.city + ' (' + booking.flight.arrivalAirport.iata_code + ')') : 'N/A' %></td>
-      </tr>
-      <tr>
-        <td>Giờ khởi hành</td>
-        <td><%= flightDate %></td>
-      </tr>
-      <tr>
-        <td>Giờ đến</td>
-        <td><%= arrivalDate %></td>
-      </tr>
-      <% } %>
-      <tr>
-        <td>Hạng ghế</td>
-        <td><%= booking.fareClass ? booking.fareClass.class_name : 'N/A' %></td>
-      </tr>
+      <% itineraryFlights.forEach(function(segment, index) { const flight = segment.flight; %>
+      <tr><th colspan="2">Chặng <%= index + 1 %></th></tr>
+      <tr><td>Hãng hàng không</td><td><%= flight.airline ? flight.airline.name : 'N/A' %></td></tr>
+      <tr><td>Điểm đi</td><td><%= flight.departureAirport ? (flight.departureAirport.city + ' (' + flight.departureAirport.iata_code + ')') : 'N/A' %></td></tr>
+      <tr><td>Điểm đến</td><td><%= flight.arrivalAirport ? (flight.arrivalAirport.city + ' (' + flight.arrivalAirport.iata_code + ')') : 'N/A' %></td></tr>
+      <tr><td>Giờ khởi hành</td><td><%= new Date(flight.departure_time).toLocaleString('vi-VN') %></td></tr>
+      <tr><td>Giờ đến</td><td><%= new Date(flight.arrival_time).toLocaleString('vi-VN') %></td></tr>
+      <tr><td>Hạng ghế</td><td><%= segment.fareClass ? segment.fareClass.class_name : 'N/A' %></td></tr>
+      <% }); %>
       <tr class="total-row">
         <td>Tổng tiền</td>
         <td><%= Number(booking.total_amount).toLocaleString('vi-VN') %> VND</td>
