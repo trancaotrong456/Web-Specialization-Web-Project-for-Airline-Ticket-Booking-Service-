@@ -12,4 +12,11 @@
 .seat-choice.selected { outline: 3px solid #f0a11b; background: #fff5df; }
 .seat-choice:disabled { border-color: #d4dce0; background: #e9edef; color: #8b989d; cursor: not-allowed; }
 .seat-clear-button { margin-top: .75rem; }
+.ancillary-choice { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .5rem; margin-top: .45rem; }
+.ancillary-choice .booking-fare-option { width: 100%; min-width: 0; }
+.ancillary-quantity { display: flex; align-items: center; gap: .35rem; color: #42616a; font-size: .75rem; }
+.ancillary-quantity span { max-width: 10rem; }
+.ancillary-quantity button { width: 2rem; height: 2rem; border: 1px solid #cbd9df; border-radius: .5rem; background: #fff; color: #07574f; }
+.ancillary-quantity button:disabled { opacity: .45; cursor: not-allowed; }
+.ancillary-quantity output { min-width: 1.25rem; text-align: center; font-weight: 700; }
 @media (max-width: 600px) { .seat-selection-picker { padding: .7rem; } .seat-grid { grid-template-columns: repeat(var(--seat-columns), minmax(1.5rem, 2.6rem)); gap: .3rem; } .seat-choice { min-height: 2.2rem; font-size: .68rem; } .seat-aisle { width: .35rem; } }

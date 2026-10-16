@@ -76,7 +76,7 @@ test('Booking module uses one injected controller, service and repository graph'
   assert.equal(typeof module.router, 'function');
 });
 
-test('multi-leg booking validates connected real flights, prices each fare and stores additional legs atomically', async () => {
+test('multi-leg booking validates connected real flights, prices each fare and persists every real segment atomically', async () => {
   const BookingService = require('../modules/booking/booking.service');
   const events = [];
   const flights = new Map([
@@ -117,6 +117,7 @@ test('multi-leg booking validates connected real flights, prices each fare and s
   assert.equal(created.total_amount, 2600000);
   assert.equal(created.flight_id, 11);
   assert.deepEqual(events.find(([type]) => type === 'segments')[1], [
+    { booking_id: 90, leg_order: 1, flight_id: 11, fare_class_id: 101, price_per_passenger: 900000 },
     { booking_id: 90, leg_order: 2, flight_id: 12, fare_class_id: 102, price_per_passenger: 400000 },
   ]);
 });
@@ -198,7 +199,7 @@ test('legacy Booking imports and cron resolve the canonical module', () => {
   const routes = module.router.stack.filter((layer) => layer.route).map((layer) => [layer.route.stack[0].method, layer.route.path]);
   assert.deepEqual(routes, [
     ['post', '/'], ['get', '/my-bookings'], ['get', '/lookup/:code'], ['get', '/admin/all'],
-    ['get', '/:id/ticket'], ['get', '/:id'], ['put', '/:id/cancel'],
+    ['get', '/:id/ticket'], ['get', '/:id'], ['put', '/:id/cancel'], ['put', '/:id/ancillaries'],
   ]);
   const ticket = module.router.stack.find((layer) => layer.route?.path === '/:id/ticket');
   assert.equal(ticket.route.stack.at(-1).handle, require('../controllers/ticket.controller').downloadTicket);

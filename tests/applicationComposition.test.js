@@ -8,7 +8,7 @@ const { createApp } = require('../app');
 test('registerModules mounts the existing feature routers once and in their established order', () => {
   const routeNames = [
     'auth', 'users', 'roles', 'airlines', 'airports', 'flights',
-    'fareClasses', 'bookings', 'payments', 'promotions',
+    'fareClasses', 'bookings', 'payments', 'seatSelection', 'ancillaries', 'promotions',
   ];
   const routeModules = Object.fromEntries(routeNames.map((name) => [name, express.Router()]));
   const router = registerModules({ routeModules });

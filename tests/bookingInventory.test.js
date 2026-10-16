@@ -5,7 +5,7 @@ const BookingService = require('../modules/booking/booking.service');
 const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
 
 // Model-boundary simulation: these tests are not evidence of MySQL concurrency.
-function inventory({ quota = 3, seats = 10, occupied = 0, failPassengers = false } = {}) {
+function inventory({ quota = 3, seats = 10, occupied = 0, failPassengers = false, ancillaryService } = {}) {
   const flights = new Map([1, 2].map((id) => [id, {
     id, status: 'scheduled', available_seats: seats,
     departure_airport_id: id, arrival_airport_id: id + 1,
@@ -20,6 +20,8 @@ function inventory({ quota = 3, seats = 10, occupied = 0, failPassengers = false
   const queues = new Map();
   const events = [];
   let nextId = 101;
+  let nextSegmentId = 501;
+  let nextPassengerId = 901;
   const repository = {
     async findFlightForUpdate(id, tx) {
       const previous = queues.get(id) || Promise.resolve();
@@ -51,11 +53,11 @@ function inventory({ quota = 3, seats = 10, occupied = 0, failPassengers = false
       bookings.push(booking); tx.created.push(booking); return booking;
     },
     async createBookingSegments(rows) {
-      for (const row of rows) bookings.find((b) => b.id === row.booking_id).segments.push(row);
+      return rows.map((row) => { const saved = { id: nextSegmentId++, ...row }; bookings.find((b) => b.id === row.booking_id).segments.push(saved); return saved; });
     },
     async createPassengers(rows) {
       if (failPassengers) throw new Error('passenger insert failed');
-      for (const row of rows) bookings.find((b) => b.id === row.booking_id).passengers.push(row);
+      return rows.map((row) => { const saved = { id: nextPassengerId++, ...row }; bookings.find((b) => b.id === row.booking_id).passengers.push(saved); return saved; });
     },
     async findBookingDetail(id) { return bookings.find((b) => b.id === id); },
   };
@@ -72,6 +74,7 @@ function inventory({ quota = 3, seats = 10, occupied = 0, failPassengers = false
   };
   const service = new BookingService({ repository, transactionManager,
     socket: () => ({ to: () => ({ emit() {} }), emit() {} }),
+    ancillaryService,
     flightSeatService: { async checkAndEmitSeatWarning(id) { events.push(['emit', id]); } },
   });
   const request = (count = 1, fare = 11, multi = false) => ({
@@ -108,11 +111,38 @@ test('zero fare quota is unavailable; null quota still respects total flight cap
   await assert.rejects(unlimited.service.createHoldingBooking(unlimited.request()), /available seats/i);
 });
 
+test('booking creation stores passenger/segment-linked ancillary snapshots and adds exact server subtotal', async () => {
+  let received;
+  const ancillaryService = { async reserveForBooking(args) {
+    received = args;
+    return { snapshots: [{ id: 1, booking_id: args.booking.id, passenger_id: args.passengers[0].id,
+      booking_segment_id: args.segments[0].id, line_total_snapshot: '250.50' }], subtotal: '250.50' };
+  } };
+  const f = inventory({ ancillaryService });
+  const request = f.request(2, 11, true);
+  request.ancillary_selections = [{ offer_id: 12, passenger_index: 0, leg_order: 1, quantity: 1 }];
+  const booking = await f.service.createHoldingBooking(request);
+  assert.equal(booking.total_amount, 1050.5);
+  assert.equal(received.booking.id, booking.id);
+  assert.equal(received.passengers[0].id, 901);
+  assert.deepEqual(received.segments.map(({ id, leg_order }) => [id, leg_order]), [[501, 1], [502, 2]]);
+  assert.equal(received.selections[0].passenger_index, 0);
+  assert.equal(received.transaction.LOCK.UPDATE, 'UPDATE');
+});
+
 test('insufficient quota on a later leg leaves the entire itinerary unreserved', async () => {
   const f = inventory(); f.fares.get(21).seat_quota = 1;
   await assert.rejects(f.service.createHoldingBooking(f.request(2, 11, true)), /fare|quota/i);
   assert.deepEqual([...f.flights.values()].map((v) => v.available_seats), [10, 10]);
   assert.equal(f.bookings.length, 0);
+});
+
+test('new one-way bookings persist their primary flight as the real first booking segment', async () => {
+  const f = inventory();
+  const booking = await f.service.createHoldingBooking(f.request());
+  assert.deepEqual(f.bookings.find((item) => item.id === booking.id).segments.map((segment) => ({
+    leg_order: segment.leg_order, flight_id: segment.flight_id, fare_class_id: segment.fare_class_id,
+  })), [{ leg_order: 1, flight_id: 1, fare_class_id: 11 }]);
 });
 
 test('failed passenger persistence rolls back flights, segments and booking without notifications', async () => {

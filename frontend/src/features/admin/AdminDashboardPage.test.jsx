@@ -102,7 +102,7 @@ describe('admin dashboard navigation shell', () => {
 
     const icons = [...document.querySelectorAll('.admin-module-icon svg[data-module-icon]')];
     expect(icons.map((icon) => icon.getAttribute('data-module-icon'))).toEqual([
-      'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions', 'seats',
+      'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions', 'seats', 'ancillaries',
     ]);
     expect(icons.every((icon) => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
   });

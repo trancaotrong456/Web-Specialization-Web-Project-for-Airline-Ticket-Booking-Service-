@@ -35,6 +35,10 @@ function fixture(t, overrides = {}, itinerarySegments = [], omitLockedPassengers
   t.mock.method(models.Booking, 'findByPk', async () => booking);
   t.mock.method(models.Booking, 'findAll', async () => [booking]);
   t.mock.method(models.BookingSegment, 'findAll', async () => itinerarySegments);
+  t.mock.method(models.BookingSegment, 'bulkCreate', async (values, options) => {
+    assert.equal(options.transaction, tx);
+    return values.map((value, index) => ({ ...value, id: index + 1 }));
+  });
   t.mock.method(models.Flight, 'findOne', async (options) => {
     assert.equal(options.transaction, tx); assert.equal(options.lock, 'UPDATE');
     return Number(options.where.id) === nextFlight.id ? nextFlight : flight;
@@ -42,6 +46,8 @@ function fixture(t, overrides = {}, itinerarySegments = [], omitLockedPassengers
   t.mock.method(models.FareClass, 'findOne', async () => ({ price: 100000 }));
   t.mock.method(models.Promotion, 'findOne', async () => promo);
   t.mock.method(models.Payment, 'findOne', async () => payment);
+  t.mock.method(models.Payment, 'count', async () => 0);
+  t.mock.method(models.BookingAncillary, 'findAll', async () => []);
   t.mock.method(models.Payment, 'create', async (values, options) => {
     assert.equal(options.transaction, tx); Object.assign(payment, values); return payment;
   });
@@ -416,12 +422,12 @@ for (const unavailable of ['seats', 'departed', 'cancelled-flight', 'wrong-fare'
   });
 }
 
-test('#33 gateway link creation failure restores holding without returning reserved seats', async (t) => {
+test('#33 gateway link creation failure restores holding and retains failed intent for audit', async (t) => {
   const f = fixture(t, { status: 'pending_payment' });
-  f.payment.destroy = async () => {};
-  const destroy = t.mock.method(f.payment, 'destroy', async (options) => { assert.equal(options.transaction, f.tx); });
+  f.payment.save = async (options) => { assert.equal(options.transaction, f.tx); };
+  const save = t.mock.method(f.payment, 'save', async (options) => { assert.equal(options.transaction, f.tx); });
   await paymentService._restoreHoldingAfterGatewayFailure(1, 'TXN_TEST');
-  assert.equal(f.booking.status, 'holding'); assert.equal(destroy.mock.callCount(), 1);
+  assert.equal(f.booking.status, 'holding'); assert.equal(f.payment.status, 'failed'); assert.equal(save.mock.callCount(), 1);
   assert.equal(f.flight.available_seats, 8); assert.equal(f.promo.used_count, 1);
 });
 
@@ -434,6 +440,50 @@ test('#39 callback rechecks state under lock when another callback already confi
   });
   assert.equal((await paymentService.handleVnpayIpn(ipn())).RspCode, '02');
   assert.equal(f.email.mock.callCount(), 0); assert.equal(f.writes.length, 0);
+});
+
+test('duplicate successful payment callbacks confirm ancillary capacity only once', async (t) => {
+  const f = fixture(t, { status: 'pending_payment' });
+  let confirmations = 0;
+  const previous = paymentService.ancillaryService;
+  paymentService.ancillaryService = { async confirmBooking(id, transaction) { assert.equal(id, f.booking.id); assert.equal(transaction, f.tx); confirmations += 1; } };
+  t.after(() => { paymentService.ancillaryService = previous; });
+  await paymentService.handleVnpayIpn(ipn());
+  await paymentService.handleVnpayIpn(ipn());
+  assert.equal(f.booking.status, 'confirmed');
+  assert.equal(f.payment.status, 'success');
+  assert.equal(confirmations, 1);
+});
+
+test('duplicate whole-booking refund cannot release ancillary capacity twice', async (t) => {
+  const f = fixture(t, { status: 'confirmed' }); f.payment.status = 'success';
+  let releases = 0;
+  const previous = paymentService.ancillaryService;
+  paymentService.ancillaryService = {
+    async assertWholeBookingRefundAllowed(id, transaction) { assert.equal(id, f.booking.id); assert.equal(transaction, f.tx); },
+    async releaseBooking(id, options) { assert.equal(id, f.booking.id); assert.equal(options.reason, 'refunded'); releases += 1; },
+  };
+  t.after(() => { paymentService.ancillaryService = previous; });
+  await paymentService.processRefund(1, 'test', { email: 'admin@example.com' });
+  await assert.rejects(paymentService.processRefund(1, 'duplicate', { email: 'admin@example.com' }), denied(400));
+  assert.equal(releases, 1);
+});
+
+test('non-refundable ancillary rejection occurs before payment booking or seat mutations', async (t) => {
+  const f = fixture(t, { status: 'confirmed' }); f.payment.status = 'success';
+  const previous = paymentService.ancillaryService;
+  let releases = 0;
+  paymentService.ancillaryService = {
+    async assertWholeBookingRefundAllowed() { const error = new Error('non-refundable'); error.statusCode = 409; throw error; },
+    async releaseBooking() { releases += 1; },
+  };
+  t.after(() => { paymentService.ancillaryService = previous; });
+  await assert.rejects(paymentService.processRefund(1, 'test', { email: 'admin@example.com' }), (error) => error.statusCode === 409);
+  assert.equal(f.payment.status, 'success');
+  assert.equal(f.booking.status, 'confirmed');
+  assert.equal(f.flight.available_seats, 8);
+  assert.equal(releases, 0);
+  assert.equal(f.writes.length, 0);
 });
 
 test('#41 fixed discount cannot produce a negative booking total', async (t) => {

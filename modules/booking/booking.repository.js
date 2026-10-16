@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizeBookingRepository {
-  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat } = {}) {
+  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary } = {}) {
     if (![Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport].every(Boolean)) {
       throw new TypeError('Booking repository requires all Booking association models');
     }
-    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat });
+    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary });
   }
 
   findFlight(options) { return this.Flight.findOne(options); }
@@ -69,7 +69,7 @@ class SequelizeBookingRepository {
   }
   _itineraryInclude() {
     if (!this.BookingSegment) return [];
-    return [{ model: this.BookingSegment, as: 'itinerarySegments', include: [
+    return [{ model: this.BookingSegment, as: 'itinerarySegments', required: false, where: { leg_order: { [Op.gt]: 1 } }, include: [
       { model: this.Flight, as: 'flight', include: [
         { model: this.Airline, as: 'airline' },
         { model: this.Airport, as: 'departureAirport' },
@@ -94,6 +94,7 @@ class SequelizeBookingRepository {
         { model: this.FareClass, as: 'fareClass' },
         { model: this.Promotion, as: 'promotion' },
         { model: this.BookingPassenger, as: 'passengers' },
+        ...(this.BookingAncillary ? [{ model: this.BookingAncillary, as: 'ancillaries', include: [{ model: this.BookingPassenger, as: 'passenger' }, ...(this.BookingSegment ? [{ model: this.BookingSegment, as: 'segment' }] : [])] }] : []),
         ...(this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['flight_id', 'seat_no', 'leg_order', 'booking_passenger_id', 'status'] }] : []),
         { model: this.Payment, as: 'payments' },
         { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email', 'phone'] },
@@ -113,6 +114,7 @@ class SequelizeBookingRepository {
         { model: this.FareClass, as: 'fareClass' },
         { model: this.Promotion, as: 'promotion' },
         { model: this.BookingPassenger, as: 'passengers' },
+        ...(this.BookingAncillary ? [{ model: this.BookingAncillary, as: 'ancillaries', include: [{ model: this.BookingPassenger, as: 'passenger' }, ...(this.BookingSegment ? [{ model: this.BookingSegment, as: 'segment' }] : [])] }] : []),
         { model: this.Payment, as: 'payments' },
         ...this._itineraryInclude(),
       ],

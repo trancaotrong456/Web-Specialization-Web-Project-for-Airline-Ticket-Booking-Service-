@@ -25,6 +25,22 @@ describe('booking customer pages', () => {
     expect(mocks.request).toHaveBeenCalledWith('/bookings/lookup/BK123?guest_email=guest%40example.com');
   });
 
+  it('does not render normalized first segment twice beside legacy primary flight fields', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ id: 7, booking_code: 'BK123', status: 'holding', total_amount: 1000,
+      flight: { ...flight, departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } },
+      fareClass: { class_name: 'Economy' }, passengers: [], payments: [],
+      itinerarySegments: [
+        { id: 70, leg_order: 1, flight: { ...flight, departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } }, fareClass: { class_name: 'Economy' } },
+        { id: 71, leg_order: 2, flight: { ...flight, departureAirport: { iata_code: 'SGN' }, arrivalAirport: { iata_code: 'DAD' } }, fareClass: { class_name: 'Business' } },
+      ],
+    });
+    renderBookingDetail();
+    const itinerary = await screen.findByRole('list');
+    expect(within(itinerary).getAllByRole('listitem')).toHaveLength(1);
+    expect(within(itinerary).getByText('SGN → DAD')).toBeInTheDocument();
+  });
+
   it.each([1, 2, 3])('preserves a %i-passenger search through fare selection without creating a booking', async (count) => {
     mocks.user = { id: 2, role: 'customer' };
     mocks.status = 'authenticated';
@@ -43,6 +59,37 @@ describe('booking customer pages', () => {
     expect(screen.getByText('Giá tham khảo trước ưu đãi')).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent(new RegExp(`${(count * 1000000).toLocaleString('vi-VN')}\\s*₫`));
     expect(mocks.request.mock.calls.some(([path]) => path === '/bookings')).toBe(false);
+  });
+
+  it('submits optional server-configured ancillaries per passenger without client-supplied prices', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/airports?')) return { data: [] };
+      if (path === '/flights/17') return flight;
+      if (path === '/fare-classes/flight/17') return { data: [{ id: 5, class_name: 'Economy', price: '1000.00' }] };
+      if (path === '/ancillaries?flight_id=17&fare_class_id=5') return { data: [{ id: 80, offer_name: '20 kg', unit_price: '250.50', capacity: 10, reserved_quantity: 0, service: { name: 'Hành lý' }, refund_policy: 'non_refundable' }] };
+      if (path === '/bookings') return { id: 70, status: 'holding' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    renderPage(<BookingCreatePage />, '/bookings/new?flight_id=17&passengers=2');
+    await user.click(await screen.findByRole('radio', { name: /Economy/ }));
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    const choices = await screen.findAllByRole('checkbox');
+    expect(choices).toHaveLength(2);
+    await user.click(choices[0]); await user.click(choices[1]);
+    await user.click(screen.getByRole('button', { name: 'Tăng số lượng 20 kg cho hành khách 1, chặng 1' }));
+    const nameInputs = screen.getAllByLabelText(/Họ tên/);
+    await user.type(nameInputs[0], 'First Passenger'); await user.type(nameInputs[1], 'Second Passenger');
+    await user.click(screen.getByRole('button', { name: 'Tạo đặt chỗ và tiếp tục thanh toán' }));
+    await waitFor(() => {
+      const createCall = mocks.request.mock.calls.find(([path]) => path === '/bookings');
+      expect(createCall[1].body.ancillary_selections).toEqual([
+        { offer_id: 80, leg_order: 1, passenger_index: 0, quantity: 2 },
+        { offer_id: 80, leg_order: 1, passenger_index: 1, quantity: 1 },
+      ]);
+      expect(JSON.stringify(createCall[1].body)).not.toContain('unit_price');
+    });
   });
 
   it('loads a selected multi-leg itinerary and submits one booking containing every real flight and fare', async () => {

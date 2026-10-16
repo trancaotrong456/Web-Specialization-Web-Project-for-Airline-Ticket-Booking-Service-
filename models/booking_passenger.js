@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       BookingPassenger.belongsTo(models.Booking, { foreignKey: 'booking_id', as: 'booking' });
       if (models.FlightSeat) BookingPassenger.hasMany(models.FlightSeat, { foreignKey: 'booking_passenger_id', as: 'seatAssignments' });
+      if (models.BookingAncillary) BookingPassenger.hasMany(models.BookingAncillary, { foreignKey: 'passenger_id', as: 'ancillaries' });
     }
   }
 

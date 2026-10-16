@@ -26,7 +26,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, seatSelectionService } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, seatSelectionService, ancillaryService } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -36,6 +36,7 @@ class PaymentService {
     this.qrCode = qrCode;
     this.emailProvider = emailProvider;
     this.seatSelectionService = seatSelectionService;
+    this.ancillaryService = ancillaryService;
   }
   /**
    * Administrative payment history. Payment gateways can disclose only the
@@ -126,13 +127,12 @@ class PaymentService {
 
       // Do not overwrite a webhook or another workflow that already changed state.
       if (booking && payment && booking.status === 'pending_payment') {
-        if (idempotencyError && payment.idempotency_key) {
-          payment.status = 'failed';
-          payment.idempotency_response = { error: idempotencyError };
-          await this.repository.save(payment, { transaction: t });
-        } else {
-          await this.repository.destroy(payment, { transaction: t });
-        }
+        // Keep every created intent as an audit record. Ancillary repricing is
+        // intentionally forbidden once any provider intent has existed, even
+        // when gateway setup later fails.
+        payment.status = 'failed';
+        if (idempotencyError && payment.idempotency_key) payment.idempotency_response = { error: idempotencyError };
+        await this.repository.save(payment, { transaction: t });
         booking.status = 'holding';
         await this.repository.save(booking, { transaction: t });
       }
@@ -258,6 +258,8 @@ class PaymentService {
 
       booking.status = 'expired';
       await this.repository.save(booking, { transaction: t });
+
+      await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'expired' });
 
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
       if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
@@ -679,6 +681,7 @@ class PaymentService {
         lockedBooking.status = 'confirmed';
         await this.repository.save(lockedBooking, { transaction: t });
         if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
+        await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
         bookingIdToEmail = lockedBooking.id;
       } else {
@@ -700,6 +703,8 @@ class PaymentService {
         } else {
           lockedBooking.status = 'expired';
           await this.repository.save(lockedBooking, { transaction: t });
+
+          await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
 
           // Giải phóng ghế về chuyến bay
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
@@ -832,6 +837,7 @@ class PaymentService {
         lockedBooking.status = 'confirmed';
         await this.repository.save(lockedBooking, { transaction: t });
         if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
+        await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
         bookingIdToEmail = lockedBooking.id;
       } else {
@@ -848,6 +854,8 @@ class PaymentService {
         } else {
           lockedBooking.status = 'expired';
           await this.repository.save(lockedBooking, { transaction: t });
+
+          await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
 
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
           if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
@@ -988,6 +996,9 @@ class PaymentService {
         throw error;
       }
 
+      // Validate before mutating Payment, Booking, seats, or ancillary inventory.
+      await this.ancillaryService?.assertWholeBookingRefundAllowed(bookingId, t);
+
       // Mark payment as refunded
       successfulPayment.status = 'refunded';
       await this.repository.save(successfulPayment, { transaction: t });
@@ -995,6 +1006,8 @@ class PaymentService {
       // Mark booking as cancelled
       booking.status = 'cancelled';
       await this.repository.save(booking, { transaction: t });
+
+      await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'refunded' });
 
       // Return seats to flight
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });

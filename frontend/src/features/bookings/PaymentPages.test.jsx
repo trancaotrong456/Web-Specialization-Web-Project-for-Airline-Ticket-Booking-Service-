@@ -35,6 +35,7 @@ describe('payment pages', () => {
       ...booking,
       total_amount: 3750000,
       itinerarySegments: [
+        { id: 20, leg_order: 1, flight: { departure_time: '2026-10-12T10:00:00Z', departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } } },
         { id: 22, leg_order: 3, flight: { departure_time: '2026-10-14T10:00:00Z', departureAirport: { iata_code: 'DAD' }, arrivalAirport: { iata_code: 'CXR' } } },
         { id: 21, leg_order: 2, flight: { departure_time: '2026-10-13T10:00:00Z', departureAirport: { iata_code: 'SGN' }, arrivalAirport: { iata_code: 'DAD' } } },
       ],

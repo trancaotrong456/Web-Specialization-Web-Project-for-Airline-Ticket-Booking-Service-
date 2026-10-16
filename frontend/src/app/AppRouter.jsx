@@ -36,6 +36,7 @@ import {
 import { PromotionDetailPage, PromotionFormPage, PromotionsPage } from '../features/promotions/PromotionPages';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { SeatMapAdminPage } from '../features/bookings/SeatMapAdminPage';
+import { AncillariesAdminPage } from '../features/admin/AncillariesAdminPage';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -104,6 +105,7 @@ export function AppRoutes() {
           <Route path="/admin/promotions/:id" element={<PromotionDetailPage />} />
           <Route path="/admin/promotions/:id/edit" element={<PromotionFormPage mode="edit" />} />
           <Route path="/admin/seat-maps" element={<SeatMapAdminPage />} />
+          <Route path="/admin/ancillaries" element={<AncillariesAdminPage />} />
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/users/:id" element={<UserDetailPage />} />
           <Route path="/admin/roles" element={<RolesPage />} />
