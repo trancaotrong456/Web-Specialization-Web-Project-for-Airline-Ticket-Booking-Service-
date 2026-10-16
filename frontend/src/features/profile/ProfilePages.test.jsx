@@ -51,12 +51,23 @@ const renderProfileRoute = (path, fetchImpl) => {
 };
 
 describe('profile and security pages', () => {
+  it('shares the public navigation shell and footer used by booking pages', async () => {
+    renderProfileRoute('/profile', createProfileFetch());
+
+    expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
+    expect(document.querySelector('.account-page')).toHaveClass('public-page');
+    expect(document.querySelector('.account-page > .site-footer')).toBeInTheDocument();
+  });
+
   it('shows read-only email and sends only editable profile fields', async () => {
     const user = userEvent.setup();
     const fetchImpl = createProfileFetch();
     renderProfileRoute('/profile', fetchImpl);
 
     expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
+    expect(document.querySelector('.account-page')).toBeInTheDocument();
+    expect(document.querySelector('.account-card')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Thông tin cá nhân' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByLabelText('Email')).toHaveValue('an@example.com');
     expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
     await user.clear(screen.getByLabelText('Họ và tên'));
@@ -97,6 +108,8 @@ describe('profile and security pages', () => {
     const fetchImpl = createProfileFetch();
     renderProfileRoute('/profile/security', fetchImpl);
     expect(await screen.findByRole('heading', { name: 'Bảo mật tài khoản' })).toBeInTheDocument();
+    expect(document.querySelector('.account-card-narrow')).toBeInTheDocument();
+    expect(document.querySelector('.account-tabs a[aria-current="page"]')).toHaveTextContent('Bảo mật');
 
     await user.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
 
