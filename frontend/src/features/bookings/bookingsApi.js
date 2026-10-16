@@ -20,7 +20,11 @@ export const createBookingsApi = (request) => ({
   bookingDetail: (id, guestEmail) => request(`/bookings/${encodeURIComponent(id)}?${toQuery({ guest_email: guestEmail })}`),
   cancelBooking: (id, guestEmail) => request(`/bookings/${encodeURIComponent(id)}/cancel`, { method: 'PUT', body: guestEmail ? { guest_email: guestEmail } : {} }),
   downloadTicket: (id, guestEmail) => request(`/bookings/${encodeURIComponent(id)}/ticket?${toQuery({ guest_email: guestEmail })}`, { responseType: 'blob' }),
-  initiatePayment: (payload) => request('/payments/initiate', { method: 'POST', body: payload }),
+  initiatePayment: (payload, idempotencyKey) => request('/payments/initiate', {
+    method: 'POST',
+    body: payload,
+    ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
+  }),
   payments: ({ page = 1, limit = 20, status, payment_method, booking_id } = {}) => request(`/payments?${toQuery({ page, limit, status, payment_method, booking_id })}`),
   paymentDetail: (id) => request(`/payments/${encodeURIComponent(id)}`),
   refundBooking: (id, reason) => request(`/payments/bookings/${encodeURIComponent(id)}/refund`, { method: 'POST', body: reason ? { reason } : {} }),

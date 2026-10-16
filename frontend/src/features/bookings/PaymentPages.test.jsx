@@ -27,6 +27,7 @@ describe('payment pages', () => {
     await user.click(screen.getByRole('button', { name: 'Tiếp tục thanh toán' }));
     expect(await screen.findByRole('img', { name: 'Mã QR do payOS trả về' })).toHaveAttribute('src', 'data:image/png;base64,serverQr');
     expect(mocks.request).toHaveBeenCalledWith('/payments/initiate', expect.objectContaining({ method: 'POST', body: expect.objectContaining({ booking_id: 7, payment_method: 'payos', guest_email: 'guest@example.com' }) }));
+    expect(mocks.request.mock.calls.find(([path]) => path === '/payments/initiate')[1].headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
   it('shows every itinerary leg in the payment summary and keeps the server total', async () => {

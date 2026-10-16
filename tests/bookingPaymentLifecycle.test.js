@@ -192,6 +192,29 @@ test('expired gateway callback restores seats on every itinerary leg exactly onc
   assert.equal(f.seatUpdates.length, 2);
 });
 
+for (const gateway of ['vnpay', 'payos']) {
+  test(`${gateway} success callback arriving after expiry cannot reconfirm or release inventory twice`, async (t) => {
+    const f = fixture(t, { status: 'pending_payment', hold_expires_at: new Date(Date.now() - 60_000) }, [{ flight_id: 3 }]);
+    const failedCallback = gateway === 'vnpay'
+      ? () => paymentService.handleVnpayIpn(ipn(180000, '24'))
+      : () => paymentService._processVerifiedPayosWebhook({ orderCode: 123, amount: 180000, isSuccess: false });
+    const lateSuccess = gateway === 'vnpay'
+      ? () => paymentService.handleVnpayIpn(ipn(180000, '00'))
+      : () => paymentService._processVerifiedPayosWebhook({ orderCode: 123, amount: 180000, isSuccess: true });
+
+    await failedCallback();
+    await lateSuccess();
+
+    assert.equal(f.payment.status, 'failed');
+    assert.equal(f.booking.status, 'expired');
+    assert.equal(f.flight.available_seats, 10);
+    assert.equal(f.nextFlight.available_seats, 6);
+    assert.equal(f.promo.used_count, 0);
+    assert.equal(f.email.mock.callCount(), 0);
+    assert.deepEqual(f.seatUpdates.map(({ flight_id }) => flight_id), [2, 3]);
+  });
+}
+
 test('successful payment confirms configured seat assignments in the same transaction and only once', async (t) => {
   const f = fixture(t, { status: 'pending_payment' });
   f.booking.seatAssignments = [{ id: 9 }];

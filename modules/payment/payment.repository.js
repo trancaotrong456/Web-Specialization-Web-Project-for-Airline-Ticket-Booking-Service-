@@ -9,6 +9,14 @@ class SequelizePaymentRepository {
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
+  findPaymentByIdempotencyKey(key, transaction) {
+    const options = { where: { idempotency_key: key } };
+    if (transaction) {
+      options.lock = transaction.LOCK.UPDATE;
+      options.transaction = transaction;
+    }
+    return this.Payment.findOne(options);
+  }
   findPaymentByPk(id, options) { return this.Payment.findByPk(id, options); }
   findAndCountPayments(options) { return this.Payment.findAndCountAll(options); }
   findPayments(options) { return this.Payment.findAll(options); }
@@ -60,13 +68,13 @@ class SequelizePaymentRepository {
     return this.Payment.findOne({ where: { booking_id: bookingId, status: 'success' }, lock: transaction.LOCK.UPDATE, transaction });
   }
   listPayments({ where, limit, offset }) {
-    return this.Payment.findAndCountAll({ where, limit, offset, order: [['created_at', 'DESC']], include: [{
+    return this.Payment.findAndCountAll({ where, limit, offset, order: [['created_at', 'DESC']], attributes: { exclude: ['idempotency_key', 'request_fingerprint', 'idempotency_response'] }, include: [{
       model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status', 'user_id', 'guest_email', 'total_amount'],
       include: [{ model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'], required: false }],
     }] });
   }
   findPaymentDetail(id) {
-    return this.Payment.findByPk(id, { include: [{
+    return this.Payment.findByPk(id, { attributes: { exclude: ['idempotency_key', 'request_fingerprint', 'idempotency_response'] }, include: [{
       model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status', 'user_id', 'guest_email', 'total_amount'],
       include: [{ model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'], required: false }],
     }] });

@@ -29,6 +29,23 @@ test('legacy Payment imports resolve the canonical module graph', () => {
   assert.equal(ipn.route.stack.at(-1).handle, module.controller.vnpayIpn);
 });
 
+test('Payment controller forwards the idempotency header without changing the request body contract', async () => {
+  const PaymentController = require('../modules/payment/payment.controller');
+  let forwarded;
+  const controller = new PaymentController({ service: { initiatePayment: async (value) => { forwarded = value; return { status: 'pending_payment' }; } } });
+  const response = { status: () => response, json: () => response };
+  await controller.initiatePayment({
+    headers: { 'idempotency-key': 'header-key-0001' },
+    body: { booking_id: 3, payment_method: 'vnpay', guest_email: 'guest@example.com' },
+    socket: { remoteAddress: '127.0.0.1' },
+    user: null,
+  }, response, (error) => { throw error; });
+
+  assert.equal(forwarded.idempotency_key, 'header-key-0001');
+  assert.equal(forwarded.booking_id, 3);
+  assert.equal(forwarded.payment_method, 'vnpay');
+});
+
 test('Payment repository preserves webhook Payment then Booking lock order and transaction identity', async () => {
   const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
   const calls = [];
@@ -44,6 +61,42 @@ test('Payment repository preserves webhook Payment then Booking lock order and t
   assert.equal(calls[0][1].transaction, transaction);
   assert.equal(calls[1][1].transaction, transaction);
   assert.equal(calls[1][1].include[0].as, 'passengers');
+});
+
+test('Payment repository reads idempotency keys under an update lock in the supplied transaction', async () => {
+  const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
+  let options;
+  const repository = new SequelizePaymentRepository({
+    Payment: { findOne: async (value) => { options = value; return null; } },
+    Booking: {}, Flight: {}, BookingPassenger: {}, Promotion: {}, User: {},
+  });
+  const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+
+  await repository.findPaymentByIdempotencyKey('request-key-1234', transaction);
+
+  assert.deepEqual(options.where, { idempotency_key: 'request-key-1234' });
+  assert.equal(options.lock, transaction.LOCK.UPDATE);
+  assert.equal(options.transaction, transaction);
+});
+
+test('Payment history and detail do not expose internal idempotency metadata', async () => {
+  let listOptions;
+  let detailOptions;
+  const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
+  const repository = new SequelizePaymentRepository({
+    Payment: {
+      findAndCountAll: async (options) => { listOptions = options; return { count: 0, rows: [] }; },
+      findByPk: async (_id, options) => { detailOptions = options; return null; },
+    },
+    Booking: {}, Flight: {}, BookingPassenger: {}, Promotion: {}, User: {},
+  });
+
+  await repository.listPayments({ where: {}, limit: 20, offset: 0 });
+  await repository.findPaymentDetail(5);
+
+  for (const options of [listOptions, detailOptions]) {
+    assert.deepEqual(options.attributes.exclude, ['idempotency_key', 'request_fingerprint', 'idempotency_response']);
+  }
 });
 
 test('Payment repository keeps refund locks and successful-payment filter', async () => {
