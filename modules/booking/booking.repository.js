@@ -14,7 +14,25 @@ class SequelizeBookingRepository {
   }
   findFareClass(options) { return this.FareClass.findOne(options); }
   findFareClassForFlight(id, flightId, transaction) {
-    return this.FareClass.findOne({ where: { id, flight_id: flightId }, transaction });
+    return this.FareClass.findOne({ where: { id, flight_id: flightId }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  countReservedFareSeats(fareClassId, transaction) {
+    // Count passengers, not bookings. DISTINCT avoids multiplying passengers by
+    // the additional legs joined to their booking. Expiry frees quota only when
+    // its status transition and physical seat release commit together.
+    const fares = [{ '$booking.fare_class_id$': fareClassId }];
+    if (this.BookingSegment) fares.push({ '$booking.itinerarySegments.fare_class_id$': fareClassId });
+    return this.BookingPassenger.count({
+      distinct: true, col: 'id', transaction,
+      where: { [Op.or]: fares },
+      include: [{
+        model: this.Booking, as: 'booking', required: true, attributes: [],
+        where: { status: { [Op.in]: ['holding', 'pending_payment', 'confirmed'] } },
+        include: this.BookingSegment ? [{
+          model: this.BookingSegment, as: 'itinerarySegments', required: false, attributes: [],
+        }] : [],
+      }],
+    });
   }
   findPromotion(options) { return this.Promotion.findOne(options); }
   findPromotionByCodeForUpdate(code, transaction) {

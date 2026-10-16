@@ -104,6 +104,32 @@ describe('booking customer pages', () => {
     expect(screen.queryByText('Hạng chuyến cũ')).not.toBeInTheDocument();
   });
 
+  it('keeps passenger details and stays on the form when the server rejects depleted fare inventory', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/airports?')) return { data: [] };
+      if (path === '/flights/17') return flight;
+      if (path === '/fare-classes/flight/17') return { data: [{ id: 5, class_name: 'Phổ thông', price: 1000000, seat_quota: 20 }] };
+      if (path === '/bookings') throw new Error('Not enough seats in selected fare class. Only 0 remaining');
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    render(<MemoryRouter initialEntries={['/bookings/new?flight_id=17&passengers=1']}><Routes>
+      <Route path="/bookings/new" element={<BookingCreatePage />} />
+      <Route path="*" element={<p>Unexpected success navigation</p>} />
+    </Routes></MemoryRouter>);
+    await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
+    expect(screen.getByText(/20 ghế phân bổ/)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    await user.type(screen.getByLabelText('Họ tên'), 'Nguyen Van A');
+    await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
+    expect(await screen.findByText('Not enough seats in selected fare class. Only 0 remaining')).toBeInTheDocument();
+    expect(screen.getByLabelText('Họ tên')).toHaveValue('Nguyen Van A');
+    expect(screen.getByRole('button', { name: /Tạo đặt chỗ/ })).toBeEnabled();
+    expect(screen.queryByText('Unexpected success navigation')).not.toBeInTheDocument();
+    expect(mocks.request.mock.calls.filter(([path]) => path === '/bookings')).toHaveLength(1);
+  });
+
   it('requires a valid guest email before sending booking creation', async () => {
     mocks.request.mockImplementation(async (path) => {
       if (path.startsWith('/airports?')) return { data: [{ id: 1, iata_code: 'HAN', city: 'Hà Nội' }, { id: 2, iata_code: 'SGN', city: 'TP. Hồ Chí Minh' }] };

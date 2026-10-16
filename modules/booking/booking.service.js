@@ -61,6 +61,11 @@ class BookingService {
       throw error;
     }
 
+    if (!Array.isArray(passengers) || passengers.length === 0) {
+      const error = new Error('passengers must contain at least 1 passenger');
+      error.statusCode = 400;
+      throw error;
+    }
     const passengerCount = passengers.length;
     const holdingMinutes = parseInt(process.env.HOLDING_TIME_MINUTES || '15', 10);
     const holdExpiresAt = new Date(Date.now() + holdingMinutes * 60 * 1000);
@@ -129,6 +134,23 @@ class BookingService {
         const fareClass = await this.repository.findFareClassForFlight(requested.fare_class_id, requested.flight_id, t);
         if (!fareClass) {
           const error = new Error('Selected fare class does not belong to this flight'); error.statusCode = 404; throw error;
+        }
+        if (fareClass.seat_quota !== null && fareClass.seat_quota !== undefined) {
+          // All itinerary flights are already locked, and the fare lookup is a
+          // locking read. This is the first consistent read in this transaction:
+          // MySQL's snapshot therefore includes reservations committed before
+          // we obtained the flight locks. Do not move it ahead of those locks.
+          const reserved = Number(await this.repository.countReservedFareSeats(requested.fare_class_id, t));
+          const quota = Number(fareClass.seat_quota);
+          if (!Number.isSafeInteger(quota) || quota < 0 || !Number.isSafeInteger(reserved) || reserved < 0) {
+            throw new Error('Invalid fare inventory data');
+          }
+          const remaining = Math.max(0, quota - reserved);
+          if (passengerCount > remaining) {
+            const error = new Error(`Not enough seats in selected fare class. Only ${remaining} remaining`);
+            error.statusCode = 400;
+            throw error;
+          }
         }
         legs.push({ ...requested, flight, fareClass });
       }
