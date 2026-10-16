@@ -1,0 +1,15 @@
+.seat-selection-picker { margin: 1.25rem 0; padding: 1rem; border: 1px solid #d7e4e8; border-radius: 1rem; background: #f8fbfc; }
+.seat-selection-picker h3 { margin: 0; color: #073e45; }
+.seat-selection-picker > p { margin: .35rem 0 1rem; color: #657681; font-size: .9rem; }
+.seat-passenger-tabs { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1rem; }
+.seat-passenger-tabs button { min-height: 2.5rem; padding: .5rem .8rem; border: 1px solid #cbd9df; border-radius: .6rem; background: white; color: #163b42; }
+.seat-passenger-tabs button[aria-pressed="true"] { border-color: #087b71; background: #e8f5f1; font-weight: 700; }
+.seat-leg-picker { margin: .75rem 0; padding: .8rem; border: 1px solid #dce6ea; border-radius: .75rem; }
+.seat-leg-picker legend { padding: 0 .35rem; color: #315660; font-weight: 700; }
+.seat-grid { display: grid; grid-template-columns: repeat(var(--seat-columns), minmax(2.6rem, 3.2rem)); justify-content: center; gap: .5rem; padding: .5rem; }
+.seat-choice { min-height: 2.5rem; border: 1px solid #9acac0; border-radius: .55rem; background: #edfaf5; color: #07574f; font-size: .78rem; font-weight: 700; }
+.seat-aisle { width: .7rem; min-height: 2rem; align-self: stretch; }
+.seat-choice.selected { outline: 3px solid #f0a11b; background: #fff5df; }
+.seat-choice:disabled { border-color: #d4dce0; background: #e9edef; color: #8b989d; cursor: not-allowed; }
+.seat-clear-button { margin-top: .75rem; }
+@media (max-width: 600px) { .seat-selection-picker { padding: .7rem; } .seat-grid { grid-template-columns: repeat(var(--seat-columns), minmax(1.5rem, 2.6rem)); gap: .3rem; } .seat-choice { min-height: 2.2rem; font-size: .68rem; } .seat-aisle { width: .35rem; } }

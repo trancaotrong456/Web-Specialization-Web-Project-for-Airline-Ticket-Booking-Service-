@@ -5,12 +5,13 @@ const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, seatSelectionService } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
     this.socket = socket;
     this.flightSeatService = flightSeatService;
+    this.seatSelectionService = seatSelectionService;
   }
   /**
    * Helper to generate unique booking code
@@ -53,7 +54,7 @@ class BookingService {
   /**
    * 1. Create holding booking with row-level locking
    */
-  async createHoldingBooking({ flight_id, fare_class_id, trip_type, itinerary_legs, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
+  async createHoldingBooking({ flight_id, fare_class_id, trip_type, itinerary_legs, seat_selections = [], promotion_code, passengers, guest_email, user_id, currentUser = null }) {
     guest_email = normalizeGuestEmail(guest_email);
     if (!user_id && !guest_email) {
       const error = new Error('Guest email is required if you are not logged in');
@@ -249,14 +250,19 @@ class BookingService {
       }
 
       // 7. Create Passenger records
-      const passengerRecords = passengers.map((p) => ({
+      const passengerRecords = passengers.map((p, passengerIndex) => ({
         booking_id: booking.id,
         passenger_name: p.passenger_name,
         passport_no: p.passport_no || null,
-        seat_no: p.seat_no || null,
+        seat_no: seat_selections.find((selection) => Number(selection.leg_order) === 1 && Number(selection.passenger_index) === passengerIndex)?.seat_no || null,
       }));
 
-      await this.repository.createPassengers(passengerRecords, { transaction: t });
+      const createdPassengers = await this.repository.createPassengers(passengerRecords, { transaction: t });
+      if (seat_selections.length) {
+        if (!this.seatSelectionService) throw new Error('Seat selection is not available for this booking');
+        await this.seatSelectionService.reserveSeats({ bookingId: booking.id, passengers: createdPassengers,
+          selections: seat_selections, legs, holdExpiresAt, transaction: t });
+      }
 
       return { booking, flightSeatUpdates: legs.map(({ flight }) => ({ id: flight.id, availableSeats: flight.available_seats })) };
     });
@@ -356,6 +362,7 @@ class BookingService {
 
       // 1. Release seats back to flight
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
+      if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
       // 2. Rollback promotion if used
       if (booking.promotion_id) {
@@ -400,6 +407,7 @@ class BookingService {
           if (!lockedBooking) return; // Might have been processed concurrently
 
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
+          if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
 
           if (lockedBooking.promotion_id) {
             const promo = await this.repository.findPromotionByIdForUpdate(lockedBooking.promotion_id, t);
@@ -458,6 +466,7 @@ class BookingService {
           await this.repository.save(payment, { transaction: t });
 
           seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
+          if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
           if (booking.promotion_id) {
             const promo = await this.repository.findPromotionByIdForUpdate(booking.promotion_id, t);

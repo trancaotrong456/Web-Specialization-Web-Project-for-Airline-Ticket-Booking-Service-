@@ -192,6 +192,57 @@ test('expired gateway callback restores seats on every itinerary leg exactly onc
   assert.equal(f.seatUpdates.length, 2);
 });
 
+test('successful payment confirms configured seat assignments in the same transaction and only once', async (t) => {
+  const f = fixture(t, { status: 'pending_payment' });
+  f.booking.seatAssignments = [{ id: 9 }];
+  const seat = { status: 'held', async update(values, options) {
+    assert.equal(options.transaction, f.tx);
+    Object.assign(this, values);
+  } };
+  let reads = 0;
+  t.mock.method(models.FlightSeat, 'findAll', async (options) => {
+    reads += 1;
+    assert.equal(options.where.booking_id, f.booking.id);
+    assert.equal(options.transaction, f.tx);
+    assert.equal(options.lock, f.tx.LOCK.UPDATE);
+    return [seat];
+  });
+
+  await paymentService.handleVnpayIpn(ipn(180000, '00'));
+  await paymentService.handleVnpayIpn(ipn(180000, '00'));
+
+  assert.equal(f.booking.status, 'confirmed');
+  assert.equal(seat.status, 'booked');
+  assert.equal(seat.hold_expires_at, null);
+  assert.equal(reads, 1);
+});
+
+test('booking cancellation releases configured seat assignments in its transaction and only once', async (t) => {
+  const f = fixture(t, { user_id: 7 });
+  f.booking.seatAssignments = [{ id: 9 }];
+  const seat = { status: 'held', async update(values, options) {
+    assert.equal(options.transaction, f.tx);
+    Object.assign(this, values);
+  } };
+  let reads = 0;
+  t.mock.method(models.FlightSeat, 'findAll', async (options) => {
+    reads += 1;
+    assert.equal(options.where.booking_id, f.booking.id);
+    assert.equal(options.transaction, f.tx);
+    assert.equal(options.lock, f.tx.LOCK.UPDATE);
+    return [seat];
+  });
+
+  await bookingService.cancelHoldingBooking(1, { id: 7 });
+
+  assert.equal(f.booking.status, 'cancelled');
+  assert.equal(seat.status, 'available');
+  assert.equal(seat.booking_id, null);
+  assert.equal(seat.booking_passenger_id, null);
+  assert.equal(seat.hold_expires_at, null);
+  assert.equal(reads, 1);
+});
+
 test('#39 invalid signature and amount never update state', async (t) => {
   const f = fixture(t, { status: 'pending_payment' });
   assert.equal((await paymentService.handleVnpayIpn({ ...ipn(), vnp_SecureHash: 'bad' })).RspCode, '97');

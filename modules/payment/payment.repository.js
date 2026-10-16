@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizePaymentRepository {
-  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat });
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
@@ -25,10 +25,10 @@ class SequelizePaymentRepository {
     return this.Payment.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
   }
   findLockedBookingWithPassengers(id, transaction) {
-    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }] });
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._seatAssignmentsInclude()] });
   }
   findLockedBooking(id, transaction) {
-    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: this._seatAssignmentsInclude() });
   }
   findPendingPaymentForGatewayFailure(bookingId, transactionRef, transaction) {
     return this.Payment.findOne({ where: { booking_id: bookingId, transaction_ref: transactionRef, status: 'pending' }, lock: transaction.LOCK.UPDATE, transaction });
@@ -49,8 +49,12 @@ class SequelizePaymentRepository {
   findRefundBooking(id, transaction) {
     return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [
       { model: this.BookingPassenger, as: 'passengers' },
+      ...this._seatAssignmentsInclude(),
       { model: this.Payment, as: 'payments' },
     ] });
+  }
+  _seatAssignmentsInclude() {
+    return this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['id'], required: false }] : [];
   }
   findSuccessfulPaymentForRefund(bookingId, transaction) {
     return this.Payment.findOne({ where: { booking_id: bookingId, status: 'success' }, lock: transaction.LOCK.UPDATE, transaction });

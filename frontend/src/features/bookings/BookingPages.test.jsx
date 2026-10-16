@@ -130,6 +130,30 @@ describe('booking customer pages', () => {
     expect(mocks.request.mock.calls.filter(([path]) => path === '/bookings')).toHaveLength(1);
   });
 
+  it('lets each passenger select an API-backed seat for a configured flight and submits it with booking', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockImplementation(async (path, options) => {
+      if (path.startsWith('/airports?')) return { data: [] };
+      if (path === '/flights/17') return flight;
+      if (path === '/fare-classes/flight/17') return { data: [{ id: 5, class_name: 'Phổ thông', price: 1000000 }] };
+      if (path === '/seat-selection/flights/17/map') return { supported: true, row_count: 1, column_count: 2, aisle_after: [1], seats: [{ seat_no: '1A', row_number: 1, column_number: 1, zone: 'economy', fare_class_id: 5, status: 'available', special_properties: [] }, { seat_no: '1B', row_number: 1, column_number: 2, zone: 'business', fare_class_id: 9, status: 'available', special_properties: [] }] };
+      if (path === '/bookings') return { id: 105, booking_code: 'BK105' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    renderPage(<BookingCreatePage />, '/bookings/new?flight_id=17&passengers=1');
+    await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục' }));
+    const availableSeat = await screen.findByRole('button', { name: '1A, trống' });
+    expect(document.querySelectorAll('.seat-aisle')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: '1B, không thuộc hạng vé' })).toHaveStyle({ gridColumn: '3' });
+    await user.click(availableSeat);
+    expect(screen.getByRole('button', { name: '1B, không thuộc hạng vé' })).toBeDisabled();
+    await user.type(screen.getByLabelText('Họ tên'), 'Nguyen Van A');
+    await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings', expect.objectContaining({ method: 'POST', body: expect.objectContaining({ seat_selections: [{ leg_order: 1, passenger_index: 0, seat_no: '1A' }] }) })));
+  });
+
   it('requires a valid guest email before sending booking creation', async () => {
     mocks.request.mockImplementation(async (path) => {
       if (path.startsWith('/airports?')) return { data: [{ id: 1, iata_code: 'HAN', city: 'Hà Nội' }, { id: 2, iata_code: 'SGN', city: 'TP. Hồ Chí Minh' }] };

@@ -25,7 +25,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, seatSelectionService } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -34,6 +34,7 @@ class PaymentService {
     this.payOSFactory = payOSFactory;
     this.qrCode = qrCode;
     this.emailProvider = emailProvider;
+    this.seatSelectionService = seatSelectionService;
   }
   /**
    * Administrative payment history. Payment gateways can disclose only the
@@ -155,6 +156,7 @@ class PaymentService {
       await this.repository.save(booking, { transaction: t });
 
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+      if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
       if (booking.promotion_id) {
         const promo = await this.repository.findLockedPromotion(booking.promotion_id, t);
@@ -547,6 +549,7 @@ class PaymentService {
 
         lockedBooking.status = 'confirmed';
         await this.repository.save(lockedBooking, { transaction: t });
+        if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
 
         bookingIdToEmail = lockedBooking.id;
       } else {
@@ -571,6 +574,7 @@ class PaymentService {
 
           // Giải phóng ghế về chuyến bay
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
 
           // Hoàn lượt dùng mã khuyến mãi
           if (lockedBooking.promotion_id) {
@@ -698,6 +702,7 @@ class PaymentService {
 
         lockedBooking.status = 'confirmed';
         await this.repository.save(lockedBooking, { transaction: t });
+        if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
 
         bookingIdToEmail = lockedBooking.id;
       } else {
@@ -716,6 +721,7 @@ class PaymentService {
           await this.repository.save(lockedBooking, { transaction: t });
 
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
 
           if (lockedBooking.promotion_id) {
             const promo = await this.repository.findLockedPromotion(lockedBooking.promotion_id, t);
@@ -863,6 +869,7 @@ class PaymentService {
 
       // Return seats to flight
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+      if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
       console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
 

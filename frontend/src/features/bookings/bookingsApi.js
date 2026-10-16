@@ -11,6 +11,7 @@ export const createBookingsApi = (request) => ({
   searchFlights: ({ departure_airport_id, arrival_airport_id, departure_date, min_seats = 1, page = 1, limit = 20 }) => request(`/flights/search?${toQuery({ departure_airport_id, arrival_airport_id, departure_date, min_seats, page, limit })}`),
   flightDetail: (id) => request(`/flights/${encodeURIComponent(id)}`),
   fareClassesForFlight: (flightId) => request(`/fare-classes/flight/${encodeURIComponent(flightId)}`),
+  seatMapForFlight: (flightId) => request(`/seat-selection/flights/${encodeURIComponent(flightId)}/map`),
   createBooking: (payload) => request('/bookings', { method: 'POST', body: payload }),
   validatePromotion: (code) => request(`/promotions/validate/${encodeURIComponent(code)}`),
   myBookings: ({ page = 1, limit = 10, status } = {}) => request(`/bookings/my-bookings?${toQuery({ page, limit, status })}`),

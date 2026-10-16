@@ -83,6 +83,11 @@ const createBookingValidator = [
     .isArray({ min: 1 })
     .withMessage('passengers must contain at least 1 passenger'),
 
+  body('seat_selections').optional().isArray({ max: 400 }).withMessage('seat_selections must be an array'),
+  body('seat_selections.*.leg_order').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isInt({ min: 1, max: 4 }),
+  body('seat_selections.*.passenger_index').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isInt({ min: 0, max: 99 }),
+  body('seat_selections.*.seat_no').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isString().trim().isLength({ min: 2, max: 10 }),
+
   body('passengers.*.passenger_name')
     .trim()
     .notEmpty()

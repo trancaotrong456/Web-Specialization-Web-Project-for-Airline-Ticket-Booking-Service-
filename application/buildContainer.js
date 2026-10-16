@@ -24,6 +24,8 @@ const { createBookingModule } = require('../modules/booking');
 const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
 const { createPaymentModule } = require('../modules/payment');
 const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
+const { createSeatSelectionModule } = require('../modules/seat-selection');
+const SequelizeSeatSelectionRepository = require('../modules/seat-selection/seatSelection.repository');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 const { getEmailProvider } = require('../infrastructure/email/emailProvider');
@@ -188,6 +190,14 @@ function getDefaultTicketModule() {
 }
 
 let defaultBookingModule;
+let defaultSeatSelectionModule;
+function getDefaultSeatSelectionModule() {
+  if (defaultSeatSelectionModule) return defaultSeatSelectionModule;
+  const models = require('../models');
+  const guards = createAuthGuards({ authenticate: require('../middlewares/auth.middleware'), optionalAuth: require('../middlewares/optionalAuth.middleware'), authorize: require('../middlewares/rbac.middleware') });
+  defaultSeatSelectionModule = createSeatSelectionModule({ repository: new SequelizeSeatSelectionRepository(models), transactionManager: models.sequelize, guards });
+  return defaultSeatSelectionModule;
+}
 function getDefaultBookingModule() {
   if (defaultBookingModule) return defaultBookingModule;
   const models = require('../models');
@@ -196,6 +206,7 @@ function getDefaultBookingModule() {
     transactionManager: models.sequelize,
     ticketController: getDefaultTicketModule().controller,
     socket: getSocket,
+    seatSelectionService: getDefaultSeatSelectionModule().service,
   });
   return defaultBookingModule;
 }
@@ -209,6 +220,7 @@ function getDefaultPaymentModule() {
     transactionManager: models.sequelize,
     socket: getSocket,
     emailProvider: getEmailProvider(),
+    seatSelectionService: getDefaultSeatSelectionModule().service,
   });
   return defaultPaymentModule;
 }
@@ -225,6 +237,7 @@ function buildContainer({
   authModule,
   bookingModule,
   paymentModule,
+  seatSelectionModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -240,6 +253,7 @@ function buildContainer({
   const resolvedAuthModule = authModule || (apiRouter ? undefined : getDefaultAuthModule());
   const resolvedBookingModule = bookingModule || (apiRouter ? undefined : getDefaultBookingModule());
   const resolvedPaymentModule = paymentModule || (apiRouter ? undefined : getDefaultPaymentModule());
+  const resolvedSeatSelectionModule = seatSelectionModule || (apiRouter ? undefined : getDefaultSeatSelectionModule());
   const routeModules = {
     ...(resolvedAuthModule ? { auth: resolvedAuthModule.router } : {}),
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
@@ -251,8 +265,9 @@ function buildContainer({
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
     ...(resolvedBookingModule ? { bookings: resolvedBookingModule.router } : {}),
     ...(resolvedPaymentModule ? { payments: resolvedPaymentModule.router } : {}),
+    ...(resolvedSeatSelectionModule ? { seatSelection: resolvedSeatSelectionModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule || seatSelectionModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -269,6 +284,7 @@ function buildContainer({
     ...(resolvedAuthModule ? { authModule: resolvedAuthModule } : {}),
     ...(resolvedBookingModule ? { bookingModule: resolvedBookingModule } : {}),
     ...(resolvedPaymentModule ? { paymentModule: resolvedPaymentModule } : {}),
+    ...(resolvedSeatSelectionModule ? { seatSelectionModule: resolvedSeatSelectionModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -277,4 +293,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule, getDefaultSeatSelectionModule };

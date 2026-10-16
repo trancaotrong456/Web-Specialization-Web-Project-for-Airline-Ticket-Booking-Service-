@@ -12,6 +12,7 @@ const modules = [
   { number: '06', icon: 'bookings', title: 'Đặt chỗ', description: 'Tra cứu và theo dõi các đặt chỗ.', to: '/admin/bookings', accent: 'navy' },
   { number: '07', icon: 'payments', title: 'Thanh toán', description: 'Xem giao dịch, chi tiết và báo cáo doanh thu.', to: '/admin/payments', accent: 'teal' },
   { number: '08', icon: 'promotions', title: 'Khuyến mại', description: 'Mã giảm giá, thời hạn và lượt sử dụng.', to: '/admin/promotions', accent: 'amber' },
+  { number: '09', icon: 'seats', title: 'Sơ đồ ghế', description: 'Quản lý mẫu máy bay và gán snapshot cho chuyến.', to: '/admin/seat-maps', accent: 'teal' },
 ];
 
 const moduleIconPaths = {
@@ -23,6 +24,7 @@ const moduleIconPaths = {
   bookings: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4.5h6M9 10h6m-6 4h6m-6 4h4" /></>,
   payments: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 10h18m-14 5h4" /></>,
   promotions: <><path d="m20.5 13-7.5 7.5L3 10.5V3h7.5z" /><circle cx="7.5" cy="7.5" r="1" /></>,
+  seats: <><rect x="5" y="3" width="14" height="7" rx="2" /><path d="M5 10v4h14v-4m-11 4v7m8-7v7M4 21h16" /></>,
 };
 
 function ModuleIcon({ name }) {

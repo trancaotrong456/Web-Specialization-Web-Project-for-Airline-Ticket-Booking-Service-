@@ -10,6 +10,7 @@ import { Pagination } from '../../components/Pagination';
 import { StatusBadge, statusLabel } from '../../components/StatusBadge';
 import { useFlightSocket } from '../../lib/socket';
 import { createBookingsApi, isValidEmail } from './bookingsApi';
+import './seatSelection.css';
 
 const bookingStatuses = ['holding', 'pending_payment', 'confirmed', 'cancelled', 'expired'];
 const emailKey = (id) => `booking_guest_email_${id}`;
@@ -65,11 +66,15 @@ export function BookingCreatePage() {
   const [promotionCode, setPromotionCode] = useState('');
   const [promotionState, setPromotionState] = useState({ checking: false, validCode: '', error: '' });
   const [passengers, setPassengers] = useState([{ passenger_name: '', passport_no: '' }]);
+  const [seatMaps, setSeatMaps] = useState({});
+  const [seatSelections, setSeatSelections] = useState([]);
+  const [activeSeatPassenger, setActiveSeatPassenger] = useState(0);
   const [guestEmail, setGuestEmail] = useState('');
   const [formErrors, setFormErrors] = useState({});
   const [state, setState] = useState({ loadingAirports: true, searching: false, loadingFares: false, submitting: false, error: '', stage: 'flight' });
   const searchRequest = useRef(0);
   const fareRequest = useRef(0);
+  const seatMapRequest = useRef(0);
   const presetFlight = urlParams.get('flight_id');
   const tripType = urlParams.get('trip_type') || '';
   const expectsItinerary = tripType === 'round_trip' || tripType === 'multi_city';
@@ -99,6 +104,20 @@ export function BookingCreatePage() {
       .finally(() => { if (active) setState((current) => ({ ...current, loadingAirports: false })); });
     return () => { active = false; };
   }, [api]);
+
+  useEffect(() => {
+    if (state.stage !== 'passenger' || !flight || !fare) return undefined;
+    let active = true;
+    const requestId = ++seatMapRequest.current;
+    const legs = itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }];
+    Promise.all(legs.map(async (leg, index) => {
+      try { return [index + 1, await api.seatMapForFlight(leg.flight.id)]; }
+      catch { return [index + 1, { supported: false, seats: [] }]; }
+    })).then((entries) => {
+      if (active && requestId === seatMapRequest.current) setSeatMaps(Object.fromEntries(entries));
+    });
+    return () => { active = false; };
+  }, [api, fare, flight, itineraryFlights, state.stage]);
 
   useEffect(() => {
     if (!presetFlight || requestedItinerary.length > 1) return undefined;
@@ -152,6 +171,7 @@ export function BookingCreatePage() {
           && Number(selectedFlights[0].arrival_airport_id) === Number(selectedFlights[1].departure_airport_id));
         if (!connectsInOrder || !returnsToOrigin) throw new Error('Các chuyến bay không tạo thành hành trình hợp lệ hoặc thời gian nối chuyến dưới 60 phút. Hãy tìm lại chuyến bay.');
         setItineraryFlights(selected);
+        setSeatSelections([]);
         setFlight(selected[0].flight);
         setFare(selected[0].fare);
         setCriteria((current) => ({ ...current, passengers: countFromSearchParams(urlParams) }));
@@ -173,14 +193,14 @@ export function BookingCreatePage() {
       const response = await api.searchFlights({ departure_airport_id: criteria.departure_airport_id, arrival_airport_id: criteria.arrival_airport_id, departure_date: criteria.departure_date, min_seats: criteria.passengers, page: 1, limit: 20 });
       if (requestId !== searchRequest.current) return;
       setResults(rowsOf(response));
-      setFlight(null); setFare(null); setFares([]); setItineraryFlights([]);
+      setFlight(null); setFare(null); setFares([]); setItineraryFlights([]); setSeatSelections([]);
       setState((current) => ({ ...current, searching: false, stage: 'flight' }));
     } catch (error) { if (requestId === searchRequest.current) setState((current) => ({ ...current, searching: false, error: errText(error, 'Không thể tìm chuyến bay.') })); }
   };
 
   const selectFlight = async (selected) => {
     const requestId = ++fareRequest.current;
-    setFlight(selected); setFare(null); setFares([]); setItineraryFlights([]); setState((current) => ({ ...current, loadingFares: true, error: '' }));
+    setFlight(selected); setFare(null); setFares([]); setItineraryFlights([]); setSeatSelections([]); setState((current) => ({ ...current, loadingFares: true, error: '' }));
     try {
       const response = await api.fareClassesForFlight(selected.id);
       if (requestId !== fareRequest.current) return;
@@ -230,7 +250,7 @@ export function BookingCreatePage() {
     setFormErrors(fields);
     if (Object.keys(fields).length) return;
     setState((current) => ({ ...current, submitting: true, error: '' }));
-    const payload = { flight_id: Number(flight.id), fare_class_id: Number(fare.id), ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}), passengers: passengers.map(({ passenger_name, passport_no }) => ({ passenger_name: passenger_name.trim(), ...(passport_no.trim() ? { passport_no: passport_no.trim() } : {}) })), ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}), ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {}) };
+    const payload = { flight_id: Number(flight.id), fare_class_id: Number(fare.id), ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}), ...(seatSelections.length ? { seat_selections: seatSelections } : {}), passengers: passengers.map(({ passenger_name, passport_no }) => ({ passenger_name: passenger_name.trim(), ...(passport_no.trim() ? { passport_no: passport_no.trim() } : {}) })), ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}), ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {}) };
     try {
       const booking = await api.createBooking(payload);
       const bookingId = booking?.id || booking?.booking?.id;
@@ -272,6 +292,21 @@ export function BookingCreatePage() {
               {promotionState.error ? <p className="booking-promotion-message is-error" role="alert">{promotionState.error}</p> : null}
               {promotionState.validCode ? <p className="booking-promotion-message" role="status">Mã {promotionState.validCode} hợp lệ. Giá cuối cùng do hệ thống tính khi tạo đặt chỗ.</p> : null}
             </div>
+            {((itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).some((_leg, index) => seatMaps[index + 1]?.supported)) ? <section className="seat-selection-picker" aria-label="Chọn ghế theo hành khách và chặng">
+              <h3>Chọn ghế (không bắt buộc)</h3><p>Ghế được giữ cùng đặt chỗ trong thời gian thanh toán. Giá vé không thay đổi.</p>
+              {passengers.length > 1 ? <div className="seat-passenger-tabs" role="group" aria-label="Hành khách">{passengers.map((_passenger, index) => <button type="button" key={index} aria-pressed={activeSeatPassenger === index} onClick={() => setActiveSeatPassenger(index)}>Hành khách {index + 1}</button>)}</div> : null}
+              {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((leg, index) => {
+                const legOrder = index + 1; const map = seatMaps[legOrder];
+                if (!map?.supported) return null;
+                const fareId = Number(leg.fare?.id || fare?.id);
+                const selected = seatSelections.find((item) => item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)?.seat_no;
+                const aisles = map.aisle_after || [];
+                return <fieldset className="seat-leg-picker" key={leg.flight.id}><legend>Chặng {legOrder}: {airportsOf(leg.flight)}</legend><div className="seat-grid" style={{ '--seat-columns': map.column_count + aisles.length }}>
+                  {map.seats.map((seat) => { const eligible = Number(seat.fare_class_id) === fareId; const disabled = seat.status !== 'available' || !eligible; const displayColumn = seat.column_number + aisles.filter((after) => after < seat.column_number).length; return <button key={seat.seat_no} style={{ gridColumn: displayColumn, gridRow: seat.row_number }} type="button" className={`seat-choice ${seat.status} ${selected === seat.seat_no ? 'selected' : ''}`} aria-label={`${seat.seat_no}, ${seat.status === 'available' ? (eligible ? 'trống' : 'không thuộc hạng vé') : 'đã giữ hoặc không bán'}`} aria-pressed={selected === seat.seat_no} disabled={disabled} title={`${seat.seat_no} · ${seat.zone}${seat.special_properties?.length ? ` · ${seat.special_properties.join(', ')}` : ''}`} onClick={() => setSeatSelections((current) => [...current.filter((item) => !(item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)), { leg_order: legOrder, passenger_index: activeSeatPassenger, seat_no: seat.seat_no }])}>{seat.seat_no}</button>; })}
+                  {aisles.flatMap((after) => Array.from({ length: map.row_count }, (_, row) => <span key={`aisle-${row + 1}-${after}`} className="seat-aisle" style={{ gridColumn: after + aisles.filter((column) => column < after).length + 1, gridRow: row + 1 }} aria-hidden="true" />))}
+                </div><button className="button button-outline seat-clear-button" type="button" disabled={!selected} onClick={() => setSeatSelections((current) => current.filter((item) => !(item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)))}>Bỏ chọn ghế chặng này</button></fieldset>;
+              })}
+            </section> : null}
             {passengers.map((passenger, index) => <fieldset className="passenger-fieldset" key={index}><legend>Hành khách {index + 1}</legend><Field id={`passenger-name-${index}`} label="Họ tên" autoComplete="name" required value={passenger.passenger_name} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))} error={formErrors[`passengers.${index}.passenger_name`]} /><Field id={`passenger-passport-${index}`} label="Số hộ chiếu (không bắt buộc)" value={passenger.passport_no} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passport_no: event.target.value } : item))} error={formErrors[`passengers.${index}.passport_no`]} /></fieldset>)}
             {state.fields ? Object.entries(state.fields).map(([field, message]) => <small className="field-error" key={field}>{message}</small>) : null}
             <div className="booking-total-row"><span>Giá tham khảo trước ưu đãi</span><strong>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong><small>{promotionState.validCode ? 'Mã đã được kiểm tra; hệ thống sẽ tính và xác nhận tổng tiền khi tạo đặt chỗ.' : 'Giá cuối cùng và ưu đãi (nếu có) do hệ thống xác nhận khi tạo đặt chỗ.'}</small></div>
