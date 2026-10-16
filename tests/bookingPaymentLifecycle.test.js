@@ -47,8 +47,13 @@ function fixture(t, overrides = {}) {
   return { booking, flight, promo, payment, tx, writes, email };
 }
 const denied = (code) => (error) => error.statusCode === code;
-function ipn(amount = 180000, response = '00') {
-  const query = { vnp_TxnRef: 'TXN_TEST', vnp_Amount: String(amount * 100), vnp_ResponseCode: response };
+function ipn(amount = 180000, response = '00', transactionStatus = response) {
+  const query = {
+    vnp_TxnRef: 'TXN_TEST',
+    vnp_Amount: String(amount * 100),
+    vnp_ResponseCode: response,
+    vnp_TransactionStatus: transactionStatus,
+  };
   query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
   return query;
 }
@@ -165,6 +170,14 @@ test('#39 invalid signature and amount never update state', async (t) => {
   t.mock.method(paymentService, '_getPayOSClient', () => ({ webhooks: { verify: async () => { throw new Error('bad signature'); } } }));
   await assert.rejects(paymentService.handlePayosWebhook({}), denied(400));
   assert.equal(f.writes.length, 0);
+});
+
+test('#39 VNPay does not confirm when transaction status is not successful', async (t) => {
+  const f = fixture(t, { status: 'pending_payment' });
+  await paymentService.handleVnpayIpn(ipn(180000, '00', '02'));
+  assert.equal(f.payment.status, 'failed');
+  assert.equal(f.booking.status, 'holding');
+  assert.equal(f.email.mock.callCount(), 0);
 });
 
 test('#35 expiry only selects holding and releases seats/promotion once', async (t) => {

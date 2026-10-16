@@ -549,6 +549,7 @@ class PaymentService {
     const txnRef = queryParams.vnp_TxnRef;
     const vnpAmount = Number(queryParams.vnp_Amount || 0) / 100;
     const vnpResponseCode = queryParams.vnp_ResponseCode;
+    const vnpTransactionStatus = queryParams.vnp_TransactionStatus;
 
     // BƯỚC 2: Tìm Payment và Booking liên quan
     const payment = await Payment.findOne({
@@ -614,7 +615,9 @@ class PaymentService {
         return;
       }
 
-      if (vnpResponseCode === '00') {
+      // VNPay exposes both the response code and the final transaction status.
+      // A request is successful only when both signed values report success.
+      if (vnpResponseCode === '00' && vnpTransactionStatus === '00') {
         // Payment Success -> Confirm Booking
         lockedPayment.status = 'success';
         lockedPayment.paid_at = new Date();
