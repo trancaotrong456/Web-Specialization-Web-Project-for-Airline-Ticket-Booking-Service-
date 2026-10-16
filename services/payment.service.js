@@ -1110,16 +1110,17 @@ class PaymentService {
       // Keep the global payment workflow lock order: Payment -> Booking ->
       // Flight -> Promotion. This avoids a Booking/Payment lock inversion with
       // gateway webhooks and pending-payment reconciliation.
-      const successfulPayment = await Payment.findOne({
+      const successfulPayments = await Payment.findAll({
         where: {
           booking_id: bookingId,
           status: 'success',
         },
+        order: [['id', 'ASC']],
         lock: t.LOCK.UPDATE,
         transaction: t,
       });
 
-      if (!successfulPayment) {
+      if (successfulPayments.length === 0) {
         const error = new Error('No successful payment found for this booking to refund.');
         error.statusCode = 400;
         throw error;
@@ -1152,9 +1153,13 @@ class PaymentService {
       // can refund them and release the still-reserved seats exactly once.
       const shouldReturnSeats = booking.status !== 'expired';
 
-      // Mark payment as refunded
-      successfulPayment.status = 'refunded';
-      await successfulPayment.save({ transaction: t });
+      // A delayed callback can reveal more than one successful charge for the
+      // same booking. Refund every recorded success while cancelling the
+      // booking and releasing its seats only once.
+      for (const payment of successfulPayments) {
+        payment.status = 'refunded';
+        await payment.save({ transaction: t });
+      }
 
       // Mark booking as cancelled
       booking.status = 'cancelled';
@@ -1177,13 +1182,19 @@ class PaymentService {
         }
       }
 
-      console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
+      const refundedAmount = successfulPayments.reduce(
+        (total, payment) => total + Number(payment.amount),
+        0
+      );
+      const paymentMethods = [...new Set(successfulPayments.map((payment) => payment.payment_method))];
+      console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${refundedAmount} VND). Reason: ${reason}`);
 
       return {
         bookingId: booking.id,
         bookingCode: booking.booking_code,
-        refundedAmount: successfulPayment.amount,
-        paymentMethod: successfulPayment.payment_method,
+        refundedAmount,
+        paymentMethod: paymentMethods.length === 1 ? paymentMethods[0] : paymentMethods.join(','),
+        refundedPaymentIds: successfulPayments.map((payment) => payment.id),
         reason,
         refundedAt: new Date(),
       };
