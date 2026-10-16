@@ -87,6 +87,72 @@ test('#21 – createFlightValidator rejects arrival before departure', async () 
   assert.ok(result.array().some((err) => err.msg.includes('arrival_time must be after departure_time')));
 });
 
+test('#21 – createFlight rejects client-supplied available_seats and system fields', async () => {
+  const flightService = require('../services/flight.service');
+
+  await assert.rejects(
+    async () => {
+      await flightService.createFlight({
+        airline_id: 1,
+        departure_airport_id: 1,
+        arrival_airport_id: 2,
+        departure_time: '2026-10-10T10:00:00Z',
+        arrival_time: '2026-10-10T12:00:00Z',
+        total_seats: 100,
+        available_seats: 50,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('available_seats'));
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    async () => {
+      await flightService.createFlight({
+        id: 999,
+        airline_id: 1,
+        departure_airport_id: 1,
+        arrival_airport_id: 2,
+        departure_time: '2026-10-10T10:00:00Z',
+        arrival_time: '2026-10-10T12:00:00Z',
+        total_seats: 100,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('trường hệ thống'));
+      return true;
+    }
+  );
+});
+
+test('#21 – createFlightValidator rejects available_seats and system fields', async () => {
+  const { validationResult } = require('express-validator');
+  const { createFlightValidator } = require('../validators/flight.validator');
+
+  const req = {
+    body: {
+      airline_id: 1,
+      departure_airport_id: 1,
+      arrival_airport_id: 2,
+      departure_time: '2026-10-10T10:00:00Z',
+      arrival_time: '2026-10-10T12:00:00Z',
+      total_seats: 100,
+      available_seats: 80,
+    },
+  };
+
+  for (const middleware of createFlightValidator) {
+    await middleware(req, {}, () => {});
+  }
+  const result = validationResult(req);
+  assert.ok(!result.isEmpty(), 'Validation must fail when available_seats is supplied');
+});
+
+
 // Test edit flight business rules
 test('#21 – updateFlight rejects direct mutation of available_seats (400)', async () => {
   const flightService = require('../services/flight.service');
@@ -96,19 +162,61 @@ test('#21 – updateFlight rejects direct mutation of available_seats (400)', as
     },
     (err) => {
       assert.equal(err.statusCode, 400);
-      assert.ok(err.message.includes('available_seats'));
+      assert.ok(err.message.includes('available_seats') || err.message.includes('Không được phép'));
       return true;
     }
   );
 });
 
-test('#21 – updateFlightValidator does not allow available_seats', async () => {
-  const { updateFlightValidator } = require('../validators/flight.validator');
-  assert.ok(Array.isArray(updateFlightValidator));
-  // Ensure available_seats is not in update validators
-  const fieldNames = updateFlightValidator.map((v) => v.builder?.fields?.[0] || '');
-  assert.ok(!fieldNames.includes('available_seats'), 'available_seats should not be validated/allowed in update');
+test('#21 – updateFlight rejects mass assignment of total_seats, airline_id, airport IDs, timestamps', async () => {
+  const flightService = require('../services/flight.service');
+  const disallowedPayloads = [
+    { total_seats: 200 },
+    { airline_id: 2 },
+    { departure_airport_id: 5 },
+    { arrival_airport_id: 6 },
+    { id: 999 },
+    { created_at: new Date() },
+    { updatedAt: new Date() },
+  ];
+
+  for (const payload of disallowedPayloads) {
+    await assert.rejects(
+      async () => {
+        await flightService.updateFlight(1, payload);
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        return true;
+      }
+    );
+  }
 });
+
+test('#21 – updateFlightValidator enforces allowlist and rejects disallowed fields', async () => {
+  const { validationResult } = require('express-validator');
+  const { updateFlightValidator } = require('../validators/flight.validator');
+
+  const invalidReq = {
+    body: {
+      available_seats: 50,
+      total_seats: 100,
+    },
+  };
+  for (const middleware of updateFlightValidator) {
+    await middleware(invalidReq, {}, () => {});
+  }
+  const result = validationResult(invalidReq);
+  assert.ok(!result.isEmpty(), 'Disallowed update fields must fail validation');
+
+  const emptyReq = { body: {} };
+  for (const middleware of updateFlightValidator) {
+    await middleware(emptyReq, {}, () => {});
+  }
+  const emptyResult = validationResult(emptyReq);
+  assert.ok(!emptyResult.isEmpty(), 'Empty update body must fail validation');
+});
+
 
 // Test delete flight rules
 test('#21 – deleteFlight contract verifies transaction and 409 when booking exists', () => {
@@ -173,6 +281,30 @@ test('#23 – getFlightById contract verifies associations and error handling', 
   assert.ok(serviceCode.includes("statusCode = 404"), 'getFlightById must throw 404 when flight is not found');
 });
 
-
-
-
+// Regression: JOIN fareClasses must not inflate pagination totals for either endpoint.
+test('#22 – search and admin lists count distinct flights with joined fare classes', async () => {
+  const { Flight } = require('../models');
+  const service = require('../services/flight.service');
+  const original = Flight.findAndCountAll;
+  const captured = [];
+  Flight.findAndCountAll = async (options) => {
+    captured.push(options);
+    // One flight with multiple FareClass rows must count as exactly one flight.
+    return { count: 1, rows: [{ id: 42, fareClasses: [{ id: 1 }, { id: 2 }] }] };
+  };
+  try {
+    const search = await service.searchFlights({ departure_airport_id: 1, arrival_airport_id: 2, page: 1, limit: 10 });
+    const admin = await service.getAllFlights({ page: 1, limit: 10 });
+    assert.equal(search.total, 1);
+    assert.equal(admin.total, 1);
+    assert.equal(captured.length, 2);
+    for (const options of captured) {
+      assert.equal(options.distinct, true, 'findAndCountAll must count distinct Flight primary keys');
+      assert.ok(options.include.some((entry) => entry.as === 'fareClasses'));
+      assert.equal(options.limit, 10);
+      assert.equal(options.offset, 0);
+    }
+  } finally {
+    Flight.findAndCountAll = original;
+  }
+});

@@ -2,6 +2,7 @@ const PDFDocument = require('pdfkit');
 const path = require('path');
 const { Booking, Flight, Airline, Airport, FareClass, BookingPassenger, User } = require('../models');
 const { verifyBookingAccess } = require('../utils/bookingAccess.util');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
 
 const UNICODE_FONT_PATH = path.join(
   __dirname,
@@ -13,6 +14,7 @@ class TicketService {
    * Generate ticket PDF buffer for a confirmed booking
    */
   async generateTicketPDF(bookingId, currentUser = null, guestEmail = null) {
+    guestEmail = normalizeGuestEmail(guestEmail);
     const booking = await Booking.findByPk(bookingId, {
       include: [
         {

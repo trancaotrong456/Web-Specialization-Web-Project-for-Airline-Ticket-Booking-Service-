@@ -1,6 +1,10 @@
 const { Op } = require('sequelize');
 const { User, Role } = require('../models');
 
+// RBAC middleware recognizes these three names. Custom role records have no
+// permission configuration and must not be assignable until that is supported.
+const ASSIGNABLE_ROLE_NAMES = new Set(['customer', 'staff', 'admin']);
+
 class UserService {
   async getAllUsers({ page = 1, limit = 20, search, status }) {
     const offset = (page - 1) * limit;
@@ -68,6 +72,11 @@ class UserService {
     if (!role) {
       const error = new Error('Role not found');
       error.statusCode = 404;
+      throw error;
+    }
+    if (!ASSIGNABLE_ROLE_NAMES.has(role.name)) {
+      const error = new Error('Only system roles (customer, staff, admin) can be assigned to users');
+      error.statusCode = 400;
       throw error;
     }
     const user = await User.findByPk(id);

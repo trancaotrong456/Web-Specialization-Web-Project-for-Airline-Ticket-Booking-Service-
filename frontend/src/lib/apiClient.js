@@ -20,7 +20,8 @@ const isJsonBody = (body) => body
   && !(body instanceof URLSearchParams)
   && !(body instanceof Blob);
 
-const parseResponse = async (response) => {
+const parseResponse = async (response, responseType) => {
+  if (responseType === 'blob' && response.ok) return response.blob();
   const contentType = response.headers.get('content-type') || '';
   if (response.status === 204) return null;
   if (contentType.includes('application/json')) return response.json();
@@ -57,7 +58,7 @@ export const createApiClient = ({
       throw new ApiError('Không thể kết nối đến máy chủ.', { data: error });
     }
 
-    const payload = await parseResponse(response);
+    const payload = await parseResponse(response, options.responseType);
     const isRefreshBoundary = normalizedPath === '/auth/refresh-token'
       || normalizedPath === '/auth/logout';
 

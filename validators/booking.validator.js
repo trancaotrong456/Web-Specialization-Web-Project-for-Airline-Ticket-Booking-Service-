@@ -1,4 +1,50 @@
 const { body, query, param } = require('express-validator');
+const { normalizeGuestEmail } = require('../utils/guestEmail.util');
+
+const validateGuestEmailField = (location, field) => [
+  location(field).custom((value, { req }) => {
+    if ((value === undefined || value === null) && !req.user) {
+      throw new Error(`${field} is required for guest bookings`);
+    }
+    return true;
+  }),
+  location(field)
+    .optional({ nullable: true })
+    .isString()
+    .withMessage(`${field} must be a valid email`)
+    .bail()
+    .trim()
+    .isEmail()
+    .withMessage(`${field} must be a valid email`)
+    .bail()
+    .isLength({ max: 191 })
+    .withMessage(`${field} must not exceed 191 characters`)
+    .customSanitizer(normalizeGuestEmail),
+];
+
+const optionalAliasEmailValidator = (field) =>
+  query(field)
+    .optional({ nullable: true })
+    .isString()
+    .withMessage(`${field} must be a valid email`)
+    .bail()
+    .trim()
+    .isEmail()
+    .withMessage(`${field} must be a valid email`)
+    .bail()
+    .isLength({ max: 191 })
+    .withMessage(`${field} must not exceed 191 characters`)
+    .customSanitizer(normalizeGuestEmail);
+
+const bookingLookupEmailValidator = query('guest_email').custom((_value, { req }) => {
+  const canonical = normalizeGuestEmail(req.query.guest_email);
+  const legacy = normalizeGuestEmail(req.query.email);
+  if (canonical && legacy && canonical !== legacy) {
+    throw new Error('guest_email and email must match');
+  }
+  if (!canonical && !legacy) throw new Error('guest_email is required for guest booking lookup');
+  return true;
+});
 
 const createBookingValidator = [
   body('flight_id')
@@ -29,6 +75,8 @@ const createBookingValidator = [
     .trim()
     .isLength({ max: 30 })
     .withMessage('Passport number must not exceed 30 characters'),
+
+  ...validateGuestEmailField(body, 'guest_email'),
 
   body('promotion_code')
     .optional({ nullable: true })
@@ -65,13 +113,7 @@ const bookingAccessEmailValidator = [
     .isInt({ min: 1 })
     .withMessage('booking_id must be a positive integer'),
 
-  query('guest_email')
-    .optional()
-    .trim()
-    .isEmail()
-    .withMessage('guest_email must be a valid email if provided')
-    .isLength({ max: 191 })
-    .withMessage('guest_email must not exceed 191 characters'),
+  ...validateGuestEmailField(query, 'guest_email'),
 ];
 
 // Public lookup is intentionally limited to guest bookings and must include
@@ -81,16 +123,13 @@ const lookupBookingValidator = [
     .trim()
     .notEmpty()
     .withMessage('booking code is required'),
-  query('email')
-    .trim()
-    .notEmpty()
-    .withMessage('email is required for guest booking lookup')
-    .isEmail()
-    .withMessage('email must be a valid email'),
+  optionalAliasEmailValidator('guest_email'),
+  optionalAliasEmailValidator('email'),
+  bookingLookupEmailValidator,
 ];
 
 const cancelBookingValidator = [
-  body('guest_email').optional({ nullable: true }).trim().isEmail().withMessage('guest_email must be a valid email if provided'),
+  ...validateGuestEmailField(body, 'guest_email'),
 ];
 
 module.exports = {

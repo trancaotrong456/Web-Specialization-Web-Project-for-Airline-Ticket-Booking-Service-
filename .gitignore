@@ -4,6 +4,7 @@ certs/
 node_modules/
 .env.*
 !.env.example
+/demo-seed.local.env
 *.log
 dist/
 build/
