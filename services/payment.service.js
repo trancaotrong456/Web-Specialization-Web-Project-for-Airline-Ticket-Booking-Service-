@@ -37,6 +37,14 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
+  _isPaymentConfirmationWindowExpired(booking, now = new Date()) {
+    if (!booking.hold_expires_at) return true;
+    const configuredGrace = Number.parseFloat(process.env.PAYMENT_PENDING_GRACE_MINUTES || '5');
+    const graceMinutes = Number.isFinite(configuredGrace) && configuredGrace >= 0 ? configuredGrace : 5;
+    const deadline = new Date(booking.hold_expires_at).getTime() + graceMinutes * 60 * 1000;
+    return !Number.isFinite(deadline) || now.getTime() > deadline;
+  }
+
   /**
    * Administrative payment history. Payment gateways can disclose only the
    * fields required by the dashboard; no provider secrets are ever stored or
@@ -572,10 +580,11 @@ class PaymentService {
     const vnpAmount = Number(queryParams.vnp_Amount || 0) / 100;
     const vnpResponseCode = queryParams.vnp_ResponseCode;
     const vnpTransactionStatus = queryParams.vnp_TransactionStatus;
+    const isGatewaySuccess = vnpResponseCode === '00' && vnpTransactionStatus === '00';
 
     // BƯỚC 2: Tìm Payment và Booking liên quan
     const payment = await Payment.findOne({
-      where: { transaction_ref: txnRef },
+      where: { transaction_ref: txnRef, payment_method: 'vnpay' },
       include: [{ model: Booking, as: 'booking' }],
     });
 
@@ -594,7 +603,10 @@ class PaymentService {
     if (payment.booking.status === 'confirmed') {
       return { RspCode: '02', Message: 'Order already confirmed' };
     }
-    if (payment.booking.status !== 'pending_payment') {
+    const isRecordableLateSuccess = isGatewaySuccess
+      && payment.status !== 'refunded'
+      && payment.booking.status === 'expired';
+    if (payment.booking.status !== 'pending_payment' && !isRecordableLateSuccess) {
       console.warn(`[VNPay IPN] Invalid booking status: ${payment.booking.status}`);
       return { RspCode: '02', Message: 'Order already updated or invalid state' };
     }
@@ -628,8 +640,23 @@ class PaymentService {
       // Repeat the early idempotency checks while both rows are locked. This
       // prevents concurrent IPN calls from confirming and emailing one booking
       // more than once.
+      if (!lockedPayment || !lockedBooking) {
+        transactionOutcome = 'invalid_state';
+        return;
+      }
       if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') {
         transactionOutcome = 'already_confirmed';
+        return;
+      }
+      if (
+        isGatewaySuccess
+        && lockedPayment.status !== 'refunded'
+        && lockedBooking.status === 'expired'
+      ) {
+        lockedPayment.status = 'success';
+        lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+        await lockedPayment.save({ transaction: t });
+        transactionOutcome = 'requires_review';
         return;
       }
       if (lockedBooking.status !== 'pending_payment') {
@@ -637,9 +664,33 @@ class PaymentService {
         return;
       }
 
-      // VNPay exposes both the response code and the final transaction status.
-      // A request is successful only when both signed values report success.
-      if (vnpResponseCode === '00' && vnpTransactionStatus === '00') {
+      if (isGatewaySuccess) {
+        // A signed success received after the callback deadline or after the
+        // flight became invalid must still be recorded. The booking remains
+        // pending for an administrator to refund/reconcile; seats are not sold
+        // twice and the charged transaction is not lost.
+        const flight = await Flight.findOne({
+          where: { id: lockedBooking.flight_id },
+          lock: t.LOCK.UPDATE,
+          transaction: t,
+        });
+        const departureTime = flight ? new Date(flight.departure_time) : null;
+        const flightIsValid = Boolean(
+          flight
+          && flight.status === 'scheduled'
+          && departureTime
+          && !Number.isNaN(departureTime.getTime())
+          && departureTime.getTime() > Date.now()
+        );
+
+        if (this._isPaymentConfirmationWindowExpired(lockedBooking) || !flightIsValid) {
+          lockedPayment.status = 'success';
+          lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+          await lockedPayment.save({ transaction: t });
+          transactionOutcome = 'requires_review';
+          return;
+        }
+
         // Payment Success -> Confirm Booking
         lockedPayment.status = 'success';
         lockedPayment.paid_at = new Date();
@@ -698,6 +749,10 @@ class PaymentService {
         }
       }
     });
+
+    if (transactionOutcome === 'requires_review') {
+      return { RspCode: '00', Message: 'Payment recorded; booking requires manual review' };
+    }
 
     if (transactionOutcome !== 'processed') {
       return {
@@ -772,7 +827,7 @@ class PaymentService {
   async _processVerifiedPayosWebhook({ orderCode, amount, isSuccess }) {
 
     const payment = await Payment.findOne({
-      where: { transaction_ref: String(orderCode) },
+      where: { transaction_ref: String(orderCode), payment_method: 'payos' },
       include: [{ model: Booking, as: 'booking' }],
     });
 
@@ -795,13 +850,17 @@ class PaymentService {
       return { message: 'Order already confirmed' };
     }
 
-    if (payment.booking.status !== 'pending_payment') {
+    const isRecordableLateSuccess = isSuccess
+      && payment.status !== 'refunded'
+      && payment.booking.status === 'expired';
+    if (payment.booking.status !== 'pending_payment' && !isRecordableLateSuccess) {
       return { message: 'Order already updated or invalid state' };
     }
 
     let bookingIdToEmail = null;
     let flightIdToEmit = null;
     let newSeatsCount = null;
+    let requiresManualReview = false;
 
     await sequelize.transaction(async (t) => {
       const lockedPayment = await Payment.findOne({
@@ -819,10 +878,44 @@ class PaymentService {
 
       // Repeat idempotency/state checks under row locks to prevent two webhook
       // requests from confirming and emailing the same booking concurrently.
+      if (!lockedPayment || !lockedBooking) return;
       if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') return;
+      if (
+        isSuccess
+        && lockedPayment.status !== 'refunded'
+        && lockedBooking.status === 'expired'
+      ) {
+        lockedPayment.status = 'success';
+        lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+        await lockedPayment.save({ transaction: t });
+        requiresManualReview = true;
+        return;
+      }
       if (lockedBooking.status !== 'pending_payment') return;
 
       if (isSuccess) {
+        const flight = await Flight.findOne({
+          where: { id: lockedBooking.flight_id },
+          lock: t.LOCK.UPDATE,
+          transaction: t,
+        });
+        const departureTime = flight ? new Date(flight.departure_time) : null;
+        const flightIsValid = Boolean(
+          flight
+          && flight.status === 'scheduled'
+          && departureTime
+          && !Number.isNaN(departureTime.getTime())
+          && departureTime.getTime() > Date.now()
+        );
+
+        if (this._isPaymentConfirmationWindowExpired(lockedBooking) || !flightIsValid) {
+          lockedPayment.status = 'success';
+          lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+          await lockedPayment.save({ transaction: t });
+          requiresManualReview = true;
+          return;
+        }
+
         lockedPayment.status = 'success';
         lockedPayment.paid_at = new Date();
         await lockedPayment.save({ transaction: t });
@@ -882,7 +975,12 @@ class PaymentService {
       this._triggerBookingConfirmationEmail(bookingIdToEmail);
     }
 
-    return { message: 'Processed successfully' };
+    return {
+      message: requiresManualReview
+        ? 'Payment recorded; booking requires manual review'
+        : 'Processed successfully',
+      requires_manual_review: requiresManualReview,
+    };
   }
 
   /**
