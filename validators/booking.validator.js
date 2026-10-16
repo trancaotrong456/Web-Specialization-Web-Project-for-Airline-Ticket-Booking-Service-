@@ -47,6 +47,11 @@ const bookingLookupEmailValidator = query('guest_email').custom((_value, { req }
 });
 
 const createBookingValidator = [
+  body('trip_type')
+    .optional()
+    .isIn(['one_way', 'round_trip', 'multi_city'])
+    .withMessage('trip_type must be one_way, round_trip, or multi_city'),
+
   body('flight_id')
     .notEmpty()
     .withMessage('flight_id is required')

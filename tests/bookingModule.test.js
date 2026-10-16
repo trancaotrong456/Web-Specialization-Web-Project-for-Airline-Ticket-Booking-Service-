@@ -121,6 +121,74 @@ test('multi-leg booking validates connected real flights, prices each fare and s
   ]);
 });
 
+test('multi-leg booking rejects disconnected flights before reserving any seats', async () => {
+  const BookingService = require('../modules/booking/booking.service');
+  const flights = new Map([
+    [21, { id: 21, departure_airport_id: 1, arrival_airport_id: 2, departure_time: new Date('2027-03-01T08:00:00Z'), arrival_time: new Date('2027-03-01T10:00:00Z'), status: 'scheduled', available_seats: 5 }],
+    [22, { id: 22, departure_airport_id: 3, arrival_airport_id: 4, departure_time: new Date('2027-03-01T13:00:00Z'), arrival_time: new Date('2027-03-01T15:00:00Z'), status: 'scheduled', available_seats: 5 }],
+  ]);
+  let writes = 0;
+  let createdBooking;
+  const service = new BookingService({
+    repository: {
+      findFlightForUpdate: async (id) => flights.get(Number(id)),
+      findFareClassForFlight: async (id) => ({ id: Number(id), price: 100000 }),
+      save: async () => { writes++; },
+      findBookingCode: async () => null,
+      createBooking: async (values) => (createdBooking = { id: 1, ...values }),
+      createBookingSegments: async () => {},
+      createPassengers: async () => {},
+      findBookingDetail: async () => createdBooking,
+    },
+    transactionManager: { transaction: (callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }) },
+    socket: () => ({ to: () => ({ emit() {} }), emit() {} }),
+    flightSeatService: { checkAndEmitSeatWarning: async () => {} },
+  });
+
+  await assert.rejects(service.createHoldingBooking({
+    flight_id: 21, fare_class_id: 31, trip_type: 'multi_city',
+    itinerary_legs: [{ flight_id: 21, fare_class_id: 31 }, { flight_id: 22, fare_class_id: 32 }],
+    passengers: [{ passenger_name: 'Test passenger' }], user_id: 7, currentUser: { id: 7 },
+  }), /connect to the previous arrival/i);
+
+  assert.equal(flights.get(21).available_seats, 5);
+  assert.equal(flights.get(22).available_seats, 5);
+  assert.equal(writes, 0);
+});
+
+test('round-trip booking must return to the original airport before any booking writes', async () => {
+  const BookingService = require('../modules/booking/booking.service');
+  const flights = new Map([
+    [31, { id: 31, departure_airport_id: 1, arrival_airport_id: 2, departure_time: new Date('2027-03-01T08:00:00Z'), arrival_time: new Date('2027-03-01T10:00:00Z'), status: 'scheduled', available_seats: 5 }],
+    [32, { id: 32, departure_airport_id: 2, arrival_airport_id: 3, departure_time: new Date('2027-03-02T08:00:00Z'), arrival_time: new Date('2027-03-02T10:00:00Z'), status: 'scheduled', available_seats: 5 }],
+  ]);
+  let writes = 0;
+  const service = new BookingService({
+    repository: {
+      findFlightForUpdate: async (id) => flights.get(Number(id)),
+      findFareClassForFlight: async (id) => ({ id: Number(id), price: 100000 }),
+      save: async () => { writes += 1; },
+      findBookingCode: async () => null,
+      createBooking: async () => { writes += 1; },
+      createBookingSegments: async () => { writes += 1; },
+      createPassengers: async () => { writes += 1; },
+      findBookingDetail: async () => null,
+    },
+    transactionManager: { transaction: (callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }) },
+    socket: () => ({ to: () => ({ emit() {} }), emit() {} }),
+    flightSeatService: { checkAndEmitSeatWarning: async () => {} },
+  });
+
+  await assert.rejects(service.createHoldingBooking({
+    flight_id: 31, fare_class_id: 41, trip_type: 'round_trip',
+    itinerary_legs: [{ flight_id: 31, fare_class_id: 41 }, { flight_id: 32, fare_class_id: 42 }],
+    passengers: [{ passenger_name: 'Test passenger' }], user_id: 7, currentUser: { id: 7 },
+  }), /return to the original departure airport/i);
+  assert.equal(writes, 0);
+  assert.equal(flights.get(31).available_seats, 5);
+  assert.equal(flights.get(32).available_seats, 5);
+});
+
 test('legacy Booking imports and cron resolve the canonical module', () => {
   const { getDefaultBookingModule } = require('../modules/booking');
   const module = getDefaultBookingModule();

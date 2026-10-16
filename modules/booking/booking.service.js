@@ -53,7 +53,7 @@ class BookingService {
   /**
    * 1. Create holding booking with row-level locking
    */
-  async createHoldingBooking({ flight_id, fare_class_id, itinerary_legs, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
+  async createHoldingBooking({ flight_id, fare_class_id, trip_type, itinerary_legs, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
     guest_email = normalizeGuestEmail(guest_email);
     if (!user_id && !guest_email) {
       const error = new Error('Guest email is required if you are not logged in');
@@ -72,6 +72,14 @@ class BookingService {
       const error = new Error('Itinerary must contain 1 to 4 valid flight and fare selections');
       error.statusCode = 400;
       throw error;
+    }
+    if (trip_type && !['one_way', 'round_trip', 'multi_city'].includes(trip_type)) {
+      const error = new Error('Trip type must be one_way, round_trip, or multi_city'); error.statusCode = 400; throw error;
+    }
+    if ((trip_type === 'round_trip' && requestedLegs.length !== 2)
+      || (trip_type === 'multi_city' && requestedLegs.length < 2)
+      || (trip_type === 'one_way' && requestedLegs.length !== 1)) {
+      const error = new Error('Selected trip type does not match the itinerary legs'); error.statusCode = 400; throw error;
     }
     if (requestedLegs[0].flight_id !== Number(flight_id) || requestedLegs[0].fare_class_id !== Number(fare_class_id)) {
       const error = new Error('The first itinerary leg must match flight_id and fare_class_id');
@@ -111,11 +119,11 @@ class BookingService {
           const previousFlight = legs[index - 1].flight;
           const previousArrival = new Date(previousFlight.arrival_time).getTime();
           const connectingAtSameAirport = Number(previousFlight.arrival_airport_id) === Number(flight.departure_airport_id);
-          const requiredConnectionGap = connectingAtSameAirport ? 60 * 60 * 1000 : 0;
-          if (!Number.isFinite(previousArrival) || departureTime.getTime() - previousArrival < requiredConnectionGap) {
-            const error = new Error(connectingAtSameAirport
-              ? 'Connecting flights require at least 60 minutes between arrival and departure'
-              : 'Itinerary flight dates must follow the previous flight arrival'); error.statusCode = 400; throw error;
+          if (!connectingAtSameAirport) {
+            const error = new Error('Each itinerary flight must connect to the previous arrival airport'); error.statusCode = 400; throw error;
+          }
+          if (!Number.isFinite(previousArrival) || departureTime.getTime() - previousArrival < 60 * 60 * 1000) {
+            const error = new Error('Connecting flights require at least 60 minutes between arrival and departure'); error.statusCode = 400; throw error;
           }
         }
         const fareClass = await this.repository.findFareClassForFlight(requested.fare_class_id, requested.flight_id, t);
@@ -123,6 +131,14 @@ class BookingService {
           const error = new Error('Selected fare class does not belong to this flight'); error.statusCode = 404; throw error;
         }
         legs.push({ ...requested, flight, fareClass });
+      }
+
+      if (trip_type === 'round_trip') {
+        const [outbound, inbound] = legs.map(({ flight }) => flight);
+        if (Number(outbound.departure_airport_id) !== Number(inbound.arrival_airport_id)
+          || Number(outbound.arrival_airport_id) !== Number(inbound.departure_airport_id)) {
+          const error = new Error('Round-trip flights must return to the original departure airport'); error.statusCode = 400; throw error;
+        }
       }
 
       const baseAmount = legs.reduce((sum, leg) => sum + Number(leg.fareClass.price) * passengerCount, 0);
