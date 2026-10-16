@@ -34,7 +34,7 @@ class FlightService {
     }
   }
 
-  async searchFlights({ departure_airport_id, arrival_airport_id, departure_date, min_seats = 1, page = 1, limit = 20 }) {
+  async searchFlights({ departure_airport_id, arrival_airport_id, airline_id, departure_date, min_seats = 1, page = 1, limit = 20 }) {
     let dateStart;
     let dateEnd;
     if (departure_date) {
@@ -43,7 +43,7 @@ class FlightService {
       dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
     }
     const { count, rows } = await this.repository.searchPage({
-      departure_airport_id, arrival_airport_id, min_seats, dateStart, dateEnd, page, limit,
+      departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd, page, limit,
     });
     return { total: count, page, limit, data: rows };
   }

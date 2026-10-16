@@ -6,10 +6,11 @@ class SequelizeFlightRepository {
     Object.assign(this, { sequelize, Flight, Airline, Airport, FareClass, Booking, Op });
   }
 
-  searchPage({ departure_airport_id, arrival_airport_id, min_seats, dateStart, dateEnd, page, limit }) {
+  searchPage({ departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd, page, limit }) {
     const where = { status: 'scheduled' };
     if (departure_airport_id) where.departure_airport_id = departure_airport_id;
     if (arrival_airport_id) where.arrival_airport_id = arrival_airport_id;
+    if (airline_id) where.airline_id = airline_id;
     if (min_seats) where.available_seats = { [this.Op.gte]: Number(min_seats) };
     if (dateStart) where.departure_time = { [this.Op.gte]: dateStart, [this.Op.lt]: dateEnd };
     return this.Flight.findAndCountAll({

@@ -9,6 +9,10 @@ const searchFlightValidator = [
     .optional()
     .isInt({ min: 1 })
     .withMessage('arrival_airport_id must be a positive integer'),
+  query('airline_id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('airline_id must be a positive integer'),
   query('departure_date')
     .optional()
     .isDate()
