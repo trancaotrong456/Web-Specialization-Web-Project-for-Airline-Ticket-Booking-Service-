@@ -1,7 +1,7 @@
 const { Resend } = require('resend');
 const path = require('path');
 const ejs = require('ejs');
-const { Booking, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment } = require('../models');
+const { Booking, BookingSegment, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment } = require('../models');
 
 let resendClient = null;
 
@@ -33,6 +33,14 @@ class EmailService {
         { model: BookingPassenger, as: 'passengers' },
         { model: Payment, as: 'payments' },
         { model: User, as: 'user', attributes: ['id', 'full_name', 'email'] },
+        ...(BookingSegment ? [{ model: BookingSegment, as: 'itinerarySegments', include: [
+          { model: Flight, as: 'flight', include: [
+            { model: Airline, as: 'airline' },
+            { model: Airport, as: 'departureAirport' },
+            { model: Airport, as: 'arrivalAirport' },
+          ] },
+          { model: FareClass, as: 'fareClass' },
+        ] }] : []),
       ],
     });
 
@@ -71,6 +79,10 @@ class EmailService {
         recipientName,
         flightDate: booking.flight ? new Date(booking.flight.departure_time).toLocaleString('vi-VN') : '',
         arrivalDate: booking.flight ? new Date(booking.flight.arrival_time).toLocaleString('vi-VN') : '',
+        itineraryFlights: [
+          ...(booking.flight ? [{ flight: booking.flight, fareClass: booking.fareClass, leg_order: 1 }] : []),
+          ...(booking.itinerarySegments || []).sort((a, b) => Number(a.leg_order) - Number(b.leg_order)),
+        ],
       });
     } catch (templateErr) {
       console.error('[Email] Template render error:', templateErr.message);
