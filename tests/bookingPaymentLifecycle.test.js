@@ -43,6 +43,10 @@ function fixture(t, overrides = {}) {
     if (transaction) lockSequence.push('payment');
     return payment;
   });
+  t.mock.method(models.Payment, 'findAll', async ({ transaction } = {}) => {
+    if (transaction) lockSequence.push('payment');
+    return payment.status === 'success' ? [payment] : [];
+  });
   t.mock.method(models.Payment, 'create', async (values, options) => {
     assert.equal(options.transaction, tx); Object.assign(payment, values); return payment;
   });
@@ -306,6 +310,33 @@ for (const bookingStatus of ['pending_payment', 'expired']) {
     assert.equal(f.flight.available_seats, 10);
   });
 }
+
+test('#33 refund marks every successful charge but releases booking seats once', async (t) => {
+  const f = fixture(t, { status: 'confirmed' });
+  f.payment.status = 'success';
+  const secondPayment = {
+    ...f.payment,
+    id: 5,
+    amount: 180000,
+    status: 'success',
+    async save(options) {
+      assert.equal(options.transaction, f.tx);
+    },
+  };
+  t.mock.method(models.Payment, 'findAll', async ({ transaction }) => {
+    assert.equal(transaction, f.tx);
+    f.lockSequence.push('payment');
+    return [f.payment, secondPayment];
+  });
+
+  const result = await paymentService.processRefund(1, 'duplicate charge', { email: 'admin@example.com' });
+
+  assert.equal(f.payment.status, 'refunded');
+  assert.equal(secondPayment.status, 'refunded');
+  assert.equal(result.refundedAmount, 360000);
+  assert.deepEqual(result.refundedPaymentIds, [4, 5]);
+  assert.equal(f.flight.available_seats, 10);
+});
 
 for (const group_by of ['day', 'month']) {
   test(`#37 revenue ${group_by} includes only successful payments in inclusive calendar range`, async (t) => {
