@@ -581,13 +581,13 @@ class PaymentService {
       return { RspCode: '02', Message: 'Order already confirmed' };
     }
 
+    const isRecordableLateSuccess = isGatewaySuccess
+      && payment.status === 'failed';
+
     // BƯỚC 4: Kiểm tra trạng thái Booking (chỉ chấp nhận pending_payment)
-    if (payment.booking.status === 'confirmed') {
+    if (payment.booking.status === 'confirmed' && !isRecordableLateSuccess) {
       return { RspCode: '02', Message: 'Order already confirmed' };
     }
-    const isRecordableLateSuccess = isGatewaySuccess
-      && payment.status !== 'refunded'
-      && payment.booking.status === 'expired';
     if (payment.booking.status !== 'pending_payment' && !isRecordableLateSuccess) {
       console.warn(`[VNPay IPN] Invalid booking status: ${payment.booking.status}`);
       return { RspCode: '02', Message: 'Order already updated or invalid state' };
@@ -626,19 +626,22 @@ class PaymentService {
         transactionOutcome = 'invalid_state';
         return;
       }
-      if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') {
+      if (lockedPayment.status === 'success') {
         transactionOutcome = 'already_confirmed';
         return;
       }
-      if (
-        isGatewaySuccess
-        && lockedPayment.status !== 'refunded'
-        && lockedBooking.status === 'expired'
-      ) {
+      // A failed attempt may report success after the customer has already
+      // started another payment. Record the charge, but never let the stale
+      // attempt confirm the booking that is now owned by the newer attempt.
+      if (isGatewaySuccess && lockedPayment.status === 'failed') {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await lockedPayment.save({ transaction: t });
         transactionOutcome = 'requires_review';
+        return;
+      }
+      if (lockedBooking.status === 'confirmed') {
+        transactionOutcome = 'already_confirmed';
         return;
       }
       if (lockedBooking.status !== 'pending_payment') {
@@ -828,13 +831,13 @@ class PaymentService {
     }
 
     // Idempotency check
-    if (payment.status === 'success' || payment.booking.status === 'confirmed') {
+    const isRecordableLateSuccess = isSuccess
+      && payment.status === 'failed';
+
+    if (payment.status === 'success' || (payment.booking.status === 'confirmed' && !isRecordableLateSuccess)) {
       return { message: 'Order already confirmed' };
     }
 
-    const isRecordableLateSuccess = isSuccess
-      && payment.status !== 'refunded'
-      && payment.booking.status === 'expired';
     if (payment.booking.status !== 'pending_payment' && !isRecordableLateSuccess) {
       return { message: 'Order already updated or invalid state' };
     }
@@ -861,18 +864,15 @@ class PaymentService {
       // Repeat idempotency/state checks under row locks to prevent two webhook
       // requests from confirming and emailing the same booking concurrently.
       if (!lockedPayment || !lockedBooking) return;
-      if (lockedPayment.status === 'success' || lockedBooking.status === 'confirmed') return;
-      if (
-        isSuccess
-        && lockedPayment.status !== 'refunded'
-        && lockedBooking.status === 'expired'
-      ) {
+      if (lockedPayment.status === 'success') return;
+      if (isSuccess && lockedPayment.status === 'failed') {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await lockedPayment.save({ transaction: t });
         requiresManualReview = true;
         return;
       }
+      if (lockedBooking.status === 'confirmed') return;
       if (lockedBooking.status !== 'pending_payment') return;
 
       if (isSuccess) {

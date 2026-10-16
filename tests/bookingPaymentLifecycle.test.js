@@ -237,6 +237,34 @@ for (const gateway of ['vnpay', 'payos']) {
     assert.equal(f.email.mock.callCount(), 0);
     assert.match(result.Message || result.message, /requires manual review/i);
   });
+
+  test(`#39 ${gateway} stale failed attempt cannot confirm a newer pending attempt`, async (t) => {
+    const f = fixture(t, { status: 'pending_payment' });
+    f.payment.status = 'failed';
+
+    const result = gateway === 'vnpay'
+      ? await paymentService.handleVnpayIpn(ipn())
+      : await paymentService._processVerifiedPayosWebhook({ orderCode: 123, amount: 180000, isSuccess: true });
+
+    assert.equal(f.payment.status, 'success');
+    assert.equal(f.booking.status, 'pending_payment');
+    assert.equal(f.email.mock.callCount(), 0);
+    assert.match(result.Message || result.message, /requires manual review/i);
+  });
+
+  test(`#39 ${gateway} records stale charge after another attempt confirmed booking`, async (t) => {
+    const f = fixture(t, { status: 'confirmed' });
+    f.payment.status = 'failed';
+
+    const result = gateway === 'vnpay'
+      ? await paymentService.handleVnpayIpn(ipn())
+      : await paymentService._processVerifiedPayosWebhook({ orderCode: 123, amount: 180000, isSuccess: true });
+
+    assert.equal(f.payment.status, 'success');
+    assert.equal(f.booking.status, 'confirmed');
+    assert.equal(f.email.mock.callCount(), 0);
+    assert.match(result.Message || result.message, /requires manual review/i);
+  });
 }
 
 test('#35 expiry only selects holding and releases seats/promotion once', async (t) => {
