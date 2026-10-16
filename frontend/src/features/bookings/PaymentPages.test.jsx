@@ -29,6 +29,27 @@ describe('payment pages', () => {
     expect(mocks.request).toHaveBeenCalledWith('/payments/initiate', expect.objectContaining({ method: 'POST', body: expect.objectContaining({ booking_id: 7, payment_method: 'payos', guest_email: 'guest@example.com' }) }));
   });
 
+  it('shows every itinerary leg in the payment summary and keeps the server total', async () => {
+    mocks.request.mockResolvedValue({
+      ...booking,
+      total_amount: 3750000,
+      itinerarySegments: [
+        { id: 22, leg_order: 3, flight: { departure_time: '2026-10-14T10:00:00Z', departureAirport: { iata_code: 'DAD' }, arrivalAirport: { iata_code: 'CXR' } } },
+        { id: 21, leg_order: 2, flight: { departure_time: '2026-10-13T10:00:00Z', departureAirport: { iata_code: 'SGN' }, arrivalAirport: { iata_code: 'DAD' } } },
+      ],
+    });
+    sessionStorage.setItem('booking_guest_email_7', 'guest@example.com');
+
+    routes(<PaymentInitiatePage />, '/bookings/:id/payment', '/bookings/7/payment');
+
+    const itinerary = await screen.findByRole('list');
+    expect(within(itinerary).getAllByRole('listitem')).toHaveLength(2);
+    const legs = within(itinerary).getAllByRole('listitem');
+    expect(legs[0]).toHaveTextContent('SGN → DAD');
+    expect(legs[1]).toHaveTextContent('DAD → CXR');
+    expect(screen.getByText(/3\.750\.000/)).toBeInTheDocument();
+  });
+
   it('uses the submitted-report booking status label on payment result', async () => {
     mocks.request.mockResolvedValue(booking);
     routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&demo=1');
