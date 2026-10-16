@@ -76,6 +76,51 @@ test('Booking module uses one injected controller, service and repository graph'
   assert.equal(typeof module.router, 'function');
 });
 
+test('multi-leg booking validates connected real flights, prices each fare and stores additional legs atomically', async () => {
+  const BookingService = require('../modules/booking/booking.service');
+  const events = [];
+  const flights = new Map([
+    [11, { id: 11, departure_airport_id: 1, arrival_airport_id: 2, departure_time: new Date(Date.now() + 86400000), arrival_time: new Date(Date.now() + 90000000), status: 'scheduled', available_seats: 5 }],
+    [12, { id: 12, departure_airport_id: 2, arrival_airport_id: 3, departure_time: new Date(Date.now() + 172800000), arrival_time: new Date(Date.now() + 180000000), status: 'scheduled', available_seats: 4 }],
+  ]);
+  const booking = { id: 90, booking_code: 'BKTEST', user_id: 7, status: 'holding', flight_id: 11, fare_class_id: 101, total_amount: 2600000 };
+  const repository = {
+    findFlightForUpdate: async (id) => flights.get(Number(id)),
+    findFareClassForFlight: async (fareId) => ({ id: Number(fareId), flight_id: fareId === 101 ? 11 : 12, price: fareId === 101 ? 900000 : 400000 }),
+    save: async (entity) => { events.push(['save-flight', entity.id, entity.available_seats]); },
+    findBookingCode: async () => null,
+    createBooking: async (values) => { events.push(['booking', values]); return booking; },
+    createBookingSegments: async (segments) => { events.push(['segments', segments]); },
+    createPassengers: async (passengers) => { events.push(['passengers', passengers]); },
+    findBookingDetail: async () => booking,
+  };
+  const service = new BookingService({
+    repository,
+    transactionManager: { transaction: (callback) => callback({ LOCK: { UPDATE: 'UPDATE' } }) },
+    socket: () => ({ to: () => ({ emit() {} }), emit() {} }),
+    flightSeatService: { checkAndEmitSeatWarning: async () => {} },
+  });
+
+  const result = await service.createHoldingBooking({
+    flight_id: 11,
+    fare_class_id: 101,
+    itinerary_legs: [{ flight_id: 11, fare_class_id: 101 }, { flight_id: 12, fare_class_id: 102 }],
+    passengers: [{ passenger_name: 'Nguyen Van An' }, { passenger_name: 'Tran Thi Binh' }],
+    user_id: 7,
+    currentUser: { id: 7 },
+  });
+
+  assert.equal(result, booking);
+  assert.equal(flights.get(11).available_seats, 3);
+  assert.equal(flights.get(12).available_seats, 2);
+  const created = events.find(([type]) => type === 'booking')[1];
+  assert.equal(created.total_amount, 2600000);
+  assert.equal(created.flight_id, 11);
+  assert.deepEqual(events.find(([type]) => type === 'segments')[1], [
+    { booking_id: 90, leg_order: 2, flight_id: 12, fare_class_id: 102, price_per_passenger: 400000 },
+  ]);
+});
+
 test('legacy Booking imports and cron resolve the canonical module', () => {
   const { getDefaultBookingModule } = require('../modules/booking');
   const module = getDefaultBookingModule();

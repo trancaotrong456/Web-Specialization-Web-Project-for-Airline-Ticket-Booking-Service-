@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizeBookingRepository {
-  constructor({ Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport } = {}) {
+  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport } = {}) {
     if (![Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport].every(Boolean)) {
       throw new TypeError('Booking repository requires all Booking association models');
     }
-    Object.assign(this, { Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport });
+    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport });
   }
 
   findFlight(options) { return this.Flight.findOne(options); }
@@ -28,15 +28,37 @@ class SequelizeBookingRepository {
     return this.Booking.findOne({ where: { booking_code: code }, transaction });
   }
   findBookingForCancellation(id, transaction) {
-    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }] });
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._itineraryInclude()] });
   }
   findHoldingBookingForExpiry(id, transaction) {
-    return this.Booking.findOne({ where: { id, status: 'holding' }, lock: transaction.LOCK.UPDATE, transaction });
+    return this.Booking.findOne({ where: { id, status: 'holding' }, lock: transaction.LOCK.UPDATE, transaction, include: [
+      { model: this.BookingPassenger, as: 'passengers' },
+      ...this._itineraryInclude(),
+    ] });
   }
   findBookingForReconciliation(id, transaction) {
-    return this.Booking.findOne({ where: { id }, include: [{ model: this.BookingPassenger, as: 'passengers' }], lock: transaction.LOCK.UPDATE, transaction });
+    return this.Booking.findOne({ where: { id }, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._itineraryInclude()], lock: transaction.LOCK.UPDATE, transaction });
   }
   findBookingByPk(id, options) { return this.Booking.findByPk(id, options); }
+  findBookingSegments(bookingId, transaction) {
+    if (!this.BookingSegment) return Promise.resolve([]);
+    return this.BookingSegment.findAll({ where: { booking_id: bookingId }, order: [['leg_order', 'ASC']], transaction });
+  }
+  createBookingSegments(values, options) {
+    if (!this.BookingSegment) throw new TypeError('BookingSegment model is required for multi-leg bookings');
+    return this.BookingSegment.bulkCreate(values, options);
+  }
+  _itineraryInclude() {
+    if (!this.BookingSegment) return [];
+    return [{ model: this.BookingSegment, as: 'itinerarySegments', include: [
+      { model: this.Flight, as: 'flight', include: [
+        { model: this.Airline, as: 'airline' },
+        { model: this.Airport, as: 'departureAirport' },
+        { model: this.Airport, as: 'arrivalAirport' },
+      ] },
+      { model: this.FareClass, as: 'fareClass' },
+    ] }];
+  }
   findBookingDetail(id) {
     return this.Booking.findByPk(id, {
       include: [
@@ -52,6 +74,7 @@ class SequelizeBookingRepository {
         { model: this.BookingPassenger, as: 'passengers' },
         { model: this.Payment, as: 'payments' },
         { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email', 'phone'] },
+        ...this._itineraryInclude(),
       ],
     });
   }
@@ -68,6 +91,7 @@ class SequelizeBookingRepository {
         { model: this.Promotion, as: 'promotion' },
         { model: this.BookingPassenger, as: 'passengers' },
         { model: this.Payment, as: 'payments' },
+        ...this._itineraryInclude(),
       ],
     });
   }
@@ -85,6 +109,7 @@ class SequelizeBookingRepository {
         { model: this.FareClass, as: 'fareClass' },
         { model: this.BookingPassenger, as: 'passengers' },
         { model: this.Payment, as: 'payments' },
+        ...this._itineraryInclude(),
       ],
     });
   }
@@ -109,12 +134,13 @@ class SequelizeBookingRepository {
         { model: this.BookingPassenger, as: 'passengers' },
         { model: this.Payment, as: 'payments' },
         { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'] },
+        ...this._itineraryInclude(),
       ],
     });
   }
   findBookings(options) { return this.Booking.findAll(options); }
   findExpiredHoldingBookings(now) {
-    return this.Booking.findAll({ where: { status: 'holding', hold_expires_at: { [Op.lt]: now } }, include: [{ model: this.BookingPassenger, as: 'passengers' }] });
+    return this.Booking.findAll({ where: { status: 'holding', hold_expires_at: { [Op.lt]: now } }, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._itineraryInclude()] });
   }
   findStalePendingBookings(cutoff) {
     return this.Booking.findAll({ where: { status: 'pending_payment', hold_expires_at: { [Op.lt]: cutoff } }, attributes: ['id'] });

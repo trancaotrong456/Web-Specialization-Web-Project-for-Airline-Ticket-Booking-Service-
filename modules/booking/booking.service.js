@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const { getIO } = require('../../sockets');
 const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
+const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 
 class BookingService {
   constructor({ repository, transactionManager, socket = getIO, flightSeatService } = {}) {
@@ -38,6 +39,9 @@ class BookingService {
 
     await (this.flightSeatService || require('../../services/flight.service')).checkAndEmitSeatWarning(flightId);
   }
+  async _emitSeatUpdates(updates = []) {
+    for (const update of updates) await this._emitSocketSeatUpdate(update.flight_id, update.available_seats);
+  }
 
   /**
    * Alias for createHoldingBooking
@@ -49,7 +53,7 @@ class BookingService {
   /**
    * 1. Create holding booking with row-level locking
    */
-  async createHoldingBooking({ flight_id, fare_class_id, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
+  async createHoldingBooking({ flight_id, fare_class_id, itinerary_legs, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
     guest_email = normalizeGuestEmail(guest_email);
     if (!user_id && !guest_email) {
       const error = new Error('Guest email is required if you are not logged in');
@@ -61,54 +65,67 @@ class BookingService {
     const holdingMinutes = parseInt(process.env.HOLDING_TIME_MINUTES || '15', 10);
     const holdExpiresAt = new Date(Date.now() + holdingMinutes * 60 * 1000);
 
+    const requestedLegs = Array.isArray(itinerary_legs) && itinerary_legs.length
+      ? itinerary_legs.map((leg) => ({ flight_id: Number(leg.flight_id), fare_class_id: Number(leg.fare_class_id) }))
+      : [{ flight_id: Number(flight_id), fare_class_id: Number(fare_class_id) }];
+    if (requestedLegs.length > 4 || (Array.isArray(itinerary_legs) && itinerary_legs.length < 2) || requestedLegs.some((leg) => !Number.isInteger(leg.flight_id) || leg.flight_id < 1 || !Number.isInteger(leg.fare_class_id) || leg.fare_class_id < 1)) {
+      const error = new Error('Itinerary must contain 1 to 4 valid flight and fare selections');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (requestedLegs[0].flight_id !== Number(flight_id) || requestedLegs[0].fare_class_id !== Number(fare_class_id)) {
+      const error = new Error('The first itinerary leg must match flight_id and fare_class_id');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (new Set(requestedLegs.map((leg) => leg.flight_id)).size !== requestedLegs.length) {
+      const error = new Error('A flight cannot appear more than once in an itinerary');
+      error.statusCode = 400;
+      throw error;
+    }
+
     const result = await this.transactionManager.transaction(async (t) => {
-      // 1. Lock flight row to check seat availability
-      const flight = await this.repository.findFlightForUpdate(flight_id, t);
-
-      if (!flight) {
-        const error = new Error('Flight not found');
-        error.statusCode = 404;
-        throw error;
+      // Lock in a stable id order to avoid deadlocks when concurrent itineraries overlap.
+      const lockedFlights = new Map();
+      for (const id of [...new Set(requestedLegs.map((leg) => leg.flight_id))].sort((a, b) => a - b)) {
+        lockedFlights.set(id, await this.repository.findFlightForUpdate(id, t));
+      }
+      const legs = [];
+      for (let index = 0; index < requestedLegs.length; index += 1) {
+        const requested = requestedLegs[index];
+        const flight = lockedFlights.get(requested.flight_id);
+        if (!flight) {
+          const error = new Error('Flight not found'); error.statusCode = 404; throw error;
+        }
+        if (flight.status !== 'scheduled') {
+          const error = new Error('Flight is not available for booking'); error.statusCode = 400; throw error;
+        }
+        const departureTime = new Date(flight.departure_time);
+        if (Number.isNaN(departureTime.getTime()) || departureTime.getTime() <= Date.now()) {
+          const error = new Error('Cannot book a flight that has already departed'); error.statusCode = 400; throw error;
+        }
+        if (flight.available_seats < passengerCount) {
+          const error = new Error(`Not enough available seats. Only ${flight.available_seats} remaining`); error.statusCode = 400; throw error;
+        }
+        if (index > 0) {
+          const previousFlight = legs[index - 1].flight;
+          const previousArrival = new Date(previousFlight.arrival_time).getTime();
+          const connectingAtSameAirport = Number(previousFlight.arrival_airport_id) === Number(flight.departure_airport_id);
+          const requiredConnectionGap = connectingAtSameAirport ? 60 * 60 * 1000 : 0;
+          if (!Number.isFinite(previousArrival) || departureTime.getTime() - previousArrival < requiredConnectionGap) {
+            const error = new Error(connectingAtSameAirport
+              ? 'Connecting flights require at least 60 minutes between arrival and departure'
+              : 'Itinerary flight dates must follow the previous flight arrival'); error.statusCode = 400; throw error;
+          }
+        }
+        const fareClass = await this.repository.findFareClassForFlight(requested.fare_class_id, requested.flight_id, t);
+        if (!fareClass) {
+          const error = new Error('Selected fare class does not belong to this flight'); error.statusCode = 404; throw error;
+        }
+        legs.push({ ...requested, flight, fareClass });
       }
 
-      if (flight.status !== 'scheduled') {
-        const error = new Error('Flight is not available for booking');
-        error.statusCode = 400;
-        throw error;
-      }
-
-      // Reject bookings for flights that have already departed
-      const departureTime = new Date(flight.departure_time);
-
-      if (
-        Number.isNaN(departureTime.getTime()) ||
-        departureTime.getTime() <= Date.now()
-      ) {
-        const error = new Error(
-          'Cannot book a flight that has already departed'
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-
-      if (flight.available_seats < passengerCount) {
-        const error = new Error(
-          `Not enough available seats. Only ${flight.available_seats} remaining`
-        );
-        error.statusCode = 400;
-        throw error;
-      }
-
-      // 2. Validate fare class
-      const fareClass = await this.repository.findFareClassForFlight(fare_class_id, flight_id, t);
-
-      if (!fareClass) {
-        const error = new Error('Selected fare class does not belong to this flight');
-        error.statusCode = 404;
-        throw error;
-      }
-
-      const baseAmount = Number(fareClass.price) * passengerCount;
+      const baseAmount = legs.reduce((sum, leg) => sum + Number(leg.fareClass.price) * passengerCount, 0);
       let totalAmount = baseAmount;
       let promotionId = null;
 
@@ -149,9 +166,11 @@ class BookingService {
         await this.repository.increment(promo, 'used_count', { by: 1, transaction: t });
       }
 
-      // 4. Deduct seats from flight
-      flight.available_seats -= passengerCount;
-      await this.repository.save(flight, { transaction: t });
+      // 4. Hold seats on every selected flight atomically.
+      for (const leg of legs) {
+        leg.flight.available_seats -= passengerCount;
+        await this.repository.save(leg.flight, { transaction: t });
+      }
 
       // 5. Generate unique booking code
       let bookingCode = this._generateBookingCode();
@@ -181,6 +200,16 @@ class BookingService {
         { transaction: t }
       );
 
+      if (legs.length > 1) {
+        await this.repository.createBookingSegments(legs.slice(1).map((leg, index) => ({
+          booking_id: booking.id,
+          leg_order: index + 2,
+          flight_id: leg.flight_id,
+          fare_class_id: leg.fare_class_id,
+          price_per_passenger: Number(leg.fareClass.price),
+        })), { transaction: t });
+      }
+
       // 7. Create Passenger records
       const passengerRecords = passengers.map((p) => ({
         booking_id: booking.id,
@@ -191,11 +220,11 @@ class BookingService {
 
       await this.repository.createPassengers(passengerRecords, { transaction: t });
 
-      return { booking, flightAvailableSeats: flight.available_seats };
+      return { booking, flightSeatUpdates: legs.map(({ flight }) => ({ id: flight.id, availableSeats: flight.available_seats })) };
     });
 
     // Real-time notification after transaction commits
-    await this._emitSocketSeatUpdate(flight_id, result.flightAvailableSeats);
+    for (const flight of result.flightSeatUpdates) await this._emitSocketSeatUpdate(flight.id, flight.availableSeats);
 
     return this.getBookingById(result.booking.id, currentUser, guest_email);
   }
@@ -268,8 +297,7 @@ class BookingService {
    */
   async cancelHoldingBooking(bookingId, currentUser = null, guestEmail = null) {
     guestEmail = normalizeGuestEmail(guestEmail);
-    let flightIdToEmit = null;
-    let newAvailableSeats = null;
+    let seatUpdates = [];
 
     await this.transactionManager.transaction(async (t) => {
       const booking = await this.repository.findBookingForCancellation(bookingId, t);
@@ -289,15 +317,7 @@ class BookingService {
       }
 
       // 1. Release seats back to flight
-      const flight = await this.repository.findFlightForUpdate(booking.flight_id, t);
-
-      if (flight) {
-        const passengerCount = booking.passengers ? booking.passengers.length : 1;
-        flight.available_seats += passengerCount;
-        await this.repository.save(flight, { transaction: t });
-        flightIdToEmit = flight.id;
-        newAvailableSeats = flight.available_seats;
-      }
+      seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
 
       // 2. Rollback promotion if used
       if (booking.promotion_id) {
@@ -312,9 +332,7 @@ class BookingService {
       await this.repository.save(booking, { transaction: t });
     });
 
-    if (flightIdToEmit) {
-      await this._emitSocketSeatUpdate(flightIdToEmit, newAvailableSeats);
-    }
+    await this._emitSeatUpdates(seatUpdates);
 
     return { message: 'Booking cancelled successfully' };
   }
@@ -336,23 +354,14 @@ class BookingService {
 
     for (const booking of expiredBookings) {
       try {
-        let flightIdToEmit = null;
-        let newAvailableSeats = null;
+        let seatUpdates = [];
 
         await this.transactionManager.transaction(async (t) => {
           const lockedBooking = await this.repository.findHoldingBookingForExpiry(booking.id, t);
 
           if (!lockedBooking) return; // Might have been processed concurrently
 
-          const flight = await this.repository.findFlightForUpdate(lockedBooking.flight_id, t);
-
-          if (flight) {
-            const seats = booking.passengers ? booking.passengers.length : 1;
-            flight.available_seats += seats;
-            await this.repository.save(flight, { transaction: t });
-            flightIdToEmit = flight.id;
-            newAvailableSeats = flight.available_seats;
-          }
+          seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
 
           if (lockedBooking.promotion_id) {
             const promo = await this.repository.findPromotionByIdForUpdate(lockedBooking.promotion_id, t);
@@ -366,9 +375,7 @@ class BookingService {
           expiredCount++;
         });
 
-        if (flightIdToEmit) {
-          await this._emitSocketSeatUpdate(flightIdToEmit, newAvailableSeats);
-        }
+        await this._emitSeatUpdates(seatUpdates);
       } catch (err) {
         console.error(`[Cron] Error expiring booking #${booking.id}:`, err.message);
       }
@@ -393,8 +400,7 @@ class BookingService {
 
     for (const candidate of candidates) {
       try {
-        let flightIdToEmit = null;
-        let newAvailableSeats = null;
+        let seatUpdates = [];
 
         await this.transactionManager.transaction(async (t) => {
           // Match the webhook lock order (Payment -> Booking) when a pending
@@ -413,15 +419,7 @@ class BookingService {
           payment.status = 'failed';
           await this.repository.save(payment, { transaction: t });
 
-          const flight = await this.repository.findFlightForUpdate(booking.flight_id, t);
-
-          if (flight) {
-            const seats = booking.passengers ? booking.passengers.length : 1;
-            flight.available_seats += seats;
-            await this.repository.save(flight, { transaction: t });
-            flightIdToEmit = flight.id;
-            newAvailableSeats = flight.available_seats;
-          }
+          seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
 
           if (booking.promotion_id) {
             const promo = await this.repository.findPromotionByIdForUpdate(booking.promotion_id, t);
@@ -435,9 +433,7 @@ class BookingService {
           reconciledCount++;
         });
 
-        if (flightIdToEmit) {
-          await this._emitSocketSeatUpdate(flightIdToEmit, newAvailableSeats);
-        }
+        await this._emitSeatUpdates(seatUpdates);
       } catch (error) {
         console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, error.message);
       }

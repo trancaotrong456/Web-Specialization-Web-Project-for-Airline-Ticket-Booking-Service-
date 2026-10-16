@@ -7,7 +7,7 @@ const paymentService = require('../services/payment.service');
 const { signVnpayParams } = require('../utils/checksum.util');
 
 // In-memory model boundary: exercise actual services without touching seeded data.
-function fixture(t, overrides = {}) {
+function fixture(t, overrides = {}, itinerarySegments = [], omitLockedPassengers = false) {
   const tx = { LOCK: { UPDATE: 'UPDATE' } };
   const writes = [];
   const row = (values) => ({ ...values, async save(options) {
@@ -19,6 +19,7 @@ function fixture(t, overrides = {}) {
     total_amount: 180000, status: 'holding', hold_expires_at: new Date(Date.now() + 900000),
     passengers: [{ passenger_name: 'An', passport_no: 'P1' }, { passenger_name: 'Binh' }], ...overrides });
   const flight = row({ id: 2, available_seats: 8, status: 'scheduled', departure_time: new Date(Date.now() + 86400000) });
+  const nextFlight = row({ id: 3, available_seats: 4, status: 'scheduled', departure_time: new Date(Date.now() + 172800000) });
   const promo = { id: 3, used_count: 1, max_uses: 10, discount_type: 'percent', discount_value: 10,
     valid_from: new Date(Date.now() - 86400000), valid_to: new Date(Date.now() + 86400000),
     async increment(_, options) { assert.equal(options.transaction, tx); this.used_count++; },
@@ -28,12 +29,15 @@ function fixture(t, overrides = {}) {
   t.mock.method(models.Booking, 'findOne', async ({ where }) => {
     if (where.booking_code) return null;
     if (where.status && where.status !== booking.status) return null;
+    if (where.status === 'holding' && omitLockedPassengers) return { ...booking, passengers: undefined };
     return booking;
   });
   t.mock.method(models.Booking, 'findByPk', async () => booking);
   t.mock.method(models.Booking, 'findAll', async () => [booking]);
+  t.mock.method(models.BookingSegment, 'findAll', async () => itinerarySegments);
   t.mock.method(models.Flight, 'findOne', async (options) => {
-    assert.equal(options.transaction, tx); assert.equal(options.lock, 'UPDATE'); return flight;
+    assert.equal(options.transaction, tx); assert.equal(options.lock, 'UPDATE');
+    return Number(options.where.id) === nextFlight.id ? nextFlight : flight;
   });
   t.mock.method(models.FareClass, 'findOne', async () => ({ price: 100000 }));
   t.mock.method(models.Promotion, 'findOne', async () => promo);
@@ -42,9 +46,10 @@ function fixture(t, overrides = {}) {
     assert.equal(options.transaction, tx); Object.assign(payment, values); return payment;
   });
   t.mock.method(bookingService, '_emitSocketSeatUpdate', async () => {});
-  t.mock.method(paymentService, '_emitSocketSeatUpdate', async () => {});
+  const seatUpdates = [];
+  t.mock.method(paymentService, '_emitSocketSeatUpdate', async (flightId, availableSeats) => seatUpdates.push({ flight_id: flightId, available_seats: availableSeats }));
   const email = t.mock.method(paymentService, '_triggerBookingConfirmationEmail', async () => {});
-  return { booking, flight, promo, payment, tx, writes, email };
+  return { booking, flight, nextFlight, promo, payment, tx, writes, email, seatUpdates };
 }
 const denied = (code) => (error) => error.statusCode === code;
 function ipn(amount = 180000, response = '00') {
@@ -158,6 +163,23 @@ for (const gateway of ['vnpay', 'payos']) {
   }
 }
 
+test('expired gateway callback restores seats on every itinerary leg exactly once', async (t) => {
+  const f = fixture(t, { status: 'pending_payment', hold_expires_at: new Date(Date.now() - 60000) }, [{ flight_id: 3 }]);
+  await paymentService.handleVnpayIpn(ipn(180000, '24'));
+  assert.equal(f.booking.status, 'expired');
+  assert.equal(f.flight.available_seats, 10);
+  assert.equal(f.nextFlight.available_seats, 6);
+  assert.deepEqual(f.seatUpdates, [
+    { flight_id: 2, available_seats: 10 },
+    { flight_id: 3, available_seats: 6 },
+  ]);
+  assert.equal(f.promo.used_count, 0);
+  await paymentService.handleVnpayIpn(ipn(180000, '24'));
+  assert.equal(f.flight.available_seats, 10);
+  assert.equal(f.nextFlight.available_seats, 6);
+  assert.equal(f.seatUpdates.length, 2);
+});
+
 test('#39 invalid signature and amount never update state', async (t) => {
   const f = fixture(t, { status: 'pending_payment' });
   assert.equal((await paymentService.handleVnpayIpn({ ...ipn(), vnp_SecureHash: 'bad' })).RspCode, '97');
@@ -174,6 +196,27 @@ test('#35 expiry only selects holding and releases seats/promotion once', async 
   assert.equal((await bookingService.expireHoldingBookings()).expiredCount, 1);
   assert.equal(f.booking.status, 'expired'); assert.equal(f.flight.available_seats, 10); assert.equal(f.promo.used_count, 0);
   assert.equal((await bookingService.expireHoldingBookings()).expiredCount, 0);
+});
+
+test('#35 expiry restores every passenger on every itinerary leg once, including repeated job runs', async (t) => {
+  const passengers = [{ passenger_name: 'An' }, { passenger_name: 'Binh' }, { passenger_name: 'Chi' }];
+  const f = fixture(t, { passengers, hold_expires_at: new Date(0) }, [{ flight_id: 3 }]);
+
+  assert.equal((await bookingService.expireHoldingBookings()).expiredCount, 1);
+  assert.equal(f.booking.status, 'expired');
+  assert.equal(f.flight.available_seats, 11);
+  assert.equal(f.nextFlight.available_seats, 7);
+  assert.equal(f.promo.used_count, 0);
+  assert.equal((await bookingService.expireHoldingBookings()).expiredCount, 0);
+  assert.equal(f.flight.available_seats, 11);
+  assert.equal(f.nextFlight.available_seats, 7);
+});
+
+test('#35 expiry fails closed when the locked booking has no passenger data', async (t) => {
+  const f = fixture(t, { hold_expires_at: new Date(0) }, [], true);
+  assert.equal((await bookingService.expireHoldingBookings()).expiredCount, 0);
+  assert.equal(f.booking.status, 'holding');
+  assert.equal(f.flight.available_seats, 8);
 });
 
 test('#35 stale pending reconciliation fails payment and releases resources once', async (t) => {
