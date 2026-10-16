@@ -338,6 +338,28 @@ class PaymentService {
         throw error;
       }
 
+      // A flight may be cancelled or depart after the booking was created but
+      // before the customer starts payment. Re-check it under a row lock so an
+      // invalid flight can never enter the gateway workflow.
+      const flight = await Flight.findOne({
+        where: { id: booking.flight_id },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+      });
+
+      if (!flight || flight.status !== 'scheduled') {
+        const error = new Error('Booking cannot be paid because the flight is no longer scheduled');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const departureTime = new Date(flight.departure_time);
+      if (Number.isNaN(departureTime.getTime()) || departureTime.getTime() <= Date.now()) {
+        const error = new Error('Booking cannot be paid because the flight has already departed');
+        error.statusCode = 400;
+        throw error;
+      }
+
       // Transition to pending_payment
       booking.status = 'pending_payment';
       await booking.save({ transaction: t });
