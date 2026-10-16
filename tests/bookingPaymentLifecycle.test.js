@@ -10,6 +10,7 @@ const { signVnpayParams } = require('../utils/checksum.util');
 function fixture(t, overrides = {}) {
   const tx = { LOCK: { UPDATE: 'UPDATE' } };
   const writes = [];
+  const lockSequence = [];
   const row = (values) => ({ ...values, async save(options) {
     assert.equal(options.transaction, tx);
     writes.push(this);
@@ -25,7 +26,8 @@ function fixture(t, overrides = {}) {
     async decrement(_, options) { assert.equal(options.transaction, tx); this.used_count--; } };
   const payment = row({ id: 4, booking_id: 1, amount: 180000, status: 'pending', payment_method: 'vnpay', booking });
   t.mock.method(models.sequelize, 'transaction', async (run) => run(tx));
-  t.mock.method(models.Booking, 'findOne', async ({ where }) => {
+  t.mock.method(models.Booking, 'findOne', async ({ where, transaction }) => {
+    if (transaction) lockSequence.push('booking');
     if (where.booking_code) return null;
     if (where.status && where.status !== booking.status) return null;
     return booking;
@@ -37,14 +39,17 @@ function fixture(t, overrides = {}) {
   });
   t.mock.method(models.FareClass, 'findOne', async () => ({ price: 100000 }));
   t.mock.method(models.Promotion, 'findOne', async () => promo);
-  t.mock.method(models.Payment, 'findOne', async () => payment);
+  t.mock.method(models.Payment, 'findOne', async ({ transaction } = {}) => {
+    if (transaction) lockSequence.push('payment');
+    return payment;
+  });
   t.mock.method(models.Payment, 'create', async (values, options) => {
     assert.equal(options.transaction, tx); Object.assign(payment, values); return payment;
   });
   t.mock.method(bookingService, '_emitSocketSeatUpdate', async () => {});
   t.mock.method(paymentService, '_emitSocketSeatUpdate', async () => {});
   const email = t.mock.method(paymentService, '_triggerBookingConfirmationEmail', async () => {});
-  return { booking, flight, promo, payment, tx, writes, email };
+  return { booking, flight, promo, payment, tx, writes, email, lockSequence };
 }
 const denied = (code) => (error) => error.statusCode === code;
 function ipn(amount = 180000, response = '00', transactionStatus = response) {
@@ -255,9 +260,24 @@ test('#33 refund cancels confirmed booking, refunds payment and releases seats o
   const result = await paymentService.processRefund(1, 'test', { email: 'admin@example.com' });
   assert.equal(result.refundedAmount, 180000); assert.equal(f.payment.status, 'refunded');
   assert.equal(f.booking.status, 'cancelled'); assert.equal(f.flight.available_seats, 10);
+  assert.deepEqual(f.lockSequence.slice(0, 2), ['payment', 'booking']);
   await assert.rejects(paymentService.processRefund(1, 'test', { email: 'admin@example.com' }), denied(400));
   assert.equal(f.flight.available_seats, 10);
 });
+
+for (const bookingStatus of ['pending_payment', 'expired']) {
+  test(`#33 refund handles charged ${bookingStatus} booking without returning seats twice`, async (t) => {
+    const f = fixture(t, { status: bookingStatus });
+    f.payment.status = 'success';
+    if (bookingStatus === 'expired') f.flight.available_seats = 10;
+
+    await paymentService.processRefund(1, 'manual reconciliation', { email: 'admin@example.com' });
+
+    assert.equal(f.payment.status, 'refunded');
+    assert.equal(f.booking.status, 'cancelled');
+    assert.equal(f.flight.available_seats, 10);
+  });
+}
 
 for (const group_by of ['day', 'month']) {
   test(`#37 revenue ${group_by} includes only successful payments in inclusive calendar range`, async (t) => {
