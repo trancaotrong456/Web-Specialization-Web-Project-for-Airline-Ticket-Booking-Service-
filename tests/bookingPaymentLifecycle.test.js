@@ -357,13 +357,39 @@ for (const unavailable of ['seats', 'departed', 'cancelled-flight', 'wrong-fare'
   });
 }
 
-test('#33 gateway link creation failure restores holding without returning reserved seats', async (t) => {
-  const f = fixture(t, { status: 'pending_payment' });
-  f.payment.destroy = async () => {};
-  const destroy = t.mock.method(f.payment, 'destroy', async (options) => { assert.equal(options.transaction, f.tx); });
-  await paymentService._restoreHoldingAfterGatewayFailure(1, 'TXN_TEST');
-  assert.equal(f.booking.status, 'holding'); assert.equal(destroy.mock.callCount(), 1);
-  assert.equal(f.flight.available_seats, 8); assert.equal(f.promo.used_count, 1);
+test('#38 ambiguous payOS link creation failure keeps payment pending for reconciliation', async (t) => {
+  const f = fixture(t);
+  t.mock.method(paymentService, '_getPayOSClient', () => ({
+    paymentRequests: { create: async () => { throw new Error('network timeout'); } },
+  }));
+  const previous = {
+    PAYOS_MODE: process.env.PAYOS_MODE,
+    PAYOS_RETURN_URL: process.env.PAYOS_RETURN_URL,
+    PAYOS_CANCEL_URL: process.env.PAYOS_CANCEL_URL,
+  };
+  process.env.PAYOS_MODE = 'live';
+  process.env.PAYOS_RETURN_URL = 'https://frontend.example/payment/payos-return';
+  process.env.PAYOS_CANCEL_URL = 'https://frontend.example/payment/payos-cancel';
+
+  try {
+    await assert.rejects(
+      paymentService.initiatePayment({
+        booking_id: 1,
+        payment_method: 'payos',
+        guest_email: 'guest@example.com',
+      }),
+      (error) => error.statusCode === 502 && error.transactionRef === f.payment.transaction_ref,
+    );
+    assert.equal(f.booking.status, 'pending_payment');
+    assert.equal(f.payment.status, 'pending');
+    assert.equal(f.flight.available_seats, 8);
+    assert.equal(f.promo.used_count, 1);
+  } finally {
+    for (const [key, value] of Object.entries(previous)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
 });
 
 test('#39 callback rechecks state under lock when another callback already confirmed payment', async (t) => {

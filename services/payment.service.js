@@ -150,28 +150,6 @@ class PaymentService {
     });
   }
 
-  async _restoreHoldingAfterGatewayFailure(bookingId, transactionRef) {
-    await sequelize.transaction(async (t) => {
-      const booking = await Booking.findOne({
-        where: { id: bookingId },
-        lock: t.LOCK.UPDATE,
-        transaction: t,
-      });
-      const payment = await Payment.findOne({
-        where: { booking_id: bookingId, transaction_ref: transactionRef, status: 'pending' },
-        lock: t.LOCK.UPDATE,
-        transaction: t,
-      });
-
-      // Do not overwrite a webhook or another workflow that already changed state.
-      if (booking && payment && booking.status === 'pending_payment') {
-        await payment.destroy({ transaction: t });
-        booking.status = 'holding';
-        await booking.save({ transaction: t });
-      }
-    });
-  }
-
   async _markPayosPaymentFailed(paymentId, bookingId) {
     let flightIdToEmit = null;
     let newSeatsCount = null;
@@ -497,9 +475,13 @@ class PaymentService {
           status: 'pending_payment',
         };
       } catch (gatewayError) {
-        await this._restoreHoldingAfterGatewayFailure(bookingData.id, txnRef);
-        const error = new Error(`Unable to create payOS payment link: ${gatewayError.message}`);
+        // A timeout/network error is ambiguous: payOS may have created the
+        // payment link even though this process did not receive the response.
+        // Keep the local payment pending so a later webhook, provider query, or
+        // stale-payment reconciliation can resolve it without losing a charge.
+        const error = new Error(`Unable to confirm payOS payment-link creation: ${gatewayError.message}`);
         error.statusCode = 502;
+        error.transactionRef = txnRef;
         throw error;
       }
     }
