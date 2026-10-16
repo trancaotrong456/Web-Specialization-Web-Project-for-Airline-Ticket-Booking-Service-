@@ -1125,28 +1125,9 @@ class PaymentService {
     let newSeatsCount = null;
 
     const result = await sequelize.transaction(async (t) => {
-      const booking = await Booking.findOne({
-        where: { id: bookingId },
-        lock: t.LOCK.UPDATE,
-        transaction: t,
-        include: [
-          { model: BookingPassenger, as: 'passengers' },
-          { model: Payment, as: 'payments' },
-        ],
-      });
-
-      if (!booking) {
-        const error = new Error('Booking not found');
-        error.statusCode = 404;
-        throw error;
-      }
-
-      if (booking.status !== 'confirmed') {
-        const error = new Error(`Cannot refund booking with status '${booking.status}'. Only 'confirmed' bookings can be refunded.`);
-        error.statusCode = 400;
-        throw error;
-      }
-
+      // Keep the global payment workflow lock order: Payment -> Booking ->
+      // Flight -> Promotion. This avoids a Booking/Payment lock inversion with
+      // gateway webhooks and pending-payment reconciliation.
       const successfulPayment = await Payment.findOne({
         where: {
           booking_id: bookingId,
@@ -1162,6 +1143,33 @@ class PaymentService {
         throw error;
       }
 
+      const booking = await Booking.findOne({
+        where: { id: bookingId },
+        lock: t.LOCK.UPDATE,
+        transaction: t,
+        include: [
+          { model: BookingPassenger, as: 'passengers' },
+        ],
+      });
+
+      if (!booking) {
+        const error = new Error('Booking not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      const refundableStatuses = ['confirmed', 'pending_payment', 'expired'];
+      if (!refundableStatuses.includes(booking.status)) {
+        const error = new Error(`Cannot refund booking with status '${booking.status}'.`);
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Expired bookings already returned their seats during expiry/reconcile.
+      // Abnormal successful payments keep pending_payment so an administrator
+      // can refund them and release the still-reserved seats exactly once.
+      const shouldReturnSeats = booking.status !== 'expired';
+
       // Mark payment as refunded
       successfulPayment.status = 'refunded';
       await successfulPayment.save({ transaction: t });
@@ -1171,18 +1179,20 @@ class PaymentService {
       await booking.save({ transaction: t });
 
       // Return seats to flight
-      const flight = await Flight.findOne({
-        where: { id: booking.flight_id },
-        lock: t.LOCK.UPDATE,
-        transaction: t,
-      });
+      if (shouldReturnSeats) {
+        const flight = await Flight.findOne({
+          where: { id: booking.flight_id },
+          lock: t.LOCK.UPDATE,
+          transaction: t,
+        });
 
-      if (flight) {
-        const seats = booking.passengers ? booking.passengers.length : 1;
-        flight.available_seats += seats;
-        await flight.save({ transaction: t });
-        flightIdToEmit = flight.id;
-        newSeatsCount = flight.available_seats;
+        if (flight) {
+          const seats = booking.passengers ? booking.passengers.length : 1;
+          flight.available_seats += seats;
+          await flight.save({ transaction: t });
+          flightIdToEmit = flight.id;
+          newSeatsCount = flight.available_seats;
+        }
       }
 
       console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
