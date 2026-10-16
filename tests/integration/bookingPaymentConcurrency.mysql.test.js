@@ -342,11 +342,35 @@ test('IT-08 stale successful payment attempt is recorded without confirming the 
   }
 });
 
-test('IT-09 payment initiation racing flight cancellation cannot leave a new pending payment', { timeout: 20000 }, async () => {
-  const fixture = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
+test('IT-09 flight cancellation and payment initiation preserve commit order and reconciliation', { timeout: 30000 }, async (t) => {
+  t.mock.method(emailService, 'sendBookingConfirmation', async () => ({ id: 'integration-email-disabled' }));
   let hookName;
   try {
-    const booking = await createHoldingBooking(fixture, 'IT09');
+    // Cancellation commits first: a later payment initiation must observe the
+    // cancelled flight and leave the holding booking/payment state untouched.
+    const cancelledFirst = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
+    const cancelledFirstBooking = await createHoldingBooking(cancelledFirst, 'IT09A');
+    await flightService.cancelFlight(cancelledFirst.flight.id);
+    await assert.rejects(
+      paymentService.initiatePayment({
+        booking_id: cancelledFirstBooking.id,
+        payment_method: 'vnpay',
+        guest_email: cancelledFirstBooking.guest_email,
+      }),
+      (error) => error.statusCode === 400 && /no longer scheduled/i.test(error.message)
+    );
+    const [bookingAfterEarlyCancellation, earlyPaymentCount] = await Promise.all([
+      models.Booking.findByPk(cancelledFirstBooking.id),
+      models.Payment.count({ where: { booking_id: cancelledFirstBooking.id } }),
+    ]);
+    assert.equal(bookingAfterEarlyCancellation.status, 'holding');
+    assert.equal(earlyPaymentCount, 0);
+
+    // Payment initiation owns the Flight lock first: it is valid to commit a
+    // pending attempt before cancellation commits. The callback must retain a
+    // later charge for review without confirming a booking on a cancelled flight.
+    const paymentFirst = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
+    const paymentFirstBooking = await createHoldingBooking(paymentFirst, 'IT09B');
     let signalFlightLock;
     const flightLocked = new Promise((resolve) => { signalFlightLock = resolve; });
     hookName = `it09-flight-lock-${Date.now()}`;
@@ -359,9 +383,9 @@ test('IT-09 payment initiation racing flight cancellation cannot leave a new pen
     });
 
     const initiatePromise = paymentService.initiatePayment({
-      booking_id: booking.id,
+      booking_id: paymentFirstBooking.id,
       payment_method: 'vnpay',
-      guest_email: booking.guest_email,
+      guest_email: paymentFirstBooking.guest_email,
     });
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(
@@ -373,18 +397,70 @@ test('IT-09 payment initiation racing flight cancellation cannot leave a new pen
         resolve();
       }, reject);
     });
-    const cancelFlightPromise = flightService.updateFlight(fixture.flight.id, { status: 'cancelled' });
+    const cancelFlightPromise = flightService.cancelFlight(paymentFirst.flight.id);
 
     const results = await Promise.allSettled([initiatePromise, cancelFlightPromise]);
+    models.sequelize.removeHook('afterQuery', hookName);
+    hookName = null;
     assertNoLockFailure(results);
-    const [persistedBooking, persistedFlight, paymentCount] = await Promise.all([
-      models.Booking.findByPk(booking.id),
-      models.Flight.findByPk(fixture.flight.id),
-      models.Payment.count({ where: { booking_id: booking.id } }),
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 2);
+    const payment = await models.Payment.findOne({ where: { booking_id: paymentFirstBooking.id } });
+    trackPayment(payment);
+    let [persistedBooking, persistedFlight] = await Promise.all([
+      models.Booking.findByPk(paymentFirstBooking.id),
+      models.Flight.findByPk(paymentFirst.flight.id),
     ]);
     assert.equal(persistedFlight.status, 'cancelled');
-    assert.equal(paymentCount, 0, 'flight cancellation race must not leave a newly-created payment');
-    assert.equal(persistedBooking.status, 'holding');
+    assert.equal(persistedBooking.status, 'pending_payment');
+    assert.equal(payment.status, 'pending');
+
+    const webhookResult = await paymentService.handleVnpayIpn(successfulVnpayIpn(payment));
+    [persistedBooking, persistedFlight] = await Promise.all([
+      models.Booking.findByPk(paymentFirstBooking.id),
+      models.Flight.findByPk(paymentFirst.flight.id),
+    ]);
+    const chargedPayment = await models.Payment.findByPk(payment.id);
+    assert.match(webhookResult.Message, /manual review/i);
+    assert.equal(chargedPayment.status, 'success');
+    assert.equal(persistedBooking.status, 'pending_payment');
+    assert.equal(persistedFlight.status, 'cancelled');
+    assert.equal(persistedFlight.available_seats, 0);
+
+    await paymentService.processRefund(
+      paymentFirstBooking.id,
+      'IT-09 cancelled flight reconciliation',
+      adminUser
+    );
+    const [refundedBooking, refundedPayment, flightAfterRefund] = await Promise.all([
+      models.Booking.findByPk(paymentFirstBooking.id),
+      models.Payment.findByPk(payment.id),
+      models.Flight.findByPk(paymentFirst.flight.id),
+    ]);
+    assert.equal(refundedBooking.status, 'cancelled');
+    assert.equal(refundedPayment.status, 'refunded');
+    assert.equal(flightAfterRefund.available_seats, 1);
+
+    // Refund and Flight cancellation touch the Flight row from independent
+    // workflows. They must serialize without deadlock or double seat release.
+    const refundRace = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
+    const refundRaceBooking = await createHoldingBooking(refundRace, 'IT09C');
+    const refundRacePayment = await initiateVnpay(refundRaceBooking);
+    await paymentService.handleVnpayIpn(successfulVnpayIpn(refundRacePayment.payment));
+    const refundRaceResults = await Promise.allSettled([
+      paymentService.processRefund(refundRaceBooking.id, 'IT-09 refund vs cancellation', adminUser),
+      flightService.cancelFlight(refundRace.flight.id),
+    ]);
+    assertNoLockFailure(refundRaceResults);
+    assert.equal(refundRaceResults.filter((result) => result.status === 'fulfilled').length, 2);
+    const [raceBooking, racePayment, raceFlight] = await Promise.all([
+      models.Booking.findByPk(refundRaceBooking.id),
+      models.Payment.findByPk(refundRacePayment.payment.id),
+      models.Flight.findByPk(refundRace.flight.id),
+    ]);
+    assert.equal(raceBooking.status, 'cancelled');
+    assert.equal(racePayment.status, 'refunded');
+    assert.equal(raceFlight.status, 'cancelled');
+    assert.equal(raceFlight.available_seats, 1);
   } finally {
     if (hookName) models.sequelize.removeHook('afterQuery', hookName);
     await cleanupTrackedFixtures();
