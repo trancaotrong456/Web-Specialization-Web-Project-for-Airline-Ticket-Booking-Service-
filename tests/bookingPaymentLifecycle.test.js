@@ -200,6 +200,40 @@ test('#39 VNPay does not confirm when transaction status is not successful', asy
   assert.equal(f.email.mock.callCount(), 0);
 });
 
+for (const gateway of ['vnpay', 'payos']) {
+  test(`#39 ${gateway} records a charged payment without confirming an invalid flight`, async (t) => {
+    const f = fixture(t, { status: 'pending_payment' });
+    f.flight.status = 'cancelled';
+
+    const result = gateway === 'vnpay'
+      ? await paymentService.handleVnpayIpn(ipn())
+      : await paymentService._processVerifiedPayosWebhook({ orderCode: 123, amount: 180000, isSuccess: true });
+
+    assert.equal(f.payment.status, 'success');
+    assert.equal(f.booking.status, 'pending_payment');
+    assert.equal(f.email.mock.callCount(), 0);
+    assert.match(result.Message || result.message, /requires manual review/i);
+  });
+
+  test(`#39 ${gateway} records late success after reconciliation without restoring expired booking`, async (t) => {
+    const f = fixture(t, {
+      status: 'expired',
+      hold_expires_at: new Date(Date.now() - 10 * 60 * 1000),
+    });
+    f.payment.status = 'failed';
+
+    const result = gateway === 'vnpay'
+      ? await paymentService.handleVnpayIpn(ipn())
+      : await paymentService._processVerifiedPayosWebhook({ orderCode: 123, amount: 180000, isSuccess: true });
+
+    assert.equal(f.payment.status, 'success');
+    assert.equal(f.booking.status, 'expired');
+    assert.equal(f.flight.available_seats, 8);
+    assert.equal(f.email.mock.callCount(), 0);
+    assert.match(result.Message || result.message, /requires manual review/i);
+  });
+}
+
 test('#35 expiry only selects holding and releases seats/promotion once', async (t) => {
   const f = fixture(t, { hold_expires_at: new Date(0) });
   t.mock.method(models.Booking, 'findAll', async (options) => { assert.equal(options.where.status, 'holding'); return [f.booking]; });
