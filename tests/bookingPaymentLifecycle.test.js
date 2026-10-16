@@ -107,6 +107,18 @@ test('#30 cancellation releases seats/promo once and enforces ownership', async 
   assert.equal(f.flight.available_seats, 10);
 });
 
+test('multi-leg holding cancellation returns all passenger seats on every leg once', async (t) => {
+  const f = fixture(t, { user_id: 7 }, [{ flight_id: 3 }]);
+  f.booking.passengers = [{ passenger_name: 'An' }, { passenger_name: 'Binh' }];
+  await bookingService.cancelHoldingBooking(1, { id: 7 });
+  assert.equal(f.booking.status, 'cancelled');
+  assert.equal(f.flight.available_seats, 10);
+  assert.equal(f.nextFlight.available_seats, 6);
+  await assert.rejects(bookingService.cancelHoldingBooking(1, { id: 7 }), denied(400));
+  assert.equal(f.flight.available_seats, 10);
+  assert.equal(f.nextFlight.available_seats, 6);
+});
+
 test('#32/#40 details and PNR enforce owner/admin and guest email; preserve passenger data', async (t) => {
   const f = fixture(t);
   t.mock.method(models.Booking, 'findOne', async () => f.booking);
@@ -234,6 +246,22 @@ test('#33 refund cancels confirmed booking, refunds payment and releases seats o
   assert.equal(f.booking.status, 'cancelled'); assert.equal(f.flight.available_seats, 10);
   await assert.rejects(paymentService.processRefund(1, 'test', { email: 'admin@example.com' }), denied(400));
   assert.equal(f.flight.available_seats, 10);
+});
+
+test('multi-leg refund returns each passenger seat on every leg exactly once', async (t) => {
+  const f = fixture(t, { status: 'confirmed' }, [{ flight_id: 3 }]);
+  f.payment.status = 'success';
+  f.booking.passengers = [{ passenger_name: 'An' }, { passenger_name: 'Binh' }, { passenger_name: 'Chi' }];
+  const result = await paymentService.processRefund(1, 'multi-leg test', { email: 'admin@example.com' });
+  assert.equal(result.refundedAmount, 180000);
+  assert.equal(f.payment.status, 'refunded');
+  assert.equal(f.booking.status, 'cancelled');
+  assert.equal(f.flight.available_seats, 11);
+  assert.equal(f.nextFlight.available_seats, 7);
+  assert.deepEqual(f.seatUpdates.map(({ flight_id }) => flight_id), [2, 3]);
+  await assert.rejects(paymentService.processRefund(1, 'duplicate multi-leg test', { email: 'admin@example.com' }), denied(400));
+  assert.equal(f.flight.available_seats, 11);
+  assert.equal(f.nextFlight.available_seats, 7);
 });
 
 for (const group_by of ['day', 'month']) {

@@ -10,6 +10,7 @@ const { getIO } = require('../../sockets');
 const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { resolvePaymentReturnUrl } = require('../../utils/paymentReturnUrl.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
+const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -131,8 +132,7 @@ class PaymentService {
   }
 
   async _markPayosPaymentFailed(paymentId, bookingId) {
-    let flightIdToEmit = null;
-    let newSeatsCount = null;
+    let seatUpdates = [];
 
     await this.transactionManager.transaction(async (t) => {
       const payment = await this.repository.findLockedPaymentById(paymentId, t);
@@ -154,13 +154,7 @@ class PaymentService {
       booking.status = 'expired';
       await this.repository.save(booking, { transaction: t });
 
-      const flight = await this.repository.findLockedFlight(booking.flight_id, t);
-      if (flight) {
-        flight.available_seats += booking.passengers ? booking.passengers.length : 1;
-        await this.repository.save(flight, { transaction: t });
-        flightIdToEmit = flight.id;
-        newSeatsCount = flight.available_seats;
-      }
+      seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
 
       if (booking.promotion_id) {
         const promo = await this.repository.findLockedPromotion(booking.promotion_id, t);
@@ -170,9 +164,7 @@ class PaymentService {
       }
     });
 
-    if (flightIdToEmit) {
-      await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
-    }
+    await this._emitSeatUpdates(seatUpdates);
   }
 
   /**
@@ -194,6 +186,9 @@ class PaymentService {
     }
 
     await (this.flightSeatService || require('../../services/flight.service')).checkAndEmitSeatWarning(flightId);
+  }
+  async _emitSeatUpdates(updates = []) {
+    for (const update of updates) await this._emitSocketSeatUpdate(update.flight_id, update.available_seats);
   }
 
   /**
@@ -523,8 +518,7 @@ class PaymentService {
     }
 
     let bookingIdToEmail = null;
-    let flightIdToEmit = null;
-    let newSeatsCount = null;
+    let seatUpdates = [];
     let transactionOutcome = 'processed';
 
     // BƯỚC 6: Cập nhật CSDL trong Transaction có Row-Level Lock
@@ -576,15 +570,7 @@ class PaymentService {
           await this.repository.save(lockedBooking, { transaction: t });
 
           // Giải phóng ghế về chuyến bay
-          const flight = await this.repository.findLockedFlight(lockedBooking.flight_id, t);
-
-          if (flight) {
-            const seatCount = lockedBooking.passengers ? lockedBooking.passengers.length : 1;
-            flight.available_seats += seatCount;
-            await this.repository.save(flight, { transaction: t });
-            flightIdToEmit = flight.id;
-            newSeatsCount = flight.available_seats;
-          }
+          seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
 
           // Hoàn lượt dùng mã khuyến mãi
           if (lockedBooking.promotion_id) {
@@ -606,9 +592,7 @@ class PaymentService {
       };
     }
 
-    if (flightIdToEmit) {
-      await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
-    }
+    await this._emitSeatUpdates(seatUpdates);
 
     if (bookingIdToEmail) {
       this._triggerBookingConfirmationEmail(bookingIdToEmail);
@@ -695,8 +679,7 @@ class PaymentService {
     }
 
     let bookingIdToEmail = null;
-    let flightIdToEmit = null;
-    let newSeatsCount = null;
+    let seatUpdates = [];
 
     await this.transactionManager.transaction(async (t) => {
       const lockedPayment = await this.repository.findLockedPaymentById(payment.id, t);
@@ -732,15 +715,7 @@ class PaymentService {
           lockedBooking.status = 'expired';
           await this.repository.save(lockedBooking, { transaction: t });
 
-          const flight = await this.repository.findLockedFlight(lockedBooking.flight_id, t);
-
-          if (flight) {
-            const seatCount = lockedBooking.passengers ? lockedBooking.passengers.length : 1;
-            flight.available_seats += seatCount;
-            await this.repository.save(flight, { transaction: t });
-            flightIdToEmit = flight.id;
-            newSeatsCount = flight.available_seats;
-          }
+          seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
 
           if (lockedBooking.promotion_id) {
             const promo = await this.repository.findLockedPromotion(lockedBooking.promotion_id, t);
@@ -752,9 +727,7 @@ class PaymentService {
       }
     });
 
-    if (flightIdToEmit) {
-      await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
-    }
+    await this._emitSeatUpdates(seatUpdates);
 
     if (bookingIdToEmail) {
       this._triggerBookingConfirmationEmail(bookingIdToEmail);
@@ -855,8 +828,7 @@ class PaymentService {
    * 5. Refund Module (Admin only)
    */
   async processRefund(bookingId, reason = 'Customer refund request', adminUser) {
-    let flightIdToEmit = null;
-    let newSeatsCount = null;
+    let seatUpdates = [];
 
     const result = await this.transactionManager.transaction(async (t) => {
       const booking = await this.repository.findRefundBooking(bookingId, t);
@@ -890,15 +862,7 @@ class PaymentService {
       await this.repository.save(booking, { transaction: t });
 
       // Return seats to flight
-      const flight = await this.repository.findLockedFlight(booking.flight_id, t);
-
-      if (flight) {
-        const seats = booking.passengers ? booking.passengers.length : 1;
-        flight.available_seats += seats;
-        await this.repository.save(flight, { transaction: t });
-        flightIdToEmit = flight.id;
-        newSeatsCount = flight.available_seats;
-      }
+      seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
 
       console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
 
@@ -912,9 +876,7 @@ class PaymentService {
       };
     });
 
-    if (flightIdToEmit) {
-      await this._emitSocketSeatUpdate(flightIdToEmit, newSeatsCount);
-    }
+    await this._emitSeatUpdates(seatUpdates);
 
     return result;
   }
