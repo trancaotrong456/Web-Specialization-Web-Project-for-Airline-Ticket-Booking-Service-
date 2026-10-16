@@ -12,8 +12,9 @@ const createErrorHandlerAdapter = require('../shared/http/filters/errorHandlerAd
 test('Flight HTTP routes preserve public search/detail, Staff operations, Admin create/delete and validation', async () => {
   const flight = { id: 8, departure_time: '2099-10-13T10:00:00Z', arrival_time: '2099-10-13T12:00:00Z', status: 'scheduled', available_seats: 10 };
   const tx = { LOCK: { UPDATE: 'UPDATE' } };
+  let searchedWith;
   const repository = {
-    searchPage: async () => ({ count: 1, rows: [flight] }),
+    searchPage: async (filters) => { searchedWith = filters; return { count: 1, rows: [flight] }; },
     findDetail: async (id) => id === '404' ? null : flight,
     findAdminPage: async () => ({ count: 1, rows: [flight] }),
     findById: async () => flight,
@@ -41,11 +42,13 @@ test('Flight HTTP routes preserve public search/detail, Staff operations, Admin 
   const url = `http://127.0.0.1:${server.address().port}/api/v1/flights`;
   const headers = (role) => ({ 'Content-Type': 'application/json', 'x-test-role': role });
   try {
-    const search = await fetch(`${url}/search?departure_airport_id=1&arrival_airport_id=2`);
+    const search = await fetch(`${url}/search?departure_airport_id=1&arrival_airport_id=2&airline_id=9`);
     assert.equal(search.status, 200);
     assert.equal((await search.json()).message, 'Flights retrieved successfully');
+    assert.equal(searchedWith.airline_id, '9');
     assert.equal((await fetch(`${url}/404`)).status, 404);
     assert.equal((await fetch(`${url}/search?min_seats=-1`)).status, 422);
+    assert.equal((await fetch(`${url}/search?airline_id=not-a-number`)).status, 422);
     assert.equal((await fetch(url)).status, 401);
     assert.equal((await fetch(url, { headers: headers('staff') })).status, 200);
     const createBody = { airline_id: 1, departure_airport_id: 2, arrival_airport_id: 3, departure_time: '2099-10-13T10:00:00Z', arrival_time: '2099-10-13T12:00:00Z', total_seats: 10 };

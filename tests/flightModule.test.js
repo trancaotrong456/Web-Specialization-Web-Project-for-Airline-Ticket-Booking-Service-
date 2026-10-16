@@ -17,9 +17,9 @@ test('Flight repository preserves scheduled search filters, distinct count, asso
   const repository = new SequelizeFlightRepository(models);
   const dateStart = new Date('2026-10-12T17:00:00.000Z');
   const dateEnd = new Date('2026-10-13T17:00:00.000Z');
-  await repository.searchPage({ departure_airport_id: '1', arrival_airport_id: '2', min_seats: '3', dateStart, dateEnd, page: '2', limit: '7' });
+  await repository.searchPage({ departure_airport_id: '1', arrival_airport_id: '2', airline_id: '9', min_seats: '3', dateStart, dateEnd, page: '2', limit: '7' });
   assert.deepEqual(calls[0], {
-    where: { status: 'scheduled', departure_airport_id: '1', arrival_airport_id: '2', available_seats: { [gte]: 3 }, departure_time: { [gte]: dateStart, [lt]: dateEnd } },
+    where: { status: 'scheduled', departure_airport_id: '1', arrival_airport_id: '2', airline_id: '9', available_seats: { [gte]: 3 }, departure_time: { [gte]: dateStart, [lt]: dateEnd } },
     distinct: true, limit: 7, offset: 7, order: [['departure_time', 'ASC']],
     include: [
       { model: models.Airline, as: 'airline', attributes: ['id', 'name', 'iata_code', 'logo_url'] },
@@ -37,12 +37,13 @@ test('Flight repository preserves scheduled search filters, distinct count, asso
 test('Flight search translates Vietnam day to UTC and preserves raw pagination', async () => {
   let query;
   const service = new FlightService({ repository: { searchPage: async (value) => { query = value; return { count: 1, rows: [{ id: 1 }] }; } }, getIO: () => { throw Error('not initialized'); } });
-  assert.deepEqual(await service.searchFlights({ departure_airport_id: '1', arrival_airport_id: '2', departure_date: '2026-10-13', min_seats: '3', page: '2', limit: '7' }), {
+  assert.deepEqual(await service.searchFlights({ departure_airport_id: '1', arrival_airport_id: '2', airline_id: '9', departure_date: '2026-10-13', min_seats: '3', page: '2', limit: '7' }), {
     total: 1, page: '2', limit: '7', data: [{ id: 1 }],
   });
   assert.equal(query.dateStart.toISOString(), '2026-10-12T17:00:00.000Z');
   assert.equal(query.dateEnd.toISOString(), '2026-10-13T17:00:00.000Z');
   assert.equal(query.departure_airport_id, '1');
+  assert.equal(query.airline_id, '9');
   assert.equal(query.min_seats, '3');
 });
 
