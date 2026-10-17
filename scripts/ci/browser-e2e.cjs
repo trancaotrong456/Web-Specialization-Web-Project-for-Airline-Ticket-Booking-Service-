@@ -53,7 +53,14 @@ async function main() {
     await admin.locator('#flight-status-update').selectOption('delayed');
     await admin.locator('#flight-status-reason').fill('CI browser delay scenario');
     await admin.getByRole('button', { name: 'Cập nhật trạng thái' }).click();
-    await admin.getByText('Trạng thái chuyến bay đã được cập nhật.').waitFor({ state: 'visible' });
+    const statusSaved = admin.getByText('Trạng thái chuyến bay đã được cập nhật.', { exact: true });
+    const statusError = admin.locator('[role="alert"]').first();
+    await Promise.race([
+      statusSaved.waitFor({ state: 'visible', timeout: 30000 }),
+      statusError.waitFor({ state: 'visible', timeout: 30000 }),
+    ]);
+    if (await statusError.isVisible()) assert.fail(`Admin flight-status update failed: ${await statusError.innerText()}`);
+    await statusSaved.waitFor({ state: 'visible' });
     await admin.getByText(/CI browser delay scenario/).waitFor({ state: 'visible' });
 
     const customer = await context.newPage();
