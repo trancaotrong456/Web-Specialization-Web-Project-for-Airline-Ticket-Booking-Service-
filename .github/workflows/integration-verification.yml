@@ -67,6 +67,12 @@ jobs:
       - name: Verify schema, constraints, associations, and rollback
         run: node scripts/ci/verify-mysql-schema.js
 
+      - name: Roll back and reapply the latest migration on the disposable database
+        run: |
+          npx sequelize-cli db:migrate:undo --env test
+          npx sequelize-cli db:migrate --env test
+          node scripts/ci/verify-mysql-schema.js
+
       - name: Verify migrations are idempotent
         run: npx sequelize-cli db:migrate --env test
 

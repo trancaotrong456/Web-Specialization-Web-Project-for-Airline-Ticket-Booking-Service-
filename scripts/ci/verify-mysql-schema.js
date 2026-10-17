@@ -51,8 +51,32 @@ async function verify() {
   for (const model of models) {
     const tableName = model.getTableName();
     const normalizedTableName = typeof tableName === 'string' ? tableName : tableName.tableName;
+    const columns = await queryInterface.describeTable(normalizedTableName);
     const foreignKeys = foreignKeysByTable.get(normalizedTableName) || [];
     const indexes = indexesByTable.get(normalizedTableName) || [];
+
+    for (const [attributeName, attribute] of Object.entries(model.rawAttributes)) {
+      const field = attribute.field || attributeName;
+      assert.ok(columns[field], `Missing model column ${normalizedTableName}.${field}`);
+      if (attribute.primaryKey) {
+        assert.ok(
+          indexes.some((index) => index.primary && index.fields.some((indexField) => (indexField.attribute || indexField.name || indexField.field) === field)),
+          `Missing primary-key index ${normalizedTableName}.${field}`,
+        );
+      }
+    }
+
+    for (const declaredIndex of model.options.indexes || []) {
+      const fields = declaredIndex.fields.map((field) => (
+        typeof field === 'string' ? field : field.attribute || field.name || field.field
+      ));
+      assert.ok(
+        indexes.some((index) => index.name === declaredIndex.name
+          && Boolean(index.unique) === Boolean(declaredIndex.unique)
+          && fields.every((field) => index.fields.some((indexField) => (indexField.attribute || indexField.name || indexField.field) === field))),
+        `Missing model index ${normalizedTableName}.${declaredIndex.name || fields.join('_')}`,
+      );
+    }
 
     for (const association of Object.values(model.associations || {})) {
       if (association.associationType !== 'BelongsTo' || association.options?.constraints === false) continue;
@@ -67,7 +91,7 @@ async function verify() {
       if (!attribute.unique) continue;
       const field = attribute.field || attributeName;
       assert.ok(
-        indexes.some((index) => index.unique && index.fields.some((indexField) => (indexField.attribute || indexField.name) === field)),
+        indexes.some((index) => index.unique && index.fields.some((indexField) => (indexField.attribute || indexField.name || indexField.field) === field)),
         `Missing unique index ${normalizedTableName}.${field}`,
       );
     }
