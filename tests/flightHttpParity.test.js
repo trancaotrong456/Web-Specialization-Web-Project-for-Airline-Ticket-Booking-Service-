@@ -16,6 +16,9 @@ test('Flight HTTP routes preserve public search/detail, Staff operations, Admin 
   const repository = {
     searchPage: async (filters) => { searchedWith = filters; return { count: 1, rows: [flight] }; },
     findDetail: async (id) => id === '404' ? null : flight,
+    findStatusHistory: async () => history,
+    findFlightForStatusUpdate: async (id, transaction) => id === '404' ? null : flight,
+    createStatusHistory: async (entry) => { history.push({ ...entry, id: history.length + 1, created_at: new Date(), actor: { id: 4, full_name: 'Admin' } }); },
     findAdminPage: async () => ({ count: 1, rows: [flight] }),
     findById: async () => flight,
     findAirlineById: async () => ({ id: 1 }),
@@ -27,10 +30,11 @@ test('Flight HTTP routes preserve public search/detail, Staff operations, Admin 
     deleteFareClasses: async () => {},
     deleteFlight: async () => {},
   };
+  const history = [];
   const authenticate = (req, res, next) => {
     const role = req.get('x-test-role');
     if (!role) return ApiResponse.error(res, 'Authentication token missing or invalid format', 401);
-    req.user = { role: { name: role } };
+    req.user = { id: 4, role: { name: role } };
     next();
   };
   const module = createFlightModule({ repository, getIO: () => { throw Error('not initialized'); }, guards: { authenticate, authorize }, validation: { validate }, validators });
@@ -47,6 +51,7 @@ test('Flight HTTP routes preserve public search/detail, Staff operations, Admin 
     assert.equal((await search.json()).message, 'Flights retrieved successfully');
     assert.equal(searchedWith.airline_id, '9');
     assert.equal((await fetch(`${url}/404`)).status, 404);
+    assert.equal((await fetch(`${url}/status/8`)).status, 200);
     assert.equal((await fetch(`${url}/search?min_seats=-1`)).status, 422);
     assert.equal((await fetch(`${url}/search?airline_id=not-a-number`)).status, 422);
     assert.equal((await fetch(url)).status, 401);
@@ -55,12 +60,19 @@ test('Flight HTTP routes preserve public search/detail, Staff operations, Admin 
     const post = (role) => fetch(url, { method: 'POST', headers: headers(role), body: JSON.stringify(createBody) });
     assert.equal((await post('staff')).status, 403);
     assert.equal((await post('admin')).status, 201);
-    const update = await fetch(`${url}/8`, { method: 'PUT', headers: headers('staff'), body: JSON.stringify({ status: 'completed' }) });
+    assert.equal((await fetch(`${url}/status/8`, { method: 'PATCH', headers: headers('staff'), body: JSON.stringify({ status: 'delayed', reason: 'Weather' }) })).status, 403);
+    const update = await fetch(`${url}/status/8`, { method: 'PATCH', headers: headers('admin'), body: JSON.stringify({ status: 'delayed', departure_time: '2099-10-13T11:00:00Z', reason: 'Weather' }) });
     assert.equal(update.status, 200);
-    assert.equal((await update.json()).message, 'Flight updated successfully');
-    const cancel = await fetch(`${url}/8/cancel`, { method: 'PUT', headers: headers('staff') });
+    assert.equal((await update.json()).message, 'Flight status updated');
+    assert.equal(history.length, 1);
+    assert.equal(history[0].actor_user_id, 4);
+    const invalid = await fetch(`${url}/status/8`, { method: 'PATCH', headers: headers('admin'), body: JSON.stringify({ status: 'takeoff' }) });
+    assert.equal(invalid.status, 422);
+    const cancel = await fetch(`${url}/8/cancel`, { method: 'PUT', headers: headers('staff'), body: JSON.stringify({ reason: 'Operational safety' }) });
     assert.equal(cancel.status, 200);
     assert.equal((await cancel.json()).message, 'Flight cancelled');
+    assert.equal(history.length, 2);
+    assert.equal((await fetch(`${url}/status/8`)).status, 200);
     assert.equal((await fetch(`${url}/8`, { method: 'DELETE', headers: headers('staff') })).status, 403);
     assert.equal((await fetch(`${url}/8`, { method: 'DELETE', headers: headers('admin') })).status, 200);
   } finally {

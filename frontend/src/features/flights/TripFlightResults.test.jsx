@@ -9,7 +9,7 @@ import { TripFlightResults } from './FlightResultsPage';
 vi.mock('../../lib/socket', () => ({ getSocket: () => ({ on: vi.fn(), off: vi.fn(), emit: vi.fn(), connect: vi.fn(), connected: true }) }));
 
 const flightFor = (id, from, to, date) => ({
-  id, departure_time: `${date}T08:00:00Z`, arrival_time: `${date}T10:00:00Z`, available_seats: 8,
+  id, departure_time: `${date}T08:00:00Z`, arrival_time: `${date}T10:00:00Z`, available_seats: 8, status: 'scheduled',
   departure_airport_id: from === 'HAN' ? 1 : 2, arrival_airport_id: to === 'HAN' ? 1 : 2,
   airline: { name: 'Vietnam Airlines' },
   departureAirport: { iata_code: from, city: from },
