@@ -83,6 +83,8 @@ jobs:
 
       - name: Run frontend tests serially
         working-directory: frontend
+        env:
+          TZ: Asia/Ho_Chi_Minh
         run: npm test -- --run --maxWorkers=1 --minWorkers=1
 
       - name: Build frontend
