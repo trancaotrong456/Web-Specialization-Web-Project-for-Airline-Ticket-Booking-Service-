@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('node:crypto');
+const { Op } = require('sequelize');
 const { models } = require('./mysqlTestDatabase');
 
 const created = {
@@ -111,15 +112,37 @@ function trackPayment(payment) {
 
 async function cleanupTrackedFixtures() {
   const ids = (set) => [...set];
-  const bookingIds = ids(created.bookingIds);
+  const flightIds = ids(created.flightIds);
+  const fareClassIds = ids(created.fareClassIds);
+  const bookingWhere = [];
+  if (flightIds.length > 0) bookingWhere.push({ flight_id: flightIds });
+  if (fareClassIds.length > 0) bookingWhere.push({ fare_class_id: fareClassIds });
+  const discoveredBookings = bookingWhere.length > 0
+    ? await models.Booking.findAll({
+      where: { [Op.or]: bookingWhere },
+      attributes: ['id'],
+      raw: true,
+    })
+    : [];
+  const bookingIds = [...new Set([
+    ...ids(created.bookingIds),
+    ...discoveredBookings.map(({ id }) => id),
+  ])];
   if (bookingIds.length > 0) {
     await models.Payment.destroy({ where: { booking_id: bookingIds }, force: true });
     await models.BookingPassenger.destroy({ where: { booking_id: bookingIds }, force: true });
+    if (models.BookingSegment) {
+      await models.BookingSegment.destroy({ where: { booking_id: bookingIds }, force: true });
+    }
     await models.Booking.destroy({ where: { id: bookingIds }, force: true });
   }
-  const fareClassIds = ids(created.fareClassIds);
+  if (models.BookingSegment && (flightIds.length > 0 || fareClassIds.length > 0)) {
+    const segmentWhere = [];
+    if (flightIds.length > 0) segmentWhere.push({ flight_id: flightIds });
+    if (fareClassIds.length > 0) segmentWhere.push({ fare_class_id: fareClassIds });
+    await models.BookingSegment.destroy({ where: { [Op.or]: segmentWhere }, force: true });
+  }
   if (fareClassIds.length > 0) await models.FareClass.destroy({ where: { id: fareClassIds }, force: true });
-  const flightIds = ids(created.flightIds);
   if (flightIds.length > 0) await models.Flight.destroy({ where: { id: flightIds }, force: true });
   const promotionIds = ids(created.promotionIds);
   if (promotionIds.length > 0) await models.Promotion.destroy({ where: { id: promotionIds }, force: true });

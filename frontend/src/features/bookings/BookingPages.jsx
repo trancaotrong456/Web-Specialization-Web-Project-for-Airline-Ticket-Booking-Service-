@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
@@ -59,6 +59,7 @@ export function BookingCreatePage() {
   const [criteria, setCriteria] = useState({ departure_airport_id: '', arrival_airport_id: '', departure_date: '', passengers: countFromSearchParams(urlParams) });
   const [results, setResults] = useState([]);
   const [flight, setFlight] = useState(null);
+  const [itineraryFlights, setItineraryFlights] = useState([]);
   const [fares, setFares] = useState([]);
   const [fare, setFare] = useState(null);
   const [promotionCode, setPromotionCode] = useState('');
@@ -67,7 +68,17 @@ export function BookingCreatePage() {
   const [guestEmail, setGuestEmail] = useState('');
   const [formErrors, setFormErrors] = useState({});
   const [state, setState] = useState({ loadingAirports: true, searching: false, loadingFares: false, submitting: false, error: '', stage: 'flight' });
+  const searchRequest = useRef(0);
+  const fareRequest = useRef(0);
   const presetFlight = urlParams.get('flight_id');
+  const tripType = urlParams.get('trip_type') || '';
+  const expectsItinerary = tripType === 'round_trip' || tripType === 'multi_city';
+  const rawItinerary = urlParams.get('itinerary_legs');
+  let requestedItinerary = [];
+  if (tripType === 'round_trip' || tripType === 'multi_city') {
+    try { requestedItinerary = JSON.parse(rawItinerary || '[]'); } catch { requestedItinerary = []; }
+  }
+  const itineraryKey = JSON.stringify(requestedItinerary);
 
   // WebSocket: subscribe to flight room when a flight is selected
   const { lastWarning, clearWarning } = useFlightSocket({
@@ -90,7 +101,7 @@ export function BookingCreatePage() {
   }, [api]);
 
   useEffect(() => {
-    if (!presetFlight) return undefined;
+    if (!presetFlight || requestedItinerary.length > 1) return undefined;
     let active = true;
     const loadPreset = async () => {
       try {
@@ -108,25 +119,73 @@ export function BookingCreatePage() {
     };
     void loadPreset();
     return () => { active = false; };
-  }, [api, presetFlight]);
+  }, [api, presetFlight, itineraryKey]);
+
+  useEffect(() => {
+    if (!expectsItinerary) return undefined;
+    if (requestedItinerary.length < 2 || requestedItinerary.length > 4) {
+      setState((current) => ({ ...current, error: 'Hành trình đã chọn không hợp lệ. Hãy quay lại tìm chuyến bay.' }));
+      return undefined;
+    }
+    let active = true;
+    const loadItinerary = async () => {
+      setState((current) => ({ ...current, loadingFares: true, error: '' }));
+      try {
+        const selected = await Promise.all(requestedItinerary.map(async (leg) => {
+          if (!Number.isInteger(Number(leg.flight_id)) || !Number.isInteger(Number(leg.fare_class_id))) throw new Error('Thông tin chuyến bay đã chọn không hợp lệ.');
+          const [selectedFlight, fareResponse] = await Promise.all([api.flightDetail(leg.flight_id), api.fareClassesForFlight(leg.flight_id)]);
+          const selectedFare = rowsOf(fareResponse).find((item) => Number(item.id) === Number(leg.fare_class_id));
+          if (!selectedFare) throw new Error('Hạng vé đã chọn không còn khả dụng. Vui lòng tìm lại hành trình.');
+          return { flight: selectedFlight, fare: selectedFare };
+        }));
+        if (!active) return;
+        const selectedFlights = selected.map(({ flight: selectedFlight }) => selectedFlight);
+        const connectsInOrder = selectedFlights.every((selectedFlight, index) => {
+          if (index === 0) return true;
+          const previous = selectedFlights[index - 1];
+          const gap = new Date(selectedFlight.departure_time).getTime() - new Date(previous.arrival_time).getTime();
+          return Number(previous.arrival_airport_id) === Number(selectedFlight.departure_airport_id)
+            && Number.isFinite(gap) && gap >= 60 * 60 * 1000;
+        });
+        const returnsToOrigin = tripType !== 'round_trip' || (selectedFlights.length === 2
+          && Number(selectedFlights[0].departure_airport_id) === Number(selectedFlights[1].arrival_airport_id)
+          && Number(selectedFlights[0].arrival_airport_id) === Number(selectedFlights[1].departure_airport_id));
+        if (!connectsInOrder || !returnsToOrigin) throw new Error('Các chuyến bay không tạo thành hành trình hợp lệ hoặc thời gian nối chuyến dưới 60 phút. Hãy tìm lại chuyến bay.');
+        setItineraryFlights(selected);
+        setFlight(selected[0].flight);
+        setFare(selected[0].fare);
+        setCriteria((current) => ({ ...current, passengers: countFromSearchParams(urlParams) }));
+        setPassengers((current) => Array.from({ length: countFromSearchParams(urlParams) }, (_, index) => current[index] || { passenger_name: '', passport_no: '' }));
+        setState((current) => ({ ...current, loadingFares: false, stage: 'passenger' }));
+      } catch (error) {
+        if (active) setState((current) => ({ ...current, loadingFares: false, stage: 'flight', error: errText(error, 'Không thể xác minh hành trình đã chọn. Hãy tìm lại chuyến bay.') }));
+      }
+    };
+    void loadItinerary();
+    return () => { active = false; };
+  }, [api, expectsItinerary, itineraryKey, urlParams]);
 
   const search = async (event) => {
     event.preventDefault();
+    const requestId = ++searchRequest.current;
     setState((current) => ({ ...current, searching: true, error: '' }));
     try {
       const response = await api.searchFlights({ departure_airport_id: criteria.departure_airport_id, arrival_airport_id: criteria.arrival_airport_id, departure_date: criteria.departure_date, min_seats: criteria.passengers, page: 1, limit: 20 });
+      if (requestId !== searchRequest.current) return;
       setResults(rowsOf(response));
-      setFlight(null); setFare(null); setFares([]);
+      setFlight(null); setFare(null); setFares([]); setItineraryFlights([]);
       setState((current) => ({ ...current, searching: false, stage: 'flight' }));
-    } catch (error) { setState((current) => ({ ...current, searching: false, error: errText(error, 'Không thể tìm chuyến bay.') })); }
+    } catch (error) { if (requestId === searchRequest.current) setState((current) => ({ ...current, searching: false, error: errText(error, 'Không thể tìm chuyến bay.') })); }
   };
 
   const selectFlight = async (selected) => {
-    setFlight(selected); setFare(null); setState((current) => ({ ...current, loadingFares: true, error: '' }));
+    const requestId = ++fareRequest.current;
+    setFlight(selected); setFare(null); setFares([]); setItineraryFlights([]); setState((current) => ({ ...current, loadingFares: true, error: '' }));
     try {
       const response = await api.fareClassesForFlight(selected.id);
+      if (requestId !== fareRequest.current) return;
       setFares(rowsOf(response)); setState((current) => ({ ...current, loadingFares: false, stage: 'fare' }));
-    } catch (error) { setState((current) => ({ ...current, loadingFares: false, error: errText(error, 'Không thể tải hạng vé của chuyến bay.') })); }
+    } catch (error) { if (requestId === fareRequest.current) setState((current) => ({ ...current, loadingFares: false, error: errText(error, 'Không thể tải hạng vé của chuyến bay.') })); }
   };
 
   const continueToPassenger = () => {
@@ -171,7 +230,7 @@ export function BookingCreatePage() {
     setFormErrors(fields);
     if (Object.keys(fields).length) return;
     setState((current) => ({ ...current, submitting: true, error: '' }));
-    const payload = { flight_id: Number(flight.id), fare_class_id: Number(fare.id), passengers: passengers.map(({ passenger_name, passport_no }) => ({ passenger_name: passenger_name.trim(), ...(passport_no.trim() ? { passport_no: passport_no.trim() } : {}) })), ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}), ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {}) };
+    const payload = { flight_id: Number(flight.id), fare_class_id: Number(fare.id), ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}), passengers: passengers.map(({ passenger_name, passport_no }) => ({ passenger_name: passenger_name.trim(), ...(passport_no.trim() ? { passport_no: passport_no.trim() } : {}) })), ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}), ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {}) };
     try {
       const booking = await api.createBooking(payload);
       const bookingId = booking?.id || booking?.booking?.id;
@@ -181,12 +240,15 @@ export function BookingCreatePage() {
     } catch (error) { setState((current) => ({ ...current, submitting: false, error: errText(error, 'Không thể tạo yêu cầu đặt chỗ.'), fields: errorFields(error) })); }
   };
 
+  const itineraryReferenceTotal = itineraryFlights.reduce((sum, item) => sum + Number(item.fare?.price || 0), 0) * passengers.length;
+
   return <BookingShell><PageHeading title="Tạo đặt chỗ" description="Chọn chuyến bay và hạng vé, sau đó nhập thông tin hành khách." actions={<Link className="button button-outline" to="/bookings/lookup">Đã có mã đặt chỗ?</Link>} />
     {state.error ? <Notice type="error">{state.error}</Notice> : null}
     {lastWarning ? <Notice type="warning">{lastWarning.message || `Chỉ còn ${lastWarning.availableSeats} ghế!`} <button type="button" style={{ marginLeft: 8, fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={clearWarning}>Bỏ qua</button></Notice> : null}
     <div className="booking-steps" aria-label="Các bước đặt vé"><span className={state.stage === 'flight' ? 'is-current' : 'is-done'}>1 <b>Chuyến bay</b></span><span className={state.stage === 'fare' ? 'is-current' : state.stage === 'passenger' ? 'is-done' : ''}>2 <b>Hạng vé</b></span><span className={state.stage === 'passenger' ? 'is-current' : ''}>3 <b>Hành khách</b></span></div>
     <section className="surface-card booking-panel">
-      {state.stage === 'flight' ? <>
+      {state.loadingFares && requestedItinerary.length > 1 ? <LoadingView label="Đang xác minh các chuyến bay và hạng vé đã chọn…" /> : null}
+      {state.stage === 'flight' && !expectsItinerary ? <>
         <h2>Tìm chuyến bay</h2>
         <form className="booking-search-form" onSubmit={search}>
           <label className="field"><span>Sân bay đi</span><select required value={criteria.departure_airport_id} onChange={(event) => setCriteria((current) => ({ ...current, departure_airport_id: event.target.value }))}><option value="">Chọn sân bay</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.iata_code} · {item.city || item.name}</option>)}</select></label>
@@ -201,7 +263,7 @@ export function BookingCreatePage() {
       {state.stage === 'fare' || state.loadingFares && flight ? <><div className="booking-section-heading"><div><h2>Chọn hạng vé</h2><p>{flightCarrier(flight)} · {airportsOf(flight)} · {dateTime(flight.departure_time)}</p></div><button className="button button-outline" type="button" onClick={() => { setFlight(null); setFare(null); setState((current) => ({ ...current, stage: 'flight' })); }}>Đổi chuyến bay</button></div>{state.loadingFares ? <LoadingView label="Đang tải hạng vé…" /> : fares.length ? <><div className="booking-fare-list">{fares.map((item) => <label className={`booking-fare-option ${fare?.id === item.id ? 'is-selected' : ''}`} key={item.id}><input type="radio" name="fare" checked={fare?.id === item.id} onChange={() => setFare(item)} /><span><strong>{item.class_name}</strong><small>{item.seat_quota ?? '—'} ghế phân bổ</small></span><strong>{money(item.price)} / khách</strong></label>)}</div><button className="button button-primary" type="button" onClick={continueToPassenger}>Tiếp tục</button></> : <div className="empty-state"><h3>Chưa có hạng vé cho chuyến bay này</h3><p>Hãy chọn chuyến bay khác hoặc quay lại sau.</p></div>}</> : null}
       {state.stage === 'passenger' ? <div className="booking-passenger-layout">
         <section className="booking-passenger-main" aria-labelledby="passenger-form-title">
-          <div className="booking-section-heading"><div><h2 id="passenger-form-title">Thông tin hành khách</h2><p>{flightCarrier(flight)} · {fare?.class_name} · {passengers.length} hành khách</p></div><button className="button button-outline" type="button" onClick={() => setState((current) => ({ ...current, stage: 'fare' }))}>Đổi hạng vé</button></div>
+          <div className="booking-section-heading"><div><h2 id="passenger-form-title">Thông tin hành khách</h2><p>{itineraryFlights.length > 1 ? `${itineraryFlights.length} chặng · ${passengers.length} hành khách` : `${flightCarrier(flight)} · ${fare?.class_name} · ${passengers.length} hành khách`}</p></div>{itineraryFlights.length > 1 ? <span className="eyebrow">HẠNG VÉ ĐÃ CHỌN CHO TỪNG CHẶNG</span> : <button className="button button-outline" type="button" onClick={() => setState((current) => ({ ...current, stage: 'fare' }))}>Đổi hạng vé</button>}</div>
           <form className="booking-passenger-form" onSubmit={submit} noValidate>
             {!user ? <Field id="booking-guest-email" label="Email liên hệ" type="email" autoComplete="email" required value={guestEmail} onChange={(event) => setGuestEmail(event.target.value)} error={formErrors.guest_email} hint="Dùng email này cùng mã đặt chỗ để tra cứu đặt chỗ của bạn." /> : null}
             <div className="booking-promotion-entry">
@@ -212,16 +274,15 @@ export function BookingCreatePage() {
             </div>
             {passengers.map((passenger, index) => <fieldset className="passenger-fieldset" key={index}><legend>Hành khách {index + 1}</legend><Field id={`passenger-name-${index}`} label="Họ tên" autoComplete="name" required value={passenger.passenger_name} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))} error={formErrors[`passengers.${index}.passenger_name`]} /><Field id={`passenger-passport-${index}`} label="Số hộ chiếu (không bắt buộc)" value={passenger.passport_no} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passport_no: event.target.value } : item))} error={formErrors[`passengers.${index}.passport_no`]} /></fieldset>)}
             {state.fields ? Object.entries(state.fields).map(([field, message]) => <small className="field-error" key={field}>{message}</small>) : null}
-            <div className="booking-total-row"><span>Giá tham khảo trước ưu đãi</span><strong>{money(Number(fare?.price || 0) * passengers.length)}</strong><small>{promotionState.validCode ? 'Mã đã được kiểm tra; hệ thống sẽ tính và xác nhận tổng tiền khi tạo đặt chỗ.' : 'Giá cuối cùng và ưu đãi (nếu có) do hệ thống xác nhận khi tạo đặt chỗ.'}</small></div>
+            <div className="booking-total-row"><span>Giá tham khảo trước ưu đãi</span><strong>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong><small>{promotionState.validCode ? 'Mã đã được kiểm tra; hệ thống sẽ tính và xác nhận tổng tiền khi tạo đặt chỗ.' : 'Giá cuối cùng và ưu đãi (nếu có) do hệ thống xác nhận khi tạo đặt chỗ.'}</small></div>
             <button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Tạo đặt chỗ và tiếp tục thanh toán'}</button>
           </form>
         </section>
         <aside className="booking-passenger-summary" aria-label="Tóm tắt hành trình">
           <span className="eyebrow">TÓM TẮT HÀNH TRÌNH</span>
-          <h3>Chuyến bay đã chọn</h3>
-          <div className="passenger-route-summary"><strong>{flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong>{flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || '—'}</strong></div>
-          <p className="passenger-airline-summary">{flightCarrier(flight)}</p>
-          <dl><div><dt>Khởi hành</dt><dd>{dateTime(flight?.departure_time)}</dd></div><div><dt>Hạng vé</dt><dd>{fare?.class_name || '—'}</dd></div><div><dt>Số hành khách</dt><dd>{passengers.length}</dd></div><div><dt>Giá tham khảo</dt><dd>{money(Number(fare?.price || 0) * passengers.length)}</dd></div></dl>
+          <h3>{itineraryFlights.length > 1 ? 'Các chặng đã chọn' : 'Chuyến bay đã chọn'}</h3>
+          {itineraryFlights.length > 1 ? <ol className="booking-itinerary-summary">{itineraryFlights.map((item, index) => <li key={`${item.flight.id}-${index}`}><div><strong>Chặng {index + 1}: {airportsOf(item.flight)}</strong><span>{dateTime(item.flight.departure_time)}</span><small>{flightCarrier(item.flight)} · {item.fare.class_name}</small></div><b>{money(Number(item.fare.price) * passengers.length)}</b></li>)}</ol> : <><div className="passenger-route-summary"><strong>{flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong>{flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || '—'}</strong></div><p className="passenger-airline-summary">{flightCarrier(flight)}</p><dl><div><dt>Khởi hành</dt><dd>{dateTime(flight?.departure_time)}</dd></div><div><dt>Hạng vé</dt><dd>{fare?.class_name || '—'}</dd></div></dl></>}
+          <dl><div><dt>Số hành khách</dt><dd>{passengers.length}</dd></div><div><dt>Giá tham khảo</dt><dd>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</dd></div></dl>
           <p className="passenger-summary-note">Giá cuối cùng và thời gian giữ chỗ do hệ thống xác nhận sau khi gửi yêu cầu.</p>
         </aside>
       </div> : null}
@@ -290,7 +351,7 @@ export function BookingDetailPage({ admin = false }) {
   const booking = state.booking; const flight = booking.flight || {}; const passengers = passengerList(booking); const isAdmin = user?.role === 'admin';
   return <BookingShell admin={admin}><PageHeading eyebrow="CHI TIẾT ĐẶT CHỖ" title={booking.booking_code || `Đặt chỗ #${booking.id}`} description={`${flightCarrier(flight)} · ${airportsOf(flight)}`} actions={<Link className="button button-outline" to={admin ? '/admin/bookings' : user ? '/bookings/my' : '/bookings/lookup'}>Danh sách đặt chỗ</Link>} />
     {state.actionError ? <Notice type="error">{state.actionError}</Notice> : null}
-    <div className="booking-detail-grid"><section className="surface-card booking-panel"><div className="booking-detail-title"><h2>Hành trình</h2><StatusBadge status={booking.status} /></div><dl className="booking-facts"><div><dt>Hãng hàng không</dt><dd>{flightCarrier(flight)}</dd></div><div><dt>Chặng bay</dt><dd>{airportsOf(flight)}</dd></div><div><dt>Khởi hành</dt><dd>{dateTime(flight.departure_time)}</dd></div><div><dt>Đến nơi</dt><dd>{dateTime(flight.arrival_time)}</dd></div><div><dt>Hạng vé</dt><dd>{booking.fareClass?.class_name || booking.fare_class?.class_name || '—'}</dd></div><div><dt>Tạo lúc</dt><dd>{dateTime(booking.created_at)}</dd></div><div><dt>Giữ chỗ đến</dt><dd>{dateTime(booking.hold_expires_at)}</dd></div><div><dt>Tổng tiền</dt><dd><strong>{money(booking.total_amount)}</strong></dd></div></dl><h3>Hành khách</h3><div className="passenger-summary">{passengers.map((item, index) => <div key={item.id || index}><strong>{item.passenger_name}</strong><span>{item.passport_no || 'Không cung cấp số hộ chiếu'}</span></div>)}</div>
+    <div className="booking-detail-grid"><section className="surface-card booking-panel"><div className="booking-detail-title"><h2>Hành trình</h2><StatusBadge status={booking.status} /></div><dl className="booking-facts"><div><dt>Hãng hàng không</dt><dd>{flightCarrier(flight)}</dd></div><div><dt>Chặng bay</dt><dd>{airportsOf(flight)}</dd></div><div><dt>Khởi hành</dt><dd>{dateTime(flight.departure_time)}</dd></div><div><dt>Đến nơi</dt><dd>{dateTime(flight.arrival_time)}</dd></div><div><dt>Hạng vé</dt><dd>{booking.fareClass?.class_name || booking.fare_class?.class_name || '—'}</dd></div><div><dt>Tạo lúc</dt><dd>{dateTime(booking.created_at)}</dd></div><div><dt>Giữ chỗ đến</dt><dd>{dateTime(booking.hold_expires_at)}</dd></div><div><dt>Tổng tiền</dt><dd><strong>{money(booking.total_amount)}</strong></dd></div></dl>{booking.itinerarySegments?.length ? <><h3>Các chặng tiếp theo</h3><ol className="booking-itinerary-summary">{booking.itinerarySegments.map((segment) => <li key={segment.id}><div><strong>{airportsOf(segment.flight)}</strong><span>{dateTime(segment.flight?.departure_time)}</span><small>{flightCarrier(segment.flight)} · {segment.fareClass?.class_name || segment.fare_class?.class_name || 'Hạng vé'}</small></div></li>)}</ol></> : null}<h3>Hành khách</h3><div className="passenger-summary">{passengers.map((item, index) => <div key={item.id || index}><strong>{item.passenger_name}</strong><span>{item.passport_no || 'Không cung cấp số hộ chiếu'}</span></div>)}</div>
       <div className="booking-actions">{booking.status === 'holding' ? <Link className="button button-primary" to={`/bookings/${id}/payment`} state={{ booking, guestEmail }}>Tiếp tục thanh toán</Link> : null}{booking.status === 'confirmed' ? <button className="button button-secondary" type="button" disabled={state.pending} onClick={() => void download()}>{state.pending ? 'Đang chuẩn bị tệp…' : 'Tải vé PDF'}</button> : null}{booking.status === 'holding' && !admin ? <button className="button button-danger" type="button" onClick={() => setConfirmCancel(true)}>Hủy đặt chỗ</button> : null}{admin && isAdmin && booking.status === 'confirmed' ? <Link className="button button-outline" to={`/admin/payments?booking_id=${booking.id}`}>Xem thanh toán</Link> : null}</div>
     </section>{admin ? <aside className="surface-card booking-panel"><h2>Thông tin khách hàng</h2><p>{booking.user?.full_name || 'Khách vãng lai'}</p><p>{booking.user?.email || booking.guest_email || '—'}</p><h3>Lịch sử thanh toán</h3>{paymentsList(booking).length ? paymentsList(booking).map((payment) => <div className="booking-payment-line" key={payment.id}><span>{payment.payment_method} · {payment.transaction_ref}</span><StatusBadge status={payment.status} /></div>) : <p>Chưa có thanh toán.</p>}</aside> : null}</div>
     <ConfirmDialog open={confirmCancel} title="Hủy đặt chỗ này?" description="Chỉ đặt chỗ đang được giữ chỗ mới có thể hủy. Ghế và ưu đãi liên quan sẽ được xử lý theo nghiệp vụ của hệ thống." confirmLabel="Xác nhận hủy" danger pending={state.pending} onConfirm={() => void cancel()} onCancel={() => setConfirmCancel(false)} />

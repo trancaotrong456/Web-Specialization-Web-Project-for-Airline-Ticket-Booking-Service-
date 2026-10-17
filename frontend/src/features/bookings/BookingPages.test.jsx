@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -7,7 +7,8 @@ import { AdminBookingsPage, BookingCreatePage, BookingDetailPage, BookingLookupP
 const mocks = vi.hoisted(() => ({ request: vi.fn(), user: null, status: 'anonymous' }));
 vi.mock('../../app/AuthProvider', () => ({ useAuth: () => ({ request: mocks.request, user: mocks.user, status: mocks.status }) }));
 
-const flight = { id: 17, departure_time: '2026-10-12T10:00:00Z', arrival_time: '2026-10-12T12:00:00Z', available_seats: 20, airline: { name: 'Airline' }, departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } };
+const flight = { id: 17, departure_airport_id: 1, arrival_airport_id: 2, departure_time: '2026-10-12T10:00:00Z', arrival_time: '2026-10-12T12:00:00Z', available_seats: 20, airline: { name: 'Airline' }, departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } };
+const deferred = () => { let resolve; const promise = new Promise((done) => { resolve = done; }); return { promise, resolve }; };
 const renderPage = (page, path = '/') => render(<MemoryRouter initialEntries={[path]}>{page}</MemoryRouter>);
 const renderBookingDetail = () => render(<MemoryRouter initialEntries={['/bookings/7']}><Routes><Route path="/bookings/:id" element={<BookingDetailPage />} /></Routes></MemoryRouter>);
 
@@ -42,6 +43,65 @@ describe('booking customer pages', () => {
     expect(screen.getByText('Giá tham khảo trước ưu đãi')).toBeInTheDocument();
     expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent(new RegExp(`${(count * 1000000).toLocaleString('vi-VN')}\\s*₫`));
     expect(mocks.request.mock.calls.some(([path]) => path === '/bookings')).toBe(false);
+  });
+
+  it('loads a selected multi-leg itinerary and submits one booking containing every real flight and fare', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    const returnFlight = { ...flight, id: 18, departure_airport_id: 2, arrival_airport_id: 1, departure_time: '2026-10-15T10:00:00Z', arrival_time: '2026-10-15T12:00:00Z', departureAirport: { iata_code: 'SGN' }, arrivalAirport: { iata_code: 'HAN' } };
+    mocks.request.mockImplementation(async (path, options) => {
+      if (path.startsWith('/airports?')) return { data: [] };
+      if (path === '/flights/17') return flight;
+      if (path === '/flights/18') return returnFlight;
+      if (path === '/fare-classes/flight/17') return { data: [{ id: 5, class_name: 'Phổ thông', price: 1000000 }] };
+      if (path === '/fare-classes/flight/18') return { data: [{ id: 6, class_name: 'Thương gia', price: 2500000 }] };
+      if (path === '/bookings') return { id: 104, booking_code: 'BK104' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    renderPage(<BookingCreatePage />, '/bookings/new?trip_type=round_trip&passengers=2&itinerary_legs=%5B%7B%22flight_id%22%3A17%2C%22fare_class_id%22%3A5%7D%2C%7B%22flight_id%22%3A18%2C%22fare_class_id%22%3A6%7D%5D');
+    expect(await screen.findByText(/Chặng 2: SGN → HAN/)).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Họ tên')).toHaveLength(2);
+    expect(screen.getByRole('complementary', { name: 'Tóm tắt hành trình' })).toHaveTextContent('7.000.000');
+    const nameFields = screen.getAllByLabelText('Họ tên');
+    await user.type(nameFields[0], 'Nguyen Van A');
+    await user.type(nameFields[1], 'Nguyen Van B');
+    await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings', expect.objectContaining({
+      method: 'POST', body: expect.objectContaining({
+        flight_id: 17, fare_class_id: 5,
+        trip_type: 'round_trip', itinerary_legs: [{ flight_id: 17, fare_class_id: 5 }, { flight_id: 18, fare_class_id: 6 }],
+      }),
+    })));
+  });
+
+  it('ignores stale fare-class responses after selecting a different booking flight', async () => {
+    const firstFare = deferred(); const secondFare = deferred();
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/airports?')) return { data: [{ id: 1, iata_code: 'HAN' }, { id: 2, iata_code: 'SGN' }] };
+      if (path.startsWith('/flights/search?')) return { data: [flight, { ...flight, id: 18, arrivalAirport: { iata_code: 'DAD' } }] };
+      if (path === '/fare-classes/flight/17') return firstFare.promise;
+      if (path === '/fare-classes/flight/18') return secondFare.promise;
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    renderPage(<BookingCreatePage />);
+    await screen.findByLabelText('Sân bay đi');
+    await user.selectOptions(screen.getByLabelText('Sân bay đi'), '1');
+    await user.selectOptions(screen.getByLabelText('Sân bay đến'), '2');
+    await user.type(screen.getByLabelText('Ngày khởi hành'), '2027-02-01');
+    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
+    const chooseButtons = await screen.findAllByRole('button', { name: 'Chọn chuyến bay' });
+    await user.click(chooseButtons[0]); await user.click(chooseButtons[1]);
+    secondFare.resolve({ data: [{ id: 6, class_name: 'Hạng chuyến mới', price: 2000000 }] });
+    const newFareOption = await screen.findByRole('radio', { name: /Hạng chuyến mới/ });
+    await user.click(newFareOption);
+    await act(async () => {
+      firstFare.resolve({ data: [{ id: 5, class_name: 'Hạng chuyến cũ', price: 1000000 }] });
+      await firstFare.promise;
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+    expect(screen.getByRole('radio', { name: /Hạng chuyến mới/ })).toBeChecked();
+    expect(screen.queryByText('Hạng chuyến cũ')).not.toBeInTheDocument();
   });
 
   it('requires a valid guest email before sending booking creation', async () => {

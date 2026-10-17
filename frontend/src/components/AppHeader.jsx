@@ -40,6 +40,28 @@ export function AppHeader() {
   const isAdminArea = user?.role === 'admin' && location.pathname.startsWith('/admin');
 
   useEffect(() => {
+    if (isAdminArea) {
+      document.body.classList.add('has-admin-sidebar');
+    } else {
+      document.body.classList.remove('has-admin-sidebar');
+    }
+    return () => {
+      document.body.classList.remove('has-admin-sidebar');
+    };
+  }, [isAdminArea]);
+
+  useEffect(() => {
+    if (isAdminArea && adminSidebarCollapsed) {
+      document.body.classList.add('admin-sidebar-collapsed');
+    } else {
+      document.body.classList.remove('admin-sidebar-collapsed');
+    }
+    return () => {
+      document.body.classList.remove('admin-sidebar-collapsed');
+    };
+  }, [isAdminArea, adminSidebarCollapsed]);
+
+  useEffect(() => {
     setAccountMenuOpen(false);
   }, [location.pathname]);
 

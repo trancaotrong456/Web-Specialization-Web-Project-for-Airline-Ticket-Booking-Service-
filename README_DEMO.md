@@ -1,31 +1,55 @@
-# Local Docker demo data
+# Dữ liệu demo Docker local
 
-This helper is for the dedicated local Compose database only. It refuses production, non-development, remote Docker contexts, unexpected container identities, and any database other than `airline_booking_docker`. It never deletes existing rows and never creates bookings or payments.
+Tài liệu này dành riêng cho database Docker local `airline_booking_docker`. Không dùng seeder hoặc ba tài khoản demo công khai trên staging/production, TiDB Cloud, Render hay môi trường dùng chung.
 
-The default command is a read-only dry run:
+## Setup cho thành viên mới
+
+1. Cài Docker Desktop (local context), Node.js 20+ và npm.
+2. Nếu repository hiện có `docker.env` đã được tùy chỉnh trước khi pull commit xóa file tracked cũ, hãy sao lưu nó trước khi pull và khôi phục sau pull chỉ khi chưa có `docker.env`. Xem mục “Safe docker.env migration” trong README. Không thay file local bằng template nếu đã có cấu hình.
+3. Chuẩn bị backend và dữ liệu demo bằng lệnh chạy trên host:
+
+```powershell
+npm run demo:up
+```
+
+Lệnh chỉ tạo `docker.env` từ `docker.env.example` nếu file local chưa tồn tại. Wrapper trên host xác minh Docker context/endpoint hiệu lực và các biến override, từ chối SSH/TCP hoặc endpoint không xác định, kiểm tra Compose cùng database `airline_booking_docker`, khởi động MySQL, chờ healthy, chạy migrations, preview rồi tự bổ sung fixture còn thiếu. Sau đó nó xác minh bootstrap, khởi động API và kiểm tra health. Đây là thao tác ghi demo được chủ động gọi bằng `demo:up`; không chạy Seeder riêng và không nhập xác nhận lần hai. Tài khoản, mật khẩu, lịch bay hiện có, Booking và Payment không bị sửa.
+
+API Compose đợi bootstrap thành công và kiểm tra marker gắn với đúng MySQL container trước khi mở cổng/health. Chạy `docker compose up` trực tiếp trên stack chưa khởi tạo sẽ để API chưa sẵn sàng; chạy `npm run demo:up`. Lệnh không tự dừng process khác khi cổng bận, không xóa volume và không chạy `db:seed:all`. Production không phụ thuộc seed demo.
+
+`npm run demo:setup` vẫn là công cụ bảo trì tương tác sau lần bootstrap đầu: nó hiển thị preview và chỉ apply khi nhập chính xác `CHO PHÉP APPLY DEMO SEED`. Không dùng lệnh này cho lần khởi động đầu tiên.
+
+## Tài khoản demo local cố định
+
+| Role | Email | Password |
+| --- | --- | --- |
+| Admin | `admin@airline-booking.local` | `DemoAdmin@2026!` |
+| Staff | `staff.demo@airline-booking.local` | `DemoStaff@2026!` |
+| Customer | `customer.demo@airline-booking.local` | `DemoCustomer@2026!` |
+
+Đây là mật khẩu public dành cho kiểm thử offline trong Docker local. Seeder hash bcrypt trước khi lưu. Nếu email đã có, seeder không sửa password, role, trạng thái hay profile; mật khẩu trên bảng chỉ đúng cho tài khoản vừa được tạo từ fixture. Không dùng trên staging/production.
+
+## Phạm vi dữ liệu và rerun
+
+Demo Seeder được tổ chức theo nhóm như Laravel tại `seeders/demo/`: `DatabaseSeeder.js` điều phối một transaction theo thứ tự Role → Airline → Airport → User → Flight → Fare Class → Promotion. Mỗi file `*Seeder.js` chỉ chịu trách nhiệm cho nhóm dữ liệu của mình. Danh mục Role/Airline/Airport dùng dữ liệu trong `seeders/demo-fixtures.js`; lịch bay, hạng vé và khuyến mãi được khai báo trong Seeder tương ứng. `UserSeeder.js` đặt ba tài khoản và role ngay cạnh nhau để dễ kiểm tra.
+
+Các file timestamp ở `seeders/` là Seeder legacy của Sequelize CLI. `DatabaseSeeder.js` không gọi Seeder performance tạo 100.000 users (`20260915184726-seed-users.js`) và không gọi Booking/Payment Seeder. Không dùng `db:seed:all` cho dữ liệu demo.
+
+Database mới nhận tối đa 50 flights tương lai, 100 fare classes và 10 promotions. Ngày đầu tiên là ngày mai theo giờ Việt Nam, được chọn trong phiên setup và giữ nguyên lịch đó khi chạy lại. Lịch đầy đủ được nhận diện và giữ nguyên kể cả khi ngày hệ thống đổi. Seeder dừng nếu lịch partial/xung đột, mã airport/airline xung đột hoặc fare classes hiện có khác fixture; nó không tự sửa dữ liệu.
+
+Seeder không tạo Booking/Payment, không sửa `used_count`, không reset mật khẩu account cũ và không gọi seeder tạo 100.000 users. Apply chạy trong transaction; dry-run sau setup phải báo 0 bản ghi thiếu mới được xem là idempotent.
+
+Preview thủ công (không khởi động service) khi Compose đã chạy và target local đã xác minh:
 
 ```powershell
 npm run seed:demo:docker
 ```
 
-It reports which demo rows already exist and which rows it would create. It does not open a transaction or write to the database. This command requires the local `api` and `db` Compose services to be running and the database healthy.
+Lệnh diagnostic cũ `npm run seed:demo:docker -- --apply` bị giữ để tương thích; đây là thao tác ghi trực tiếp có guard target. Thành viên nên dùng `npm run demo:up` cho startup bình thường.
 
-For an intentional local demo-data apply only:
-
-1. Copy `demo-seed.local.env.example` to `demo-seed.local.env`. PowerShell: `Copy-Item demo-seed.local.env.example demo-seed.local.env`. CMD: `copy demo-seed.local.env.example demo-seed.local.env`.
-2. Set three unique, demo-only passwords. Do not use real account credentials.
-3. Choose `SEED_FLIGHT_START_DATE` once, 1–7 days in the future in Vietnam time. Keep it unchanged for reruns. If the existing schedule is found, the seeder recognizes it and does not create another one.
-4. Run the dry-run command and inspect the counts first.
-5. Only if the target and counts are expected, run:
+Frontend chạy riêng:
 
 ```powershell
-npm run seed:demo:docker -- --apply
+npm --prefix frontend run dev -- --port 5174
 ```
 
-`--apply` is an explicit write operation, guarded again inside the API container and wrapped in a database transaction. Existing accounts are left unchanged; new account passwords are bcrypt-hashed. The plan creates up to three demo accounts, 50 scheduled flights over ten real airport-code routes, two fare classes per flight (100 total), and ten promotions. Airline and airport IDs are read from the local database; missing prerequisites cause a safe refusal.
-
-The runner sends only the current `scripts/demo-seed-core.js` and `scripts/seed-demo-local.js` source to a private temporary folder inside the already verified API container. It deletes that temporary folder when the command exits, so editing only these seed scripts does not require an API image rebuild or a bind mount. The payload contains only the four `SEED_*` fields; passwords are sent over Docker exec stdin, not command-line arguments or logs. No env file or secret is mounted into the container.
-
-The API image still includes backend migrations/seeders and `sequelize-cli`; the Dockerfile keeps `npm ci` (including dev dependencies) because startup runs `npx sequelize-cli db:migrate`. Rebuilds are therefore only needed when API runtime dependencies or application image contents change, not for edits to the two demo-seed scripts.
-
-This is mock/demo booking data only. It does not contact a payment provider, send email, or issue tickets. Remove `demo-seed.local.env` only through your normal local secret-management process; it is ignored by Git.
+API health: `http://localhost:5000/api/v1/health`; MySQL host port mặc định: `3307`. Dừng mà giữ dữ liệu: `docker compose --env-file docker.env stop` hoặc `down`. Không dùng `docker compose down -v` cho setup/rerun thường lệ vì lệnh đó xóa volume dữ liệu.

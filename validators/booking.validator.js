@@ -47,6 +47,11 @@ const bookingLookupEmailValidator = query('guest_email').custom((_value, { req }
 });
 
 const createBookingValidator = [
+  body('trip_type')
+    .optional()
+    .isIn(['one_way', 'round_trip', 'multi_city'])
+    .withMessage('trip_type must be one_way, round_trip, or multi_city'),
+
   body('flight_id')
     .notEmpty()
     .withMessage('flight_id is required')
@@ -58,6 +63,21 @@ const createBookingValidator = [
     .withMessage('fare_class_id is required')
     .isInt({ min: 1 })
     .withMessage('fare_class_id must be a positive integer'),
+
+  body('itinerary_legs')
+    .optional()
+    .isArray({ min: 2, max: 4 })
+    .withMessage('itinerary_legs must contain between 2 and 4 flight legs'),
+
+  body('itinerary_legs.*.flight_id')
+    .if((_value, { req }) => Array.isArray(req.body.itinerary_legs))
+    .isInt({ min: 1 })
+    .withMessage('itinerary leg flight_id must be a positive integer'),
+
+  body('itinerary_legs.*.fare_class_id')
+    .if((_value, { req }) => Array.isArray(req.body.itinerary_legs))
+    .isInt({ min: 1 })
+    .withMessage('itinerary leg fare_class_id must be a positive integer'),
 
   body('passengers')
     .isArray({ min: 1 })
