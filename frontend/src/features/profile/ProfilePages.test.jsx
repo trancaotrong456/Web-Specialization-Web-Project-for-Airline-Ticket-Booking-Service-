@@ -94,13 +94,14 @@ describe('profile and security pages', () => {
     }, 422);
     renderProfileRoute('/profile', createProfileFetch({ updateResponse }));
     expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
-    await user.clear(screen.getByLabelText('Số điện thoại'));
-    await user.type(screen.getByLabelText('Số điện thoại'), '0911111111');
+    const phoneField = await screen.findByDisplayValue(profile.phone);
+    await user.clear(phoneField);
+    await user.type(phoneField, '0911111111');
 
     await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
     expect(await screen.findByText('Must be a valid phone number')).toBeInTheDocument();
-    expect(screen.getByLabelText('Số điện thoại')).toHaveValue('0911111111');
+    expect(phoneField).toHaveValue('0911111111');
   });
 
   it('validates current, new, and confirmation passwords locally', async () => {
