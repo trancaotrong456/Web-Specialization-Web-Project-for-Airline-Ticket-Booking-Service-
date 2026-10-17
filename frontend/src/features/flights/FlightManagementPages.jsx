@@ -57,7 +57,7 @@ function useFlight(id) {
   const api = useManagementApi();
   const [state, setState] = useState({ loading: true, data: null, error: '' });
   const reload = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, error: '' }));
+    setState((current) => ({ ...current, loading: current.data === null, error: '' }));
     try { setState({ loading: false, data: await api.getFlight(id), error: '' }); }
     catch (error) { setState({ loading: false, data: null, error: errorMessage(error, 'Không thể tải chuyến bay.') }); }
   }, [api, id]);
