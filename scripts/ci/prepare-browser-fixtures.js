@@ -65,7 +65,8 @@ async function main() {
         const offer = await db.AncillaryOffer.create({ ancillary_service_id: service.id, offer_name: 'CI 10 kg baggage', flight_id: flight.id, fare_class_id: fare.id, unit_price: '12500.00', currency: 'VND', capacity: 20, reserved_quantity: 0, max_quantity_per_passenger: 2, refund_policy: 'non_refundable', is_active: true });
         fixture.offerIds.push(offer.id);
       }
-      return { id: flight.id, fareClassId: fare.id, departureDate: departure.toISOString().slice(0, 10), departureAirportId: airports[from].id, arrivalAirportId: airports[to].id };
+      const vietnamDepartureDate = new Date(departure.getTime() + 7 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      return { id: flight.id, fareClassId: fare.id, departureDate: vietnamDepartureDate, departureAirportId: airports[from].id, arrivalAirportId: airports[to].id };
     };
 
     const oneWay = await createFlight({ from: 0, to: 1, dayOffset: 0, configureAncillaries: true });
