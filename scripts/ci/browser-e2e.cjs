@@ -22,10 +22,14 @@ async function chooseLeg(page, expectedLegCount, itinerary) {
   await page.goto(`${frontendUrl}/flights/search?${params}`, { waitUntil: 'domcontentloaded' });
   for (let index = 0; index < itinerary.length; index += 1) {
     await page.getByRole('heading', { name: `Chọn chuyến cho chặng ${index + 1}/${itinerary.length}` }).waitFor({ state: 'visible', timeout: 20000 });
+    const fareResponsePromise = page.waitForResponse((response) => /\/fare-classes\/flight\/\d+(?:\?|$)/.test(response.url()), { timeout: 20000 })
+      .then(async (response) => ({ status: response.status(), url: response.url(), body: (await response.text()).slice(0, 1500) }))
+      .catch((error) => ({ error: error.message }));
     await page.getByRole('button', { name: 'Chọn chuyến bay' }).first().click();
+    const fareResponse = await fareResponsePromise;
     const economyFare = page.getByRole('radio', { name: /Economy/ });
     try { await economyFare.waitFor({ state: 'visible', timeout: 15000 }); }
-    catch { throw new Error(`Economy fare did not render for leg ${index + 1}/${itinerary.length} at ${page.url()}: ${(await page.locator('main').innerText()).slice(0, 3000)}`); }
+    catch { throw new Error(`Economy fare did not render for leg ${index + 1}/${itinerary.length} at ${page.url()}; fare API: ${JSON.stringify(fareResponse)}; page: ${(await page.locator('main').innerText()).slice(0, 3000)}`); }
     await economyFare.check();
     const next = index + 1 < itinerary.length ? 'Tiếp tục chọn chặng sau' : 'Tiếp tục nhập hành khách';
     await page.getByRole('button', { name: next }).click();
