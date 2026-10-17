@@ -5,12 +5,13 @@ const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, notificationPublisher } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
     this.socket = socket;
     this.flightSeatService = flightSeatService;
+    this.notificationPublisher = notificationPublisher;
   }
   /**
    * Helper to generate unique booking code
@@ -236,6 +237,16 @@ class BookingService {
 
       await this.repository.createPassengers(passengerRecords, { transaction: t });
 
+      if (this.notificationPublisher) {
+        await this.notificationPublisher.publish({
+          eventKey: `booking:${booking.id}:created`, eventType: 'BOOKING_CREATED',
+          aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: guest_email,
+          relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code },
+        }, { transaction: t });
+      }
+
       return { booking, flightSeatUpdates: legs.map(({ flight }) => ({ id: flight.id, availableSeats: flight.available_seats })) };
     });
 
@@ -346,6 +357,15 @@ class BookingService {
       // 3. Update status to cancelled
       booking.status = 'cancelled';
       await this.repository.save(booking, { transaction: t });
+      if (this.notificationPublisher) {
+        await this.notificationPublisher.publish({
+          eventKey: `booking:${booking.id}:cancelled`, eventType: 'BOOKING_CANCELLED',
+          aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: booking.guest_email,
+          relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code },
+        }, { transaction: t });
+      }
     });
 
     await this._emitSeatUpdates(seatUpdates);

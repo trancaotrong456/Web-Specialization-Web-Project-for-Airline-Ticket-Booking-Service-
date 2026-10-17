@@ -1,0 +1,16 @@
+.notification-bell { position: relative; display: flex; align-items: center; }
+.notification-bell-trigger { position: relative; display: grid; width: 2.5rem; height: 2.5rem; place-items: center; border: 1px solid var(--color-border); border-radius: 999px; color: var(--color-primary); background: var(--color-surface); cursor: pointer; font-size: 1.15rem; }
+.notification-badge { position: absolute; top: -.35rem; right: -.4rem; min-width: 1.15rem; padding: .08rem .28rem; border: 2px solid var(--color-surface); border-radius: 999px; color: white; background: #d74636; font-size: .65rem; font-weight: 700; line-height: 1.2; }
+.notification-popover { position: absolute; z-index: 40; top: calc(100% + .65rem); right: 0; width: min(24rem, calc(100vw - 2rem)); max-height: min(32rem, 75vh); overflow: auto; border: 1px solid var(--color-border); border-radius: 1rem; background: var(--color-surface); box-shadow: 0 1rem 2.5rem #102e3b24; color: var(--color-text); }
+.notification-popover > header { position: sticky; top: 0; display: flex; align-items: center; justify-content: space-between; padding: .9rem 1rem; border-bottom: 1px solid var(--color-border); background: var(--color-surface); }
+.notification-refresh { border: 0; color: var(--color-primary); background: transparent; cursor: pointer; }
+.notification-popover > p { margin: .9rem 1rem; color: var(--color-muted); }
+.notification-popover .notification-error { color: #b42318; }
+.notification-popover ul { display: grid; gap: .25rem; margin: 0; padding: .4rem; list-style: none; }
+.notification-popover li { border-radius: .7rem; }
+.notification-popover li.is-unread { background: color-mix(in srgb, var(--color-primary) 8%, transparent); }
+.notification-popover li > a, .notification-item { display: grid; width: 100%; gap: .2rem; padding: .75rem; border: 0; border-radius: inherit; color: inherit; background: transparent; text-align: left; text-decoration: none; cursor: pointer; }
+.notification-popover li span { color: var(--color-muted); font-size: .875rem; }
+.notification-popover time { color: var(--color-muted); font-size: .72rem; }
+.notification-load-more { display: block; width: calc(100% - 1rem); margin: .25rem .5rem .6rem; padding: .55rem; border: 1px solid var(--color-border); border-radius: .6rem; color: var(--color-primary); background: var(--color-surface); cursor: pointer; }
+@media (max-width: 48rem) { .notification-popover { right: -.5rem; } }

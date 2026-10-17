@@ -11,6 +11,7 @@ const routeDefinitions = [
   ['bookings', '/bookings', '../routes/booking.route'],
   ['payments', '/payments', '../routes/payment.route'],
   ['promotions', '/promotions', '../routes/promotion.route'],
+  ['notifications', '/notifications', '../routes/notification.route'],
 ];
 
 const loadDefaultRouteModules = (overrides = {}) => Object.fromEntries(

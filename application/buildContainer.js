@@ -24,6 +24,9 @@ const { createBookingModule } = require('../modules/booking');
 const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
 const { createPaymentModule } = require('../modules/payment');
 const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
+const { createNotificationModule } = require('../modules/notification');
+const { SequelizeNotificationRepository } = require('../modules/notification/notification.repository');
+const { NotificationEventPublisher } = require('../modules/notification/notificationEventPublisher');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 const { getEmailProvider } = require('../infrastructure/email/emailProvider');
@@ -196,6 +199,7 @@ function getDefaultBookingModule() {
     transactionManager: models.sequelize,
     ticketController: getDefaultTicketModule().controller,
     socket: getSocket,
+    notificationPublisher: getDefaultNotificationPublisher(),
   });
   return defaultBookingModule;
 }
@@ -209,8 +213,36 @@ function getDefaultPaymentModule() {
     transactionManager: models.sequelize,
     socket: getSocket,
     emailProvider: getEmailProvider(),
+    notificationPublisher: getDefaultNotificationPublisher(),
   });
   return defaultPaymentModule;
+}
+
+let defaultNotificationPublisher;
+function getDefaultNotificationPublisher() {
+  if (defaultNotificationPublisher) return defaultNotificationPublisher;
+  const { Notification, NotificationOutbox, User } = require('../models');
+  defaultNotificationPublisher = new NotificationEventPublisher({ Notification, NotificationOutbox, User });
+  return defaultNotificationPublisher;
+}
+
+let defaultNotificationModule;
+function getDefaultNotificationModule() {
+  if (defaultNotificationModule) return defaultNotificationModule;
+  const { Notification } = require('../models');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  defaultNotificationModule = createNotificationModule({
+    repository: new SequelizeNotificationRepository({ Notification }),
+    guards,
+    validation,
+    validators: require('../validators/notification.validator'),
+  });
+  return defaultNotificationModule;
 }
 
 function buildContainer({
@@ -225,6 +257,7 @@ function buildContainer({
   authModule,
   bookingModule,
   paymentModule,
+  notificationModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -240,6 +273,7 @@ function buildContainer({
   const resolvedAuthModule = authModule || (apiRouter ? undefined : getDefaultAuthModule());
   const resolvedBookingModule = bookingModule || (apiRouter ? undefined : getDefaultBookingModule());
   const resolvedPaymentModule = paymentModule || (apiRouter ? undefined : getDefaultPaymentModule());
+  const resolvedNotificationModule = notificationModule || (apiRouter ? undefined : getDefaultNotificationModule());
   const routeModules = {
     ...(resolvedAuthModule ? { auth: resolvedAuthModule.router } : {}),
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
@@ -251,8 +285,9 @@ function buildContainer({
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
     ...(resolvedBookingModule ? { bookings: resolvedBookingModule.router } : {}),
     ...(resolvedPaymentModule ? { payments: resolvedPaymentModule.router } : {}),
+    ...(resolvedNotificationModule ? { notifications: resolvedNotificationModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule || notificationModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -269,6 +304,7 @@ function buildContainer({
     ...(resolvedAuthModule ? { authModule: resolvedAuthModule } : {}),
     ...(resolvedBookingModule ? { bookingModule: resolvedBookingModule } : {}),
     ...(resolvedPaymentModule ? { paymentModule: resolvedPaymentModule } : {}),
+    ...(resolvedNotificationModule ? { notificationModule: resolvedNotificationModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -277,4 +313,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule, getDefaultNotificationModule, getDefaultNotificationPublisher };

@@ -6,6 +6,8 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       User.belongsTo(models.Role, { foreignKey: 'role_id', as: 'role' });
       User.hasMany(models.Booking, { foreignKey: 'user_id', as: 'bookings' });
+      if (models.Notification) User.hasMany(models.Notification, { foreignKey: 'user_id', as: 'notifications' });
+      if (models.NotificationOutbox) User.hasMany(models.NotificationOutbox, { foreignKey: 'recipient_user_id', as: 'notificationOutboxEvents' });
     }
   }
 
