@@ -30,10 +30,11 @@ function sameDate(left, right) {
 }
 
 class FlightService {
-  constructor({ repository, getIO = defaultGetIO } = {}) {
+  constructor({ repository, getIO = defaultGetIO, flightStatusNotifier } = {}) {
     if (!repository) throw new TypeError('A Flight repository is required');
     this.repository = repository;
     this.getIO = getIO;
+    this.flightStatusNotifier = flightStatusNotifier;
   }
 
   _broadcastFlightUpdate(flightId, data) {
@@ -63,7 +64,12 @@ class FlightService {
     }
   }
 
-  async searchFlights({ departure_airport_id, arrival_airport_id, airline_id, departure_date, min_seats = 1, page = 1, limit = 20 }) {
+  async searchFlights({
+    departure_airport_id, arrival_airport_id, airline_id, departure_date, min_seats = 1, page = 1, limit = 20,
+    min_price, max_price, fare_class, departure_time_from, departure_time_to,
+    arrival_time_from, arrival_time_to, min_duration_minutes, max_duration_minutes,
+    sort_by = 'departure_earliest',
+  }) {
     let dateStart;
     let dateEnd;
     if (departure_date) {
@@ -72,7 +78,15 @@ class FlightService {
       dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
     }
     const { count, rows } = await this.repository.searchPage({
-      departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd, page, limit,
+      departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd,
+      // Giữ chuỗi thập phân để MySQL so sánh đúng với cột DECIMAL(12,2).
+      min_price,
+      max_price,
+      fare_class: fare_class?.trim(), departure_time_from, departure_time_to,
+      arrival_time_from, arrival_time_to,
+      min_duration_minutes: min_duration_minutes === undefined ? undefined : Number(min_duration_minutes),
+      max_duration_minutes: max_duration_minutes === undefined ? undefined : Number(max_duration_minutes),
+      sort_by, page, limit,
     });
     return { total: count, page, limit, data: rows };
   }
@@ -141,8 +155,22 @@ class FlightService {
         actual_departure_time: actualDepartureTime,
         actual_arrival_time: actualArrivalTime,
       };
+      const scheduleChanged = !sameDate(flight.departure_time, departureTime) || !sameDate(flight.arrival_time, arrivalTime);
       await this.repository.update(flight, nextValues, { transaction });
-      await this.repository.createStatusHistory(history, transaction);
+      const createdHistory = await this.repository.createStatusHistory(history, transaction);
+      const changeType = nextStatus === 'cancelled' ? 'cancelled'
+        : nextStatus === 'delayed' ? 'delayed'
+          : scheduleChanged ? 'schedule_changed' : null;
+      if (changeType && this.flightStatusNotifier && this.repository.findStatusNotificationRecipients) {
+        const recipients = await this.repository.findStatusNotificationRecipients(flight.id, transaction);
+        await this.flightStatusNotifier.handleFlightStatusChanged({
+          eventId: createdHistory?.id,
+          flightId: flight.id,
+          changeType,
+          recipients,
+          transaction,
+        });
+      }
       return flight;
     });
 

@@ -5,15 +5,17 @@ import { AppHeader } from '../../components/AppHeader';
 import { LoadingView } from '../../components/LoadingView';
 import { getSocket } from '../../lib/socket';
 import { createFlightDiscoveryApi } from './flightDiscoveryApi';
+import { AdvancedFlightFilters } from './AdvancedFlightFilters';
 
 const pageSize = 20;
+const EMPTY_FILTER_VALUES = Object.freeze({});
 const validId = (value) => /^\d+$/.test(value || '') && Number(value) > 0;
 const formatTime = (value) => value ? new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
 const formatDay = (value) => value ? new Intl.DateTimeFormat('vi-VN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '';
 const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price);
 const flightStatusLabel = (status) => ({ scheduled: 'Theo lịch', delayed: 'Hoãn chuyến', boarding: 'Đang lên máy bay', departed: 'Đã khởi hành', arrived: 'Đã đến nơi', cancelled: 'Đã hủy', completed: 'Đã hoàn thành' })[status] || 'Thông tin chuyến bay';
 
-function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight }) {
+function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight, sortBy = 'departure_earliest' }) {
   const [flight, setFlight] = useState(initialFlight);
   const [seatWarning, setSeatWarning] = useState(null);
   const flightId = initialFlight.id;
@@ -65,7 +67,7 @@ function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight }) {
       .filter(Number.isFinite)
       .sort((a, b) => a - b)
     : [];
-  const lowestFare = farePrices[0];
+  const shownFare = sortBy === 'price_high' ? farePrices.at(-1) : farePrices[0];
   const from = flight.departureAirport || {};
   const to = flight.arrivalAirport || {};
   const bookable = flight.status === 'scheduled';
@@ -83,7 +85,7 @@ function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight }) {
         <strong>{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span>
         {seatWarning ? <span className="seat-warning-tag" role="alert">⚠ {seatWarning.message || `Chỉ còn ${seatWarning.availableSeats} ghế`}</span> : null}
       </div>
-      <div className="flight-fare">{lowestFare !== undefined ? <><small>Giá từ</small><strong>{formatPrice(lowestFare)} ₫</strong></> : <span>Chưa có thông tin giá</span>}</div>
+      <div className="flight-fare">{shownFare !== undefined ? <><small>{sortBy === 'price_high' ? 'Mức giá cao nhất' : 'Giá từ'}</small><strong>{formatPrice(shownFare)} ₫</strong></> : <span>Chưa có thông tin giá</span>}</div>
       {flight.status_reason ? <p className="flight-status-reason">Lý do cập nhật: {flight.status_reason}</p> : null}
       {onSelectFlight
         ? <button className="button button-primary flight-book-link" type="button" disabled={!bookable} onClick={() => onSelectFlight(flight)}>{bookable ? 'Chọn chuyến bay' : 'Không thể đặt chuyến này'}</button>
@@ -92,7 +94,7 @@ function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight }) {
   );
 }
 
-export function TripFlightResults({ api, tripType, legs, passengerCount, airlineId }) {
+export function TripFlightResults({ api, tripType, legs, passengerCount, airlineId, filterValues = EMPTY_FILTER_VALUES, page: externalPage, onPageChange, sortBy }) {
   const navigate = useNavigate();
   const [legIndex, setLegIndex] = useState(0);
   const [selectedLegs, setSelectedLegs] = useState([]);
@@ -104,7 +106,13 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
   const [loading, setLoading] = useState(false);
   const [loadingFares, setLoadingFares] = useState(false);
   const [error, setError] = useState('');
-  const [page, setPage] = useState(1);
+  const [localPage, setLocalPage] = useState(1);
+  const page = externalPage || localPage;
+  const setPage = (nextPage) => {
+    const resolvedPage = typeof nextPage === 'function' ? nextPage(page) : nextPage;
+    if (onPageChange) onPageChange(resolvedPage);
+    else setLocalPage(resolvedPage);
+  };
   const [selectionError, setSelectionError] = useState('');
   const searchRequest = useRef(0);
   const fareRequest = useRef(0);
@@ -126,14 +134,14 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
     setLoading(true); setError(''); setResult({ data: [] }); setSelectedFlight(null); setSelectedFare(null); setFares([]); setSelectionError('');
     try {
       const response = await api.searchFlights({
-        ...leg, min_seats: passengerCount, airline_id: airlineId, page, limit: pageSize,
+        ...leg, ...filterValues, min_seats: passengerCount, airline_id: filterValues.airline_id || airlineId, page, limit: pageSize,
       });
       if (requestId !== searchRequest.current) return;
       setResult({ data: response?.data || [], pagination: response?.pagination || null });
     } catch (requestError) {
       if (requestId === searchRequest.current) setError(requestError.message || 'Không thể tải chuyến bay cho chặng này.');
     } finally { if (requestId === searchRequest.current) setLoading(false); }
-  }, [api, validLegs, leg, passengerCount, airlineId, page]);
+  }, [api, validLegs, leg, passengerCount, airlineId, filterValues, page]);
 
   useEffect(() => {
     void load();
@@ -197,7 +205,7 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
     {loading ? <LoadingView label={`Đang tìm chuyến cho chặng ${legIndex + 1}…`} /> : null}
     {!loading && !error ? result.data.length ? <>
       <section className="results-summary"><span>{result.data.length} chuyến bay trên trang này</span><span>Giá và chỗ trống lấy từ lịch bay hiện có</span></section>
-      <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} passengerCount={passengerCount} onSelectFlight={chooseFlight} />)}</div>
+      <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} passengerCount={passengerCount} onSelectFlight={chooseFlight} sortBy={sortBy} />)}</div>
       {selectedFlight ? <section className="surface-card trip-fare-picker" aria-labelledby="trip-fare-heading"><div><span className="eyebrow">CHẶNG {legIndex + 1}</span><h2 id="trip-fare-heading">Chọn hạng vé · {airportsOfFlight(selectedFlight)}</h2></div>{loadingFares ? <LoadingView label="Đang tải hạng vé…" /> : fares.length ? <><div className="booking-fare-list">{fares.map((fare) => <label className={`booking-fare-option ${selectedFare?.id === fare.id ? 'is-selected' : ''}`} key={fare.id}><input type="radio" name={`fare-leg-${legIndex}`} checked={selectedFare?.id === fare.id} onChange={() => setSelectedFare(fare)} /><span><strong>{fare.class_name}</strong><small>{fare.seat_quota ?? '—'} ghế phân bổ</small></span><strong>{formatPrice(fare.price)} ₫ / khách</strong></label>)}</div><button className="button button-primary" type="button" disabled={!selectedFare} onClick={continueWithFare}>{legIndex + 1 < legs.length ? 'Tiếp tục chọn chặng sau' : 'Tiếp tục nhập hành khách'}</button></> : <p>Chuyến này chưa có hạng vé đang bán. Hãy chọn chuyến khác.</p>}</section> : null}
       {(page > 1 || canGoNext) ? <nav className="results-pagination" aria-label="Phân trang chuyến bay"><button type="button" onClick={() => setPage((current) => current - 1)} disabled={page <= 1}>← Trước</button><span aria-current="page">Trang {page}</span><button type="button" onClick={() => setPage((current) => current + 1)} disabled={!canGoNext}>Tiếp theo →</button></nav> : null}
     </> : <section className="search-state surface-card"><span className="empty-mark" aria-hidden="true">✦</span><h2>Không có chuyến bay phù hợp cho chặng {legIndex + 1}</h2><p>Không tự động đổi ngày hoặc tạo chuyến thay thế. Hãy quay lại và chọn ngày/tuyến khác.</p><Link className="button button-outline" to="/">Sửa tiêu chí tìm kiếm</Link></section> : null}
@@ -224,9 +232,32 @@ export function FlightResultsPage() {
     departure_date: searchParams.get('departure_date') || '',
     min_seats: searchParams.get('min_seats') || '1',
     airline_id: searchParams.get('airline_id') || '',
+    min_price: searchParams.get('min_price') || '',
+    max_price: searchParams.get('max_price') || '',
+    fare_class: searchParams.get('fare_class') || '',
+    departure_time_from: searchParams.get('departure_time_from') || '',
+    departure_time_to: searchParams.get('departure_time_to') || '',
+    arrival_time_from: searchParams.get('arrival_time_from') || '',
+    arrival_time_to: searchParams.get('arrival_time_to') || '',
+    min_duration_minutes: searchParams.get('min_duration_minutes') || '',
+    max_duration_minutes: searchParams.get('max_duration_minutes') || '',
+    sort_by: searchParams.get('sort_by') || 'departure_earliest',
     page: searchParams.get('page') || '1',
     limit: searchParams.get('limit') || String(pageSize),
   }), [searchParams]);
+  const filterValues = useMemo(() => ({
+    airline_id: values.airline_id,
+    min_price: values.min_price,
+    max_price: values.max_price,
+    fare_class: values.fare_class,
+    departure_time_from: values.departure_time_from,
+    departure_time_to: values.departure_time_to,
+    arrival_time_from: values.arrival_time_from,
+    arrival_time_to: values.arrival_time_to,
+    min_duration_minutes: values.min_duration_minutes,
+    max_duration_minutes: values.max_duration_minutes,
+    sort_by: values.sort_by,
+  }), [values]);
   const valid = validId(values.departure_airport_id)
     && validId(values.arrival_airport_id)
     && values.departure_airport_id !== values.arrival_airport_id
@@ -265,6 +296,28 @@ export function FlightResultsPage() {
     next.set('page', String(page));
     return next;
   });
+  const applyFilters = (filters) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    for (const key of ['airline_id', 'min_price', 'max_price', 'fare_class', 'departure_time_from', 'departure_time_to', 'arrival_time_from', 'arrival_time_to', 'min_duration_minutes', 'max_duration_minutes', 'sort_by']) {
+      next.delete(key);
+      const value = filters[key]?.trim?.() ?? filters[key];
+      if (value && !(key === 'sort_by' && value === 'departure_earliest')) next.set(key, value);
+    }
+    next.set('page', '1');
+    return next;
+  });
+  const clearFilter = (key) => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    next.delete(key);
+    next.set('page', '1');
+    return next;
+  });
+  const resetFilters = () => setSearchParams((current) => {
+    const next = new URLSearchParams(current);
+    for (const key of ['airline_id', 'min_price', 'max_price', 'fare_class', 'departure_time_from', 'departure_time_to', 'arrival_time_from', 'arrival_time_to', 'min_duration_minutes', 'max_duration_minutes', 'sort_by']) next.delete(key);
+    next.set('page', '1');
+    return next;
+  });
   const currentPage = Number(values.page);
   const canGoNext = result.data.length >= Number(values.limit);
   const representativeFlight = result.data[0];
@@ -274,14 +327,18 @@ export function FlightResultsPage() {
       <AppHeader />
       <main className="results-main">
         <Link className="back-link" to="/">← Chỉnh sửa tìm kiếm</Link>
-        {tripMode ? <TripFlightResults api={api} tripType={tripType} legs={itineraryLegs} passengerCount={passengerCount} airlineId={airlineId} /> : <>
+        {!tripMode && valid ? <AdvancedFlightFilters api={api} values={values} onApply={applyFilters} onClear={clearFilter} onReset={resetFilters} /> : null}
+        {tripMode ? <>
+          <AdvancedFlightFilters api={api} values={values} onApply={applyFilters} onClear={clearFilter} onReset={resetFilters} />
+          <TripFlightResults api={api} tripType={tripType} legs={itineraryLegs} passengerCount={passengerCount} airlineId={airlineId} filterValues={filterValues} page={Number(values.page)} sortBy={values.sort_by} onPageChange={changePage} />
+        </> : <>
         <header className="results-heading"><div><span className="eyebrow">HÀNH TRÌNH MỘT CHIỀU</span><h1>Chuyến bay phù hợp</h1><p>{values.departure_date ? formatDay(values.departure_date) : 'Chưa chọn ngày'} · {values.min_seats} hành khách</p></div>{representativeFlight ? <div className="results-route-chip" aria-label="Chặng bay trong kết quả"><span>{representativeFlight.departureAirport?.iata_code || '—'}</span><i aria-hidden="true">✈</i><span>{representativeFlight.arrivalAirport?.iata_code || '—'}</span></div> : null}</header>
         {!valid ? <section className="search-state surface-card" role="alert"><h2>Thông tin tìm kiếm chưa đầy đủ</h2><p>Quay lại trang chủ và chọn điểm đi, điểm đến cùng ngày khởi hành hợp lệ.</p><Link className="button button-primary" to="/">Tìm chuyến bay</Link></section> : null}
         {loading ? <LoadingView label="Đang tìm chuyến bay…" /> : null}
         {error ? <section className="search-state surface-card" role="alert"><h2>Chưa tải được kết quả</h2><p>{error}</p><button className="button button-outline" type="button" onClick={() => void load()}>Thử lại</button></section> : null}
         {valid && !loading && !error ? <>
-          <section className="results-summary"><span>{result.data.length} chuyến bay trên trang này</span><span>Thứ tự khởi hành do hệ thống sắp xếp</span></section>
-          {result.data.length ? <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} passengerCount={values.min_seats} />)}</div> : <section className="search-state surface-card"><span className="empty-mark" aria-hidden="true">✦</span><h2>{currentPage > 1 ? 'Trang này không có chuyến bay' : 'Không có chuyến bay phù hợp'}</h2><p>{currentPage > 1 ? 'Thông tin tổng số trang từ máy chủ có thể chưa khớp với danh sách. Bạn có thể quay lại trang trước.' : 'Thử đổi ngày bay, điểm đến hoặc số hành khách để tìm lựa chọn khác.'}</p>{currentPage === 1 ? <Link className="button button-outline" to="/">Sửa tiêu chí tìm kiếm</Link> : null}</section>}
+          <section className="results-summary"><span>{result.data.length} chuyến bay trên trang này</span><span>Kết quả đã áp dụng bộ lọc và thứ tự sắp xếp từ máy chủ</span></section>
+          {result.data.length ? <div className="flight-results-list">{result.data.map((flight) => <FlightCard key={flight.id} flight={flight} passengerCount={values.min_seats} sortBy={values.sort_by} />)}</div> : <section className="search-state surface-card"><span className="empty-mark" aria-hidden="true">✦</span><h2>{currentPage > 1 ? 'Trang này không có chuyến bay' : 'Không có chuyến bay phù hợp'}</h2><p>{currentPage > 1 ? 'Thông tin tổng số trang từ máy chủ có thể chưa khớp với danh sách. Bạn có thể quay lại trang trước.' : 'Thử đổi ngày bay, điểm đến hoặc bộ lọc để tìm lựa chọn khác.'}</p>{currentPage === 1 ? <Link className="button button-outline" to="/">Sửa tiêu chí tìm kiếm</Link> : null}</section>}
           {(currentPage > 1 || canGoNext) ? <nav className="results-pagination" aria-label="Phân trang chuyến bay"><button type="button" onClick={() => changePage(currentPage - 1)} disabled={currentPage <= 1} aria-label="Quay lại trang trước">← Trước</button><span aria-current="page">Trang {currentPage}</span><button type="button" onClick={() => changePage(currentPage + 1)} disabled={!canGoNext} aria-label="Sang trang tiếp theo">Tiếp theo →</button></nav> : null}
         </> : null}
         </>}

@@ -116,7 +116,7 @@ function getDefaultFareClassModule() {
 let defaultFlightModule;
 function getDefaultFlightModule() {
   if (defaultFlightModule) return defaultFlightModule;
-  const { sequelize, Flight, Airline, Airport, FareClass, Booking, FlightStatusHistory, User } = require('../models');
+  const { sequelize, Flight, Airline, Airport, FareClass, Booking, BookingSegment, FlightStatusHistory, User } = require('../models');
   const { Op } = require('sequelize');
   const guards = createAuthGuards({
     authenticate: require('../middlewares/auth.middleware'),
@@ -125,8 +125,10 @@ function getDefaultFlightModule() {
   });
   const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
   defaultFlightModule = createFlightModule({
-    repository: new SequelizeFlightRepository({ sequelize, Flight, Airline, Airport, FareClass, Booking, FlightStatusHistory, User, Op }),
+    repository: new SequelizeFlightRepository({ sequelize, Flight, Airline, Airport, FareClass, Booking, BookingSegment, FlightStatusHistory, User, Op }),
     guards, validation, validators: require('../validators/flight.validator'), getIO: getSocket,
+    flightStatusNotifier: require('../modules/notification/flightStatusNotificationAdapter')
+      .createFlightStatusNotificationAdapter({ publisher: getDefaultNotificationPublisher() }),
   });
   return defaultFlightModule;
 }

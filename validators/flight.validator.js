@@ -1,7 +1,19 @@
 const { body, query, param } = require('express-validator');
 const FLIGHT_STATUSES = ['scheduled', 'delayed', 'boarding', 'departed', 'arrived', 'cancelled', 'completed'];
 
+const SEARCH_QUERY_FIELDS = [
+  'departure_airport_id', 'arrival_airport_id', 'airline_id', 'departure_date', 'min_seats', 'page', 'limit',
+  'min_price', 'max_price', 'fare_class', 'departure_time_from', 'departure_time_to',
+  'arrival_time_from', 'arrival_time_to', 'min_duration_minutes', 'max_duration_minutes', 'sort_by',
+];
+
 const searchFlightValidator = [
+  query('*').custom((_value, { path }) => {
+    if (!SEARCH_QUERY_FIELDS.includes(String(path).split('.')[0])) {
+      throw new Error(`Unsupported search parameter: ${String(path).split('.')[0]}`);
+    }
+    return true;
+  }),
   query('departure_airport_id')
     .optional()
     .isInt({ min: 1 })
@@ -30,6 +42,43 @@ const searchFlightValidator = [
     .optional()
     .isInt({ min: 1, max: 100 })
     .withMessage('limit must be between 1 and 100'),
+  query('min_price').optional().isFloat({ min: 0, max: 9999999999.99 }).withMessage('min_price must be between 0 and 9999999999.99'),
+  query('max_price').optional().isFloat({ min: 0, max: 9999999999.99 }).withMessage('max_price must be between 0 and 9999999999.99'),
+  query('fare_class').optional().trim().isLength({ min: 1, max: 50 }).withMessage('fare_class must contain 1 to 50 characters'),
+  query(['departure_time_from', 'departure_time_to', 'arrival_time_from', 'arrival_time_to'])
+    .optional()
+    .matches(/^(?:[01]\d|2[0-3]):[0-5]\d$/)
+    .withMessage('Flight time filters must use HH:mm'),
+  query('min_duration_minutes').optional().isInt({ min: 1, max: 1440 }).withMessage('min_duration_minutes must be between 1 and 1440'),
+  query('max_duration_minutes').optional().isInt({ min: 1, max: 1440 }).withMessage('max_duration_minutes must be between 1 and 1440'),
+  query('sort_by')
+    .optional()
+    .isIn(['price_low', 'price_high', 'departure_earliest', 'departure_latest', 'duration_shortest', 'arrival_earliest'])
+    .withMessage('sort_by is not supported'),
+  query('max_price').custom((value, { req }) => {
+    if (value !== undefined && req.query.min_price !== undefined && Number(value) < Number(req.query.min_price)) {
+      throw new Error('max_price must be greater than or equal to min_price');
+    }
+    return true;
+  }),
+  query('max_duration_minutes').custom((value, { req }) => {
+    if (value !== undefined && req.query.min_duration_minutes !== undefined && Number(value) < Number(req.query.min_duration_minutes)) {
+      throw new Error('max_duration_minutes must be greater than or equal to min_duration_minutes');
+    }
+    return true;
+  }),
+  query('departure_time_to').custom((value, { req }) => {
+    if (value && req.query.departure_time_from && value < req.query.departure_time_from) {
+      throw new Error('departure_time_to must be greater than or equal to departure_time_from');
+    }
+    return true;
+  }),
+  query('arrival_time_to').custom((value, { req }) => {
+    if (value && req.query.arrival_time_from && value < req.query.arrival_time_from) {
+      throw new Error('arrival_time_to must be greater than or equal to arrival_time_from');
+    }
+    return true;
+  }),
 ];
 
 const createFlightValidator = [
@@ -138,6 +187,7 @@ const cancelFlightValidator = [
 
 module.exports = {
   searchFlightValidator,
+  SEARCH_QUERY_FIELDS,
   createFlightValidator,
   updateFlightValidator,
   flightStatusValidator,

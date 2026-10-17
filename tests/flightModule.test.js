@@ -8,11 +8,11 @@ const validators = require('../validators/flight.validator');
 const validate = require('../middlewares/validate.middleware');
 
 test('Flight repository preserves scheduled search filters, distinct count, association projections and UTC window', async () => {
-  const gte = Symbol('gte'); const lt = Symbol('lt');
+  const gte = Symbol('gte'); const lt = Symbol('lt'); const is = Symbol('is'); const or = Symbol('or');
   const calls = [];
   const models = {
     Flight: { findAndCountAll: async (options) => { calls.push(options); return { count: 1, rows: [{ id: 1 }] }; } },
-    Airline: {}, Airport: {}, FareClass: {}, Booking: {}, sequelize: { transaction() {} }, Op: { gte, lt },
+    Airline: {}, Airport: {}, FareClass: {}, Booking: {}, sequelize: { transaction() {} }, Op: { gte, lt, is, or },
   };
   const repository = new SequelizeFlightRepository(models);
   const dateStart = new Date('2026-10-12T17:00:00.000Z');
@@ -25,7 +25,7 @@ test('Flight repository preserves scheduled search filters, distinct count, asso
       { model: models.Airline, as: 'airline', attributes: ['id', 'name', 'iata_code', 'logo_url'] },
       { model: models.Airport, as: 'departureAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
       { model: models.Airport, as: 'arrivalAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
-      { model: models.FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price', 'seat_quota'] },
+      { model: models.FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price', 'seat_quota'], required: true, where: { [or]: [{ seat_quota: { [is]: null } }, { seat_quota: { [gte]: 3 } }] } },
     ],
   });
   await repository.findAdminPage({ page: 1, limit: 20, status: 'cancelled' });
@@ -66,6 +66,14 @@ test('Flight search translates Vietnam day to UTC and preserves raw pagination',
   assert.equal(query.departure_airport_id, '1');
   assert.equal(query.airline_id, '9');
   assert.equal(query.min_seats, '3');
+});
+
+test('Flight search preserves decimal FareClass bounds for exact DECIMAL comparison', async () => {
+  let query;
+  const service = new FlightService({ repository: { searchPage: async (value) => { query = value; return { count: 0, rows: [] }; } } });
+  await service.searchFlights({ min_price: '123.45', max_price: '678.90' });
+  assert.equal(query.min_price, '123.45');
+  assert.equal(query.max_price, '678.90');
 });
 
 test('Flight delete propagates one transaction, row lock and operation order', async () => {
