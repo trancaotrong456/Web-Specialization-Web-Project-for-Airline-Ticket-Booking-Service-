@@ -173,7 +173,7 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
     try {
       const response = await api.fareClassesForFlight(flight.id);
       if (requestId !== fareRequest.current) return;
-      setFares(response?.data || []);
+      setFares(Array.isArray(response) ? response : response?.data || []);
     } catch (requestError) {
       if (requestId === fareRequest.current) setError(requestError.message || 'Không thể tải hạng vé của chuyến bay.');
     } finally { if (requestId === fareRequest.current) setLoadingFares(false); }

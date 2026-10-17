@@ -27,6 +27,24 @@ const deferred = () => {
 };
 
 describe('TripFlightResults', () => {
+  it('renders fares returned as the API client unwrapped array', async () => {
+    const user = userEvent.setup();
+    const flight = flightFor(17, 'HAN', 'SGN', '2027-02-01');
+    const api = {
+      searchFlights: vi.fn().mockResolvedValue({ data: [flight] }),
+      fareClassesForFlight: vi.fn().mockResolvedValue([{ id: 5, class_name: 'Economy', price: 1000000 }]),
+    };
+    render(<MemoryRouter><TripFlightResults api={api} tripType="round_trip" passengerCount="1" legs={[
+      { departure_airport_id: '1', arrival_airport_id: '2', departure_date: '2027-02-01' },
+      { departure_airport_id: '2', arrival_airport_id: '1', departure_date: '2027-02-05' },
+    ]} /></MemoryRouter>);
+
+    await user.click(await screen.findByRole('button', { name: 'Chọn chuyến bay' }));
+
+    expect(await screen.findByRole('radio', { name: /Economy/ })).toBeInTheDocument();
+    expect(screen.queryByText('Chuyến này chưa có hạng vé đang bán. Hãy chọn chuyến khác.')).not.toBeInTheDocument();
+  });
+
   it('searches each real leg, requires a fare per leg, and carries the itinerary into booking', async () => {
     const user = userEvent.setup();
     const outbound = flightFor(17, 'HAN', 'SGN', '2027-02-01');
