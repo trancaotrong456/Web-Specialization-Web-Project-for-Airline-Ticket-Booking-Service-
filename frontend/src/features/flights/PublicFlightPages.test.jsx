@@ -849,6 +849,72 @@ describe('public flight discovery pages', () => {
     expect(secondRequest).not.toContain('return_date');
   });
 
+  it('applies advanced filters to the backend, preserves them in the URL and clears one filter independently', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch();
+    render(
+      <AuthProvider fetchImpl={fetchImpl}>
+        <MemoryRouter initialEntries={['/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-20&min_seats=2&page=3&limit=20']}>
+          <><AppRoutes /><RouteLocationProbe /></>
+        </MemoryRouter>
+      </AuthProvider>
+    );
+
+    await screen.findByText('Serene Air');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Lọc theo hãng hàng không' }), '9');
+    await user.type(screen.getByLabelText('Lọc theo hạng vé'), 'Economy');
+    await user.type(screen.getByRole('spinbutton', { name: 'Giá thấp nhất' }), '1000000');
+    await user.type(screen.getByLabelText('Giờ khởi hành từ'), '08:00');
+    await user.type(screen.getByRole('spinbutton', { name: 'Thời lượng tối đa' }), '240');
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Sắp xếp chuyến bay' }), 'price_low');
+    await user.click(screen.getByRole('button', { name: 'Áp dụng bộ lọc' }));
+
+    await waitFor(() => {
+      const location = screen.getByLabelText('Current route').textContent;
+      expect(location).toContain('min_price=1000000');
+      expect(location).toContain('fare_class=Economy');
+      expect(location).toContain('page=1');
+    });
+    const lastSearch = fetchImpl.mock.calls.map(([url]) => url).filter((url) => url.includes('/flights/search?')).at(-1);
+    const params = new URL(lastSearch, 'http://localhost').searchParams;
+    expect(params.get('airline_id')).toBe('9');
+    expect(params.get('min_price')).toBe('1000000');
+    expect(params.get('fare_class')).toBe('Economy');
+    expect(params.get('departure_time_from')).toBe('08:00');
+    expect(params.get('max_duration_minutes')).toBe('240');
+    expect(params.get('sort_by')).toBe('price_low');
+    expect(params.get('page')).toBe('1');
+
+    await user.click(screen.getByRole('button', { name: 'Xóa bộ lọc Giá từ' }));
+    await waitFor(() => expect(screen.getByLabelText('Current route').textContent).not.toContain('min_price='));
+    const clearedSearch = fetchImpl.mock.calls.map(([url]) => url).filter((url) => url.includes('/flights/search?')).at(-1);
+    expect(new URL(clearedSearch, 'http://localhost').searchParams.has('min_price')).toBe(false);
+    expect(new URL(clearedSearch, 'http://localhost').searchParams.get('fare_class')).toBe('Economy');
+  });
+
+  it('ignores an older flight-search response after a newer filter request completes', async () => {
+    const user = userEvent.setup();
+    const pendingSearches = [];
+    const fetchImpl = vi.fn((url) => {
+      if (url.includes('/airlines?')) return Promise.resolve(response({ success: true, data: airlines }));
+      if (url.includes('/flights/search?')) {
+        return new Promise((resolve) => { pendingSearches.push({ url, resolve }); });
+      }
+      throw new Error(`Unexpected request: ${url}`);
+    });
+    renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-20&min_seats=1&page=1&limit=20', fetchImpl);
+    await waitFor(() => expect(pendingSearches.length).toBeGreaterThan(0));
+    await user.type(screen.getByRole('spinbutton', { name: 'Giá thấp nhất' }), '1000000');
+    await user.click(screen.getByRole('button', { name: 'Áp dụng bộ lọc' }));
+    await waitFor(() => expect(pendingSearches.length).toBeGreaterThan(1));
+    const [firstSearch, latestSearch] = [pendingSearches[0], pendingSearches.at(-1)];
+    latestSearch.resolve(response({ success: true, data: [{ ...flights[0], airline: { name: 'Kết quả mới' } }], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }));
+    expect(await screen.findByText('Kết quả mới')).toBeInTheDocument();
+    firstSearch.resolve(response({ success: true, data: [{ ...flights[0], airline: { name: 'Kết quả cũ' } }], pagination: { page: 1, limit: 20, total: 1, totalPages: 1 } }));
+    await waitFor(() => expect(screen.queryByText('Kết quả cũ')).not.toBeInTheDocument());
+    expect(screen.getByText('Kết quả mới')).toBeInTheDocument();
+  });
+
   it('preserves the passenger count in the booking link and labels the Vietnam time zone accurately', async () => {
     renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=3&page=1&limit=20', createFetch());
     const choose = await screen.findByRole('link', { name: 'Chọn chuyến bay' });

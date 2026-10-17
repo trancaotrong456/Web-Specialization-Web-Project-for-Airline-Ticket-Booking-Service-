@@ -38,7 +38,7 @@ describe('TripFlightResults', () => {
     render(<MemoryRouter><TripFlightResults api={api} tripType="round_trip" passengerCount="2" legs={[
       { departure_airport_id: '1', arrival_airport_id: '2', departure_date: '2027-02-01' },
       { departure_airport_id: '2', arrival_airport_id: '1', departure_date: '2027-02-05' },
-    ]} /><CurrentLocation /></MemoryRouter>);
+    ]} filterValues={{ airline_id: '9', min_price: '500000', fare_class: 'Phổ thông', sort_by: 'price_low' }} /><CurrentLocation /></MemoryRouter>);
 
     await user.click(await screen.findByRole('button', { name: 'Chọn chuyến bay' }));
     await user.click(await screen.findByRole('radio', { name: /Phổ thông/ }));
@@ -49,8 +49,8 @@ describe('TripFlightResults', () => {
 
     await screen.findByText(/\/bookings\/new\?/);
     const route = new URL(screen.getByText(/\/bookings\/new\?/).textContent, 'http://localhost');
-    expect(api.searchFlights).toHaveBeenNthCalledWith(1, expect.objectContaining({ departure_airport_id: '1', arrival_airport_id: '2', min_seats: '2' }));
-    expect(api.searchFlights).toHaveBeenNthCalledWith(2, expect.objectContaining({ departure_airport_id: '2', arrival_airport_id: '1', min_seats: '2' }));
+    expect(api.searchFlights).toHaveBeenNthCalledWith(1, expect.objectContaining({ departure_airport_id: '1', arrival_airport_id: '2', min_seats: '2', airline_id: '9', min_price: '500000', fare_class: 'Phổ thông', sort_by: 'price_low' }));
+    expect(api.searchFlights).toHaveBeenNthCalledWith(2, expect.objectContaining({ departure_airport_id: '2', arrival_airport_id: '1', min_seats: '2', airline_id: '9', min_price: '500000', fare_class: 'Phổ thông', sort_by: 'price_low' }));
     expect(JSON.parse(route.searchParams.get('itinerary_legs'))).toEqual([{ flight_id: 17, fare_class_id: 5 }, { flight_id: 18, fare_class_id: 5 }]);
   });
 
