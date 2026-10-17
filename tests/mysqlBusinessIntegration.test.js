@@ -221,6 +221,19 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
 
     await t.test('ancillary snapshot pricing and concurrent capacity reservation are persisted atomically', async () => {
       const f = await createFixture();
+      const reserveAncillaries = f.ancillaryService.reserveForBooking.bind(f.ancillaryService);
+      f.ancillaryService.reserveForBooking = async (args) => {
+        try { return await reserveAncillaries(args); }
+        catch (error) {
+          if (error.message === 'Ancillary offer is not eligible for the selected flight and fare class') {
+            const selection = args.selections[0];
+            const segment = args.segments.find((row) => Number(row.leg_order) === Number(selection.leg_order));
+            const offer = await db.AncillaryOffer.findByPk(selection.offer_id);
+            error.message += `; CI diagnostics ${JSON.stringify({ selectedOfferId: selection.offer_id, offerFlightId: offer?.flight_id, segmentFlightId: segment?.flight_id, offerFareClassId: offer?.fare_class_id, segmentFareClassId: segment?.fare_class_id })}`;
+          }
+          throw error;
+        }
+      };
       const { flight, fareClass } = await f.makeFlight({ seats: 3, quota: 3 });
       const service = await db.AncillaryService.create({ service_type: 'baggage', name: `CI baggage ${prefix}`, is_active: true });
       f.fixture.serviceIds.push(service.id);
@@ -329,6 +342,9 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
         throw new Error('intentional-business-rollback');
       }), /intentional-business-rollback/);
       assert.equal(await db.NotificationOutbox.count({ where: { event_key: eventKey } }), 0);
+      await db.NotificationOutbox.update({ status: 'processed', lease_token: null, lease_expires_at: null }, {
+        where: { status: { [Op.in]: ['pending', 'processing'] } },
+      });
       const event = await publisher.publish({ eventKey: `ci:${prefix}:claim`, eventType: 'BOOKING_CREATED', aggregateType: 'booking', aggregateId: 999999998, recipientUserId: f.user.id, variables: { code: 'CLAIM' } });
       f.fixture.outboxIds.push(event.outbox.id);
       const [first, second] = await Promise.all([
