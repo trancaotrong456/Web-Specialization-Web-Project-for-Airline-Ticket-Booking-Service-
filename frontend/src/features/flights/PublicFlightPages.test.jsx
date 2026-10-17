@@ -53,6 +53,7 @@ const flights = [{
   arrival_time: '2026-10-10T10:00:00.000Z',
   total_seats: 180,
   available_seats: 12,
+  status: 'scheduled',
   airline: { name: 'Serene Air', iata_code: 'SA' },
   departureAirport: { iata_code: 'HAN', city: 'Hanoi', name: 'Noi Bai' },
   arrivalAirport: { iata_code: 'SGN', city: 'Ho Chi Minh City', name: 'Tan Son Nhat' },
@@ -897,6 +898,16 @@ describe('public flight discovery pages', () => {
 
     expect(await screen.findByText('Chưa có thông tin giá')).toBeInTheDocument();
     expect(screen.queryByText('0 ₫')).not.toBeInTheDocument();
+  });
+
+  it('shows a cancelled flight status and prevents selecting it for a new booking', async () => {
+    const cancelled = [{ ...flights[0], status: 'cancelled', status_reason: 'Điều kiện khai thác' }];
+    renderRoutes('/flights/search?departure_airport_id=1&arrival_airport_id=2&departure_date=2026-10-10&min_seats=1&page=1&limit=20', createFetch({ flightResponse: cancelled }));
+
+    expect(await screen.findByText('Đã hủy')).toBeInTheDocument();
+    expect(screen.getByText('Lý do cập nhật: Điều kiện khai thác')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Chuyến bay đã hủy' })).toBeDisabled();
+    expect(screen.queryByRole('link', { name: 'Chọn chuyến bay' })).not.toBeInTheDocument();
   });
 
   it('shows a clear empty state and a retryable error state', async () => {

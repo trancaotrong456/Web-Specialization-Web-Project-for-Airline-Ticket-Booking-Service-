@@ -34,6 +34,27 @@ test('Flight repository preserves scheduled search filters, distinct count, asso
   assert.deepEqual(calls[1].include[3], { model: models.FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price'] });
 });
 
+test('Flight status repository locks the flight and writes/reads history through the caller transaction', async () => {
+  const calls = [];
+  const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+  const history = { findAll: async (options) => { calls.push(['history.findAll', options]); return []; }, create: async (values, options) => calls.push(['history.create', values, options]) };
+  const repository = new SequelizeFlightRepository({
+    sequelize: { transaction: async (work) => work(transaction) },
+    Flight: { findByPk: async (id, options) => { calls.push(['Flight.findByPk', id, options]); return { id }; } },
+    FlightStatusHistory: history, User: {}, Booking: {}, FareClass: {}, Airline: {}, Airport: {}, Op: {},
+  });
+  await repository.transaction(async (tx) => {
+    await repository.findFlightForStatusUpdate(9, tx);
+    await repository.createStatusHistory({ flight_id: 9, to_status: 'delayed' }, tx);
+  });
+  await repository.findStatusHistory(9);
+  assert.deepEqual(calls[0], ['Flight.findByPk', 9, { lock: 'UPDATE', transaction }]);
+  assert.deepEqual(calls[1], ['history.create', { flight_id: 9, to_status: 'delayed' }, { transaction }]);
+  assert.equal(calls[2][1].where.flight_id, 9);
+  assert.deepEqual(calls[2][1].order, [['created_at', 'DESC'], ['id', 'DESC']]);
+  assert.deepEqual(calls[2][1].include, [{ model: {}, as: 'actor', attributes: ['id', 'full_name'] }]);
+});
+
 test('Flight search translates Vietnam day to UTC and preserves raw pagination', async () => {
   let query;
   const service = new FlightService({ repository: { searchPage: async (value) => { query = value; return { count: 1, rows: [{ id: 1 }] }; } }, getIO: () => { throw Error('not initialized'); } });
@@ -118,20 +139,24 @@ test('Flight update and seat warning retain room, event names and payloads', asy
   const originalThreshold = process.env.SEAT_WARNING_THRESHOLD;
   process.env.SEAT_WARNING_THRESHOLD = '5';
   const events = [];
-  const flight = { id: 8, departure_time: '2026-10-13T10:00:00Z', arrival_time: '2026-10-13T12:00:00Z', status: 'scheduled', available_seats: 3 };
+  const flight = { id: 8, departure_time: '2026-10-13T10:00:00Z', arrival_time: '2026-10-13T12:00:00Z', actual_departure_time: null, actual_arrival_time: null, status_reason: null, status: 'scheduled', available_seats: 3 };
+  const transaction = { LOCK: { UPDATE: 'UPDATE' } };
   const repository = {
     findById: async () => flight,
     update: async (_instance, value) => Object.assign(flight, value),
     findDetail: async () => flight,
+    transaction: async (work) => work(transaction),
+    findFlightForStatusUpdate: async (_id, tx) => { assert.equal(tx, transaction); return flight; },
+    createStatusHistory: async () => {},
     findSeatSnapshot: async (_id) => ({ id: 8, available_seats: 3 }),
   };
   const io = { to(room) { return { emit(name, payload) { events.push([room, name, payload]); } }; } };
   const service = new FlightService({ repository, getIO: () => io });
   try {
-    await service.updateFlight('8', { status: 'cancelled' });
+    await service.updateFlight('8', { status: 'cancelled', reason: 'Safety' });
     await service.checkAndEmitSeatWarning('8');
     assert.deepEqual(events, [
-      ['flight_8', 'flight_updated', { flight_id: 8, status: 'cancelled', available_seats: 3, departure_time: '2026-10-13T10:00:00Z', arrival_time: '2026-10-13T12:00:00Z' }],
+      ['flight_8', 'flight_updated', { flight_id: 8, status: 'cancelled', available_seats: 3, departure_time: new Date('2026-10-13T10:00:00Z'), arrival_time: new Date('2026-10-13T12:00:00Z'), actual_departure_time: null, actual_arrival_time: null, status_reason: 'Safety' }],
       ['flight_8', 'seat-warning', { flightId: 8, availableSeats: 3, message: 'Chỉ còn 3 ghế!' }],
     ]);
   } finally {
@@ -166,15 +191,19 @@ test('Flight module constructs one injected graph and preserves exact route orde
   assert.equal(module.service.repository, repository);
   assert.equal(module.controller.service, module.service);
   assert.deepEqual(routes.map((route) => [route.path, Object.keys(route.methods)[0]]), [
-    ['/search', 'get'], ['/:id', 'get'], ['/', 'get'], ['/', 'post'],
+    ['/search', 'get'], ['/status/:id', 'get'], ['/status/:id', 'patch'], ['/:id', 'get'], ['/', 'get'], ['/', 'post'],
     ['/:id', 'put'], ['/:id/cancel', 'put'], ['/:id', 'delete'],
   ]);
-  assert.deepEqual(roles, [['admin', 'staff'], ['admin'], ['admin', 'staff'], ['admin', 'staff'], ['admin']]);
+  assert.deepEqual(roles, [['admin'], ['admin', 'staff'], ['admin'], ['admin', 'staff'], ['admin', 'staff'], ['admin']]);
   assert.equal(routes[0].stack[0].handle, validators.searchFlightValidator[0]);
   assert.equal(routes[0].stack.at(-2).handle, validate);
+  assert.equal(routes[1].stack.at(-2).handle, validate);
   assert.equal(routes[2].stack[0].handle, authenticate);
   assert.equal(routes[2].stack[1].handle, authorizers[0]);
-  assert.equal(routes[3].stack[0].handle, authenticate);
-  assert.equal(routes[3].stack[1].handle, authorizers[1]);
-  assert.equal(routes[3].stack.at(-2).handle, validate);
+  assert.equal(routes[2].stack.at(-2).handle, validate);
+  assert.equal(routes[4].stack[0].handle, authenticate);
+  assert.equal(routes[4].stack[1].handle, authorizers[1]);
+  assert.equal(routes[5].stack[0].handle, authenticate);
+  assert.equal(routes[5].stack[1].handle, authorizers[2]);
+  assert.equal(routes[5].stack.at(-2).handle, validate);
 });

@@ -11,7 +11,7 @@ const validId = (value) => /^\d+$/.test(value || '') && Number(value) > 0;
 const formatTime = (value) => value ? new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '—';
 const formatDay = (value) => value ? new Intl.DateTimeFormat('vi-VN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date(value)) : '';
 const formatPrice = (price) => new Intl.NumberFormat('vi-VN').format(price);
-const flightStatusLabel = (status) => ({ scheduled: 'Theo lịch', cancelled: 'Đã hủy', completed: 'Đã hoàn thành' })[status] || 'Thông tin chuyến bay';
+const flightStatusLabel = (status) => ({ scheduled: 'Theo lịch', delayed: 'Hoãn chuyến', boarding: 'Đang lên máy bay', departed: 'Đã khởi hành', arrived: 'Đã đến nơi', cancelled: 'Đã hủy', completed: 'Đã hoàn thành' })[status] || 'Thông tin chuyến bay';
 
 function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight }) {
   const [flight, setFlight] = useState(initialFlight);
@@ -68,22 +68,26 @@ function FlightCard({ flight: initialFlight, passengerCount, onSelectFlight }) {
   const lowestFare = farePrices[0];
   const from = flight.departureAirport || {};
   const to = flight.arrivalAirport || {};
+  const bookable = flight.status === 'scheduled';
+  const departureTime = flight.status === 'departed' || flight.status === 'arrived' ? flight.actual_departure_time || flight.departure_time : flight.departure_time;
+  const arrivalTime = flight.status === 'arrived' ? flight.actual_arrival_time || flight.arrival_time : flight.arrival_time;
   return (
     <article className="flight-result-card">
       <div className="flight-carrier"><span className="carrier-logo" aria-hidden="true">{flight.airline?.logo_url ? <><img src={flight.airline.logo_url} alt="" onError={(event) => { event.currentTarget.hidden = true; }} /><span className="carrier-mark">✈</span></> : <span className="carrier-mark">✈</span>}</span><div><strong>{flight.airline?.name || 'Hãng hàng không'}</strong><small>{flightStatusLabel(flight.status)}</small></div></div>
       <div className="flight-itinerary">
-        <div><time>{formatTime(flight.departure_time)}</time><strong>{from.iata_code || from.city || from.name || '—'}</strong><small>{from.city || from.name || ''}</small></div>
+        <div><time>{formatTime(departureTime)}</time><strong>{from.iata_code || from.city || from.name || '—'}</strong><small>{from.city || from.name || ''}</small></div>
         <div className="flight-duration" aria-hidden="true"><span /><small>Chặng bay</small></div>
-        <div><time>{formatTime(flight.arrival_time)}</time><strong>{to.iata_code || to.city || to.name || '—'}</strong><small>{to.city || to.name || ''}</small></div>
+        <div><time>{formatTime(arrivalTime)}</time><strong>{to.iata_code || to.city || to.name || '—'}</strong><small>{to.city || to.name || ''}</small></div>
       </div>
       <div className="flight-availability">
         <strong>{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span>
         {seatWarning ? <span className="seat-warning-tag" role="alert">⚠ {seatWarning.message || `Chỉ còn ${seatWarning.availableSeats} ghế`}</span> : null}
       </div>
       <div className="flight-fare">{lowestFare !== undefined ? <><small>Giá từ</small><strong>{formatPrice(lowestFare)} ₫</strong></> : <span>Chưa có thông tin giá</span>}</div>
+      {flight.status_reason ? <p className="flight-status-reason">Lý do cập nhật: {flight.status_reason}</p> : null}
       {onSelectFlight
-        ? <button className="button button-primary flight-book-link" type="button" onClick={() => onSelectFlight(flight)}>Chọn chuyến bay</button>
-        : <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}>Chọn chuyến bay</Link>}
+        ? <button className="button button-primary flight-book-link" type="button" disabled={!bookable} onClick={() => onSelectFlight(flight)}>{bookable ? 'Chọn chuyến bay' : 'Không thể đặt chuyến này'}</button>
+        : bookable ? <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}>Chọn chuyến bay</Link> : <button className="button button-secondary flight-book-link" type="button" disabled>{flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}</button>}
     </article>
   );
 }

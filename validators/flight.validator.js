@@ -1,4 +1,5 @@
 const { body, query, param } = require('express-validator');
+const FLIGHT_STATUSES = ['scheduled', 'delayed', 'boarding', 'departed', 'arrived', 'cancelled', 'completed'];
 
 const searchFlightValidator = [
   query('departure_airport_id')
@@ -85,7 +86,7 @@ const updateFlightValidator = [
     if (keys.length === 0) {
       throw new Error('Vui lòng cung cấp ít nhất một trường cần cập nhật');
     }
-    const ALLOWED = ['departure_time', 'arrival_time', 'status'];
+    const ALLOWED = ['departure_time', 'arrival_time', 'actual_departure_time', 'actual_arrival_time', 'status', 'reason'];
     const disallowed = keys.filter((key) => !ALLOWED.includes(key));
     if (disallowed.length > 0) {
       throw new Error(`Không được phép chỉnh sửa các trường: ${disallowed.join(', ')}`);
@@ -105,12 +106,41 @@ const updateFlightValidator = [
     }),
   body('status')
     .optional()
-    .isIn(['scheduled', 'cancelled', 'completed'])
-    .withMessage('status must be scheduled, cancelled, or completed'),
+    .isIn(FLIGHT_STATUSES)
+    .withMessage('status không hợp lệ'),
+  ...['actual_departure_time', 'actual_arrival_time'].map((field) => body(field).optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage(`${field} phải là thời gian ISO8601`)),
+  body('reason').optional({ nullable: true }).isString().trim().isLength({ max: 500 }).withMessage('reason tối đa 500 ký tự'),
+];
+
+const flightStatusValidator = [
+  param('id').isInt({ min: 1 }).withMessage('id must be a positive integer'),
+];
+
+const updateFlightStatusValidator = [
+  param('id').isInt({ min: 1 }).withMessage('id must be a positive integer'),
+  body().custom((value) => {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Dữ liệu trạng thái phải là object');
+    const allowed = ['status', 'departure_time', 'arrival_time', 'actual_departure_time', 'actual_arrival_time', 'reason'];
+    const extra = Object.keys(value).filter((key) => !allowed.includes(key));
+    if (extra.length) throw new Error(`Không được phép truyền trường: ${extra.join(', ')}`);
+    return true;
+  }),
+  body('status').notEmpty().isIn(FLIGHT_STATUSES).withMessage('status không hợp lệ'),
+  ...['departure_time', 'arrival_time', 'actual_departure_time', 'actual_arrival_time']
+    .map((field) => body(field).optional({ nullable: true, checkFalsy: true }).isISO8601().withMessage(`${field} phải là thời gian ISO8601`)),
+  body('reason').optional({ nullable: true }).isString().trim().isLength({ max: 500 }).withMessage('reason tối đa 500 ký tự'),
+];
+
+const cancelFlightValidator = [
+  param('id').isInt({ min: 1 }).withMessage('id must be a positive integer'),
+  body('reason').notEmpty().isString().trim().isLength({ min: 1, max: 500 }).withMessage('Vui lòng nhập lý do hủy chuyến'),
 ];
 
 module.exports = {
   searchFlightValidator,
   createFlightValidator,
   updateFlightValidator,
+  flightStatusValidator,
+  updateFlightStatusValidator,
+  cancelFlightValidator,
 };

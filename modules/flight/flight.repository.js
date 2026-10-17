@@ -1,9 +1,9 @@
 class SequelizeFlightRepository {
-  constructor({ sequelize, Flight, Airline, Airport, FareClass, Booking, Op } = {}) {
+  constructor({ sequelize, Flight, Airline, Airport, FareClass, Booking, FlightStatusHistory, User, Op } = {}) {
     if (!sequelize || !Flight || !Airline || !Airport || !FareClass || !Booking || !Op) {
       throw new TypeError('Flight repository requires Sequelize models and operators');
     }
-    Object.assign(this, { sequelize, Flight, Airline, Airport, FareClass, Booking, Op });
+    Object.assign(this, { sequelize, Flight, Airline, Airport, FareClass, Booking, FlightStatusHistory, User, Op });
   }
 
   searchPage({ departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd, page, limit }) {
@@ -37,11 +37,24 @@ class SequelizeFlightRepository {
   findById(id, options) {
     return options === undefined ? this.Flight.findByPk(id) : this.Flight.findByPk(id, options);
   }
+  findFlightForStatusUpdate(id, transaction) {
+    return this.Flight.findByPk(id, { lock: transaction.LOCK.UPDATE, transaction });
+  }
+  findStatusHistory(flightId) {
+    return this.FlightStatusHistory.findAll({
+      where: { flight_id: flightId },
+      order: [['created_at', 'DESC'], ['id', 'DESC']],
+      ...(this.User ? { include: [{ model: this.User, as: 'actor', attributes: ['id', 'full_name'] }] } : {}),
+    });
+  }
+  createStatusHistory(values, transaction) {
+    return this.FlightStatusHistory.create(values, { transaction });
+  }
   findSeatSnapshot(id) { return this.Flight.findByPk(id, { attributes: ['id', 'available_seats'] }); }
   findAirlineById(id) { return this.Airline.findByPk(id); }
   findAirportById(id) { return this.Airport.findByPk(id); }
   create(data) { return this.Flight.create(data); }
-  update(flight, data) { return flight.update(data); }
+  update(flight, data, options) { return flight.update(data, options); }
   transaction(work) { return this.sequelize.transaction(work); }
   countBookings(flightId, transaction) { return this.Booking.count({ where: { flight_id: flightId }, transaction }); }
   deleteFareClasses(flightId, transaction) { return this.FareClass.destroy({ where: { flight_id: flightId }, transaction }); }
