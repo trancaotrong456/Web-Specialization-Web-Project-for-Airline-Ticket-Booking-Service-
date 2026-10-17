@@ -17,7 +17,7 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
   const { SeatSelectionService } = require('../modules/seat-selection/seatSelection.service');
   const SequelizeSeatSelectionRepository = require('../modules/seat-selection/seatSelection.repository');
   const { AncillariesService } = require('../modules/ancillaries/ancillaries.service');
-  const SequelizeAncillariesRepository = require('../modules/ancillaries/ancillaries.repository');
+  const { SequelizeAncillariesRepository } = require('../modules/ancillaries/ancillaries.repository');
   const PaymentService = require('../modules/payment/payment.service');
   const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
   const { signPayosDemoPayload } = require('../utils/checksum.util');
