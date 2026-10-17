@@ -61,7 +61,7 @@ async function main() {
     ]);
     if (await statusError.isVisible()) assert.fail(`Admin flight-status update failed: ${await statusError.innerText()}`);
     await statusSaved.waitFor({ state: 'visible' });
-    await admin.getByText(/CI browser delay scenario/).waitFor({ state: 'visible' });
+    await admin.locator('.flight-status-history').getByText('CI browser delay scenario', { exact: true }).waitFor({ state: 'visible' });
 
     const customer = await context.newPage();
     customer.on('pageerror', (error) => errors.push(`customer: ${error.message}`));
