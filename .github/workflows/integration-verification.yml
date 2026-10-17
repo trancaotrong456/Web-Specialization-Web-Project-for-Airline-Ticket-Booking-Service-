@@ -79,6 +79,12 @@ jobs:
       - name: Run backend regression suite
         run: npm test
 
+      - name: Run real MySQL business and concurrency scenarios
+        id: mysql_business
+        env:
+          RUN_MYSQL_BUSINESS_TESTS: '1'
+        run: npm run test:mysql-business
+
       - name: Check tracked JavaScript syntax
         shell: bash
         run: git ls-files -z '*.js' | xargs -0 -r -n1 node --check
@@ -102,6 +108,9 @@ jobs:
           npm install --no-save --package-lock=false playwright
           npx playwright install --with-deps chromium
 
+      - name: Prepare isolated browser fixtures
+        run: node scripts/ci/prepare-browser-fixtures.js
+
       - name: Start backend and frontend
         shell: bash
         run: |
@@ -124,16 +133,25 @@ jobs:
       - name: Browser smoke test (flight search modes)
         run: node scripts/ci/browser-smoke.cjs
 
-      - name: Document remaining real-world integration coverage
+      - name: Browser E2E (admin, booking, payment demo, notifications, itineraries)
+        id: browser_e2e
+        run: node scripts/ci/browser-e2e.cjs
+
+      - name: Clean exact browser fixtures
+        if: always()
+        run: node scripts/ci/cleanup-browser-fixtures.js
+
+      - name: Document integration coverage and remaining limits
         if: always()
         shell: bash
         run: |
           {
-            echo '### Scope limits';
-            echo '- This run verifies MySQL migrations, schema/model FK and unique-index declarations, migration idempotency, and a real rollback probe.';
-            echo '- Existing backend and frontend suites include unit/mock tests; they are not counted as MySQL concurrency tests.';
-            echo '- Business-level concurrent inventory/seat holds, payment callback races, ancillary capacity lifecycle, booking ownership/cancel, and notification outbox worker races remain **UNVERIFIED** until dedicated DB-backed scenarios exist.';
-            echo '- Browser automation currently covers the public home page, round-trip controls, multi-city controls, and adding a leg. Admin login and end-to-end booking/payment/seat/ancillary/notification workflows remain **UNVERIFIED**.';
+            echo '### Integration verification evidence';
+            echo '- Real MySQL business/concurrency step outcome: ${{ steps.mysql_business.outcome }}.';
+            echo '- Browser E2E step outcome: ${{ steps.browser_e2e.outcome }}.';
+            echo '- The MySQL business suite uses Sequelize transactions and independent pooled connections against airline_booking_ci_test; it is separate from the mock-based regression suite.';
+            echo '- Browser E2E uses CI-only accounts/fixtures and PAYOS_MODE=demo; no live payment or email provider is configured.';
+            echo '- Refund provider interactions, real email delivery, and production-scale concurrency/load remain **UNVERIFIED**.';
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload browser traces and service logs on failure
