@@ -221,20 +221,6 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
 
     await t.test('ancillary snapshot pricing and concurrent capacity reservation are persisted atomically', async () => {
       const f = await createFixture();
-      const reserveAncillaries = f.ancillaryService.reserveForBooking.bind(f.ancillaryService);
-      f.ancillaryService.reserveForBooking = async (args) => {
-        try { return await reserveAncillaries(args); }
-        catch (error) {
-          if (error.message === 'Ancillary offer is not eligible for the selected flight and fare class') {
-            const selection = args.selections[0];
-            const segment = args.segments.find((row) => Number(row.leg_order) === Number(selection.leg_order));
-            const offer = await db.AncillaryOffer.findByPk(selection.offer_id);
-            const loadedOffer = await f.ancillaryService.repository.findOffer(selection.offer_id);
-            error.message += `; CI diagnostics ${JSON.stringify({ selectedOfferId: selection.offer_id, offerFlightId: offer?.flight_id, segmentFlightId: segment?.flight_id, offerFareClassId: offer?.fare_class_id, segmentFareClassId: segment?.fare_class_id, offerActive: loadedOffer?.is_active, serviceActive: loadedOffer?.service?.is_active, loadedOffer: loadedOffer?.get ? loadedOffer.get({ plain: true }) : loadedOffer })}`;
-          }
-          throw error;
-        }
-      };
       const { flight, fareClass } = await f.makeFlight({ seats: 3, quota: 3 });
       const service = await db.AncillaryService.create({ service_type: 'baggage', name: `CI baggage ${prefix}`, is_active: true });
       f.fixture.serviceIds.push(service.id);

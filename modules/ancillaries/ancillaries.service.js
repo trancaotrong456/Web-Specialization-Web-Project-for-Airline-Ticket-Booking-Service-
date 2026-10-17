@@ -112,7 +112,10 @@ class AncillariesService {
         || !Number.isSafeInteger(Number(offer.reserved_quantity)) || Number(offer.reserved_quantity) < 0) {
         throw httpError('Ancillary offer capacity is invalid');
       }
-      offers.set(id, { ...offer, unitMinor });
+      // Sequelize model getters live on the prototype; spread a plain snapshot
+      // so eligibility fields remain available after leaving the query loop.
+      const offerValues = typeof offer.get === 'function' ? offer.get({ plain: true }) : offer;
+      offers.set(id, { ...offerValues, unitMinor });
     }
 
     const demand = new Map();
