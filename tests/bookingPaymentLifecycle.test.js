@@ -10,6 +10,15 @@ const { signVnpayParams } = require('../utils/checksum.util');
 function fixture(t, overrides = {}, itinerarySegments = [], omitLockedPassengers = false) {
   const tx = { LOCK: { UPDATE: 'UPDATE' } };
   const writes = [];
+  const notificationEvents = [];
+  const priorBookingPublisher = bookingService.notificationPublisher;
+  const priorPaymentPublisher = paymentService.notificationPublisher;
+  bookingService.notificationPublisher = { publish: async (event, options) => { notificationEvents.push({ event, options }); } };
+  paymentService.notificationPublisher = { publish: async (event, options) => { notificationEvents.push({ event, options }); } };
+  t.after(() => {
+    bookingService.notificationPublisher = priorBookingPublisher;
+    paymentService.notificationPublisher = priorPaymentPublisher;
+  });
   const row = (values) => ({ ...values, async save(options) {
     assert.equal(options.transaction, tx);
     writes.push(this);
@@ -56,7 +65,7 @@ function fixture(t, overrides = {}, itinerarySegments = [], omitLockedPassengers
   const seatUpdates = [];
   t.mock.method(paymentService, '_emitSocketSeatUpdate', async (flightId, availableSeats) => seatUpdates.push({ flight_id: flightId, available_seats: availableSeats }));
   const email = t.mock.method(paymentService, '_triggerBookingConfirmationEmail', async () => {});
-  return { booking, flight, nextFlight, promo, payment, tx, writes, email, seatUpdates };
+  return { booking, flight, nextFlight, promo, payment, tx, writes, email, seatUpdates, notificationEvents };
 }
 const denied = (code) => (error) => error.statusCode === code;
 function ipn(amount = 180000, response = '00') {
@@ -86,6 +95,8 @@ test('#30/#41 creation reserves seats, promo and passengers in one transaction f
     assert.equal(f.booking.guest_email, 'guest@example.com');
     assert.equal(passengers[0].passport_no, 'P1');
     assert.equal(passengers.length, 2);
+    assert.deepEqual(f.notificationEvents.map(({ event }) => event.eventType), ['BOOKING_CREATED']);
+    assert.equal(f.notificationEvents[0].options.transaction, f.tx);
     assert.ok(f.booking.hold_expires_at - before >= 900000);
     assert.ok(f.booking.hold_expires_at - before < 901000);
   } finally { if (old === undefined) delete process.env.HOLDING_TIME_MINUTES; else process.env.HOLDING_TIME_MINUTES = old; }
@@ -176,7 +187,11 @@ for (const gateway of ['vnpay', 'payos']) {
       assert.equal(f.flight.available_seats, outcome === 'failed-expired' ? 10 : 8);
       assert.equal(f.promo.used_count, outcome === 'failed-expired' ? 0 : 1);
       assert.equal(f.email.mock.callCount(), outcome === 'success' ? 1 : 0);
+      assert.equal(f.notificationEvents.filter(({ event }) => event.eventType === 'BOOKING_CONFIRMED').length, outcome === 'success' ? 1 : 0);
+      assert.equal(f.notificationEvents.filter(({ event }) => event.eventType === 'PAYMENT_SUCCEEDED').length, outcome === 'success' ? 1 : 0);
+      assert.ok(f.notificationEvents.every(({ options }) => options.transaction === f.tx));
       await run(); assert.equal(f.flight.available_seats, outcome === 'failed-expired' ? 10 : 8);
+      assert.equal(f.notificationEvents.length, outcome === 'success' ? 2 : 1);
       assert.equal(f.email.mock.callCount(), outcome === 'success' ? 1 : 0);
     });
   }
@@ -325,6 +340,8 @@ test('#33 refund cancels confirmed booking, refunds payment and releases seats o
   const result = await paymentService.processRefund(1, 'test', { email: 'admin@example.com' });
   assert.equal(result.refundedAmount, 180000); assert.equal(f.payment.status, 'refunded');
   assert.equal(f.booking.status, 'cancelled'); assert.equal(f.flight.available_seats, 10);
+  assert.equal(f.notificationEvents.filter(({ event }) => event.eventType === 'REFUND_COMPLETED').length, 1);
+  assert.equal(f.notificationEvents.filter(({ event }) => event.eventType === 'BOOKING_CANCELLED').length, 1);
   await assert.rejects(paymentService.processRefund(1, 'test', { email: 'admin@example.com' }), denied(400));
   assert.equal(f.flight.available_seats, 10);
 });
@@ -395,7 +412,7 @@ test('#35 cron reconciles pending only when feature flag is true', async (t) => 
   const reconcile = t.mock.method(bookingService, 'reconcileStalePendingPayments', async () => ({ reconciledCount: 0 }));
   const old = process.env.ENABLE_PENDING_RECONCILIATION;
   try {
-    process.env.ENABLE_PENDING_RECONCILIATION = 'false'; initExpireBookingsJob(); await callback();
+    process.env.ENABLE_PENDING_RECONCILIATION = 'false'; initExpireBookingsJob({ notificationWorker: { runBatch: async () => 0 } }); await callback();
     assert.equal(reconcile.mock.callCount(), 0);
     process.env.ENABLE_PENDING_RECONCILIATION = 'true'; await callback();
     assert.equal(reconcile.mock.callCount(), 1); assert.equal(expire.mock.callCount(), 2);

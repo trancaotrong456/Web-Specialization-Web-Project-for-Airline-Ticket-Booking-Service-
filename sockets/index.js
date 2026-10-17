@@ -1,9 +1,10 @@
 const { Server } = require('socket.io');
+const { createSocketAuthenticator } = require('./socketAuthenticator');
 
 let io = null;
 
-const initSocket = (server) => {
-  io = new Server(server, {
+const initSocket = (server, { authenticateSocket, ServerClass = Server } = {}) => {
+  io = new ServerClass(server, {
     cors: {
       origin: process.env.CLIENT_URL || '*',
       methods: ['GET', 'POST'],
@@ -11,8 +12,15 @@ const initSocket = (server) => {
     },
   });
 
+  const socketAuthenticator = authenticateSocket || createSocketAuthenticator({
+    verifyAccessToken: require('../utils/jwt.util').verifyAccessToken,
+    findUser: async (id) => require('../models').User.findByPk(id, { attributes: ['id', 'status'] }),
+  });
+  io.use(socketAuthenticator);
+
   io.on('connection', (socket) => {
     console.log(`[Socket.io] Client connected: ${socket.id}`);
+    if (socket.data.authenticatedUserId) socket.join(`user:${socket.data.authenticatedUserId}`);
 
     // Join room for a specific flight
     socket.on('join_flight', (flightId) => {

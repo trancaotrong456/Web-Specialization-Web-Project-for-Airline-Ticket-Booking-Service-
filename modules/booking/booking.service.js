@@ -7,7 +7,7 @@ const { toMinorUnits, fromMinorUnits } = require('../ancillaries/money.util');
 const { recordBookingStatusTransition } = require('./bookingStatusHistory.util');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, seatSelectionService, ancillaryService } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -15,6 +15,7 @@ class BookingService {
     this.flightSeatService = flightSeatService;
     this.seatSelectionService = seatSelectionService;
     this.ancillaryService = ancillaryService;
+    this.notificationPublisher = notificationPublisher;
   }
   /**
    * Helper to generate unique booking code
@@ -285,6 +286,16 @@ class BookingService {
         await this.repository.save(booking, { transaction: t });
       }
 
+      if (this.notificationPublisher) {
+        await this.notificationPublisher.publish({
+          eventKey: `booking:${booking.id}:created`, eventType: 'BOOKING_CREATED',
+          aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: guest_email,
+          relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code },
+        }, { transaction: t });
+      }
+
       return { booking, flightSeatUpdates: legs.map(({ flight }) => ({ id: flight.id, availableSeats: flight.available_seats })) };
     });
 
@@ -401,6 +412,15 @@ class BookingService {
 
       // 3. Update status to cancelled
       await recordBookingStatusTransition({ booking, toStatus: 'cancelled', source: 'customer_cancel', actorUserId: currentUser?.id, repository: this.repository, transaction: t });
+      if (this.notificationPublisher) {
+        await this.notificationPublisher.publish({
+          eventKey: `booking:${booking.id}:cancelled`, eventType: 'BOOKING_CANCELLED',
+          aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: booking.guest_email,
+          relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code },
+        }, { transaction: t });
+      }
     });
 
     await this._emitSeatUpdates(seatUpdates);

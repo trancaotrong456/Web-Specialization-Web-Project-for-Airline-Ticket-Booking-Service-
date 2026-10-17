@@ -28,6 +28,9 @@ const { createSeatSelectionModule } = require('../modules/seat-selection');
 const SequelizeSeatSelectionRepository = require('../modules/seat-selection/seatSelection.repository');
 const { createAncillariesModule } = require('../modules/ancillaries');
 const { SequelizeAncillariesRepository } = require('../modules/ancillaries/ancillaries.repository');
+const { createNotificationModule } = require('../modules/notification');
+const { SequelizeNotificationRepository } = require('../modules/notification/notification.repository');
+const { NotificationEventPublisher } = require('../modules/notification/notificationEventPublisher');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 const { getEmailProvider } = require('../infrastructure/email/emailProvider');
@@ -218,6 +221,7 @@ function getDefaultBookingModule() {
     socket: getSocket,
     seatSelectionService: getDefaultSeatSelectionModule().service,
     ancillaryService: getDefaultAncillariesModule().service,
+    notificationPublisher: getDefaultNotificationPublisher(),
   });
   return defaultBookingModule;
 }
@@ -233,8 +237,36 @@ function getDefaultPaymentModule() {
     emailProvider: getEmailProvider(),
     seatSelectionService: getDefaultSeatSelectionModule().service,
     ancillaryService: getDefaultAncillariesModule().service,
+    notificationPublisher: getDefaultNotificationPublisher(),
   });
   return defaultPaymentModule;
+}
+
+let defaultNotificationPublisher;
+function getDefaultNotificationPublisher() {
+  if (defaultNotificationPublisher) return defaultNotificationPublisher;
+  const { Notification, NotificationOutbox, User } = require('../models');
+  defaultNotificationPublisher = new NotificationEventPublisher({ Notification, NotificationOutbox, User });
+  return defaultNotificationPublisher;
+}
+
+let defaultNotificationModule;
+function getDefaultNotificationModule() {
+  if (defaultNotificationModule) return defaultNotificationModule;
+  const { Notification } = require('../models');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  defaultNotificationModule = createNotificationModule({
+    repository: new SequelizeNotificationRepository({ Notification }),
+    guards,
+    validation,
+    validators: require('../validators/notification.validator'),
+  });
+  return defaultNotificationModule;
 }
 
 function buildContainer({
@@ -251,6 +283,7 @@ function buildContainer({
   paymentModule,
   seatSelectionModule,
   ancillariesModule,
+  notificationModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -268,6 +301,7 @@ function buildContainer({
   const resolvedPaymentModule = paymentModule || (apiRouter ? undefined : getDefaultPaymentModule());
   const resolvedSeatSelectionModule = seatSelectionModule || (apiRouter ? undefined : getDefaultSeatSelectionModule());
   const resolvedAncillariesModule = ancillariesModule || (apiRouter ? undefined : getDefaultAncillariesModule());
+  const resolvedNotificationModule = notificationModule || (apiRouter ? undefined : getDefaultNotificationModule());
   const routeModules = {
     ...(resolvedAuthModule ? { auth: resolvedAuthModule.router } : {}),
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
@@ -281,8 +315,9 @@ function buildContainer({
     ...(resolvedPaymentModule ? { payments: resolvedPaymentModule.router } : {}),
     ...(resolvedSeatSelectionModule ? { seatSelection: resolvedSeatSelectionModule.router } : {}),
     ...(resolvedAncillariesModule ? { ancillaries: resolvedAncillariesModule.router } : {}),
+    ...(resolvedNotificationModule ? { notifications: resolvedNotificationModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule || seatSelectionModule || ancillariesModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule || seatSelectionModule || ancillariesModule || notificationModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -301,6 +336,7 @@ function buildContainer({
     ...(resolvedPaymentModule ? { paymentModule: resolvedPaymentModule } : {}),
     ...(resolvedSeatSelectionModule ? { seatSelectionModule: resolvedSeatSelectionModule } : {}),
     ...(resolvedAncillariesModule ? { ancillariesModule: resolvedAncillariesModule } : {}),
+    ...(resolvedNotificationModule ? { notificationModule: resolvedNotificationModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -309,4 +345,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule, getDefaultSeatSelectionModule, getDefaultAncillariesModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule, getDefaultSeatSelectionModule, getDefaultAncillariesModule, getDefaultNotificationModule, getDefaultNotificationPublisher };

@@ -1,4 +1,4 @@
-function createBookingMaintenanceJob({ cron, bookingService, environment = process.env, logger = console } = {}) {
+function createBookingMaintenanceJob({ cron, bookingService, notificationWorker, environment = process.env, logger = console } = {}) {
   if (!cron || !bookingService) throw new TypeError('Cron and BookingService are required');
   let scheduled;
   let started = false;
@@ -11,6 +11,14 @@ function createBookingMaintenanceJob({ cron, bookingService, environment = proce
         if (environment.ENABLE_PENDING_RECONCILIATION === 'true') {
           const reconciliation = await bookingService.reconcileStalePendingPayments();
           if (reconciliation.reconciledCount > 0) logger.log(`[Cron] Reconciled ${reconciliation.reconciledCount} stale pending payment(s) at ${new Date().toISOString()}`);
+        }
+        if (notificationWorker) {
+          try {
+            const delivered = await notificationWorker.runBatch(25);
+            if (delivered > 0) logger.log(`[Notifications] Processed ${delivered} outbox event(s)`);
+          } catch (error) {
+            logger.error('[Notifications] Outbox delivery job failed:', error.message);
+          }
         }
       } catch (error) {
         logger.error('[Cron] Error in booking maintenance job:', error.message);

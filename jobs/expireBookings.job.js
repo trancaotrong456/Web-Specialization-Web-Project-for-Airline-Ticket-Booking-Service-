@@ -9,8 +9,31 @@ const { createBookingMaintenanceJob } = require('../infrastructure/jobs/bookingM
  *
  * IMPORTANT: Only targets { status: 'holding' } — NOT 'pending_payment'.
  */
-const defaultJob = createBookingMaintenanceJob({ cron, bookingService });
-const initExpireBookingsJob = () => defaultJob.start();
+let defaultJob;
+function createDefaultNotificationWorker() {
+  const models = require('../models');
+  const { Op } = require('sequelize');
+  const { SequelizeNotificationOutboxRepository } = require('../modules/notification/notificationOutbox.repository');
+  const { NotificationDeliveryWorker } = require('../modules/notification/notificationDeliveryWorker');
+  return new NotificationDeliveryWorker({
+    repository: new SequelizeNotificationOutboxRepository({
+      NotificationOutbox: models.NotificationOutbox, sequelize: models.sequelize, Op,
+    }),
+    emailProvider: require('../infrastructure/email/emailProvider').getEmailProvider(),
+    getSocket: require('../infrastructure/realtime/socketProvider').getSocket,
+  });
+}
+
+const initExpireBookingsJob = ({ notificationWorker } = {}) => {
+  if (!defaultJob) {
+    defaultJob = createBookingMaintenanceJob({
+      cron,
+      bookingService,
+      notificationWorker: notificationWorker || createDefaultNotificationWorker(),
+    });
+  }
+  return defaultJob.start();
+};
 
 module.exports = {
   initExpireBookingsJob,

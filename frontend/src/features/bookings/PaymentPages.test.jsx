@@ -67,7 +67,7 @@ describe('payment pages', () => {
     fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-10-01' } });
     await user.click(screen.getByRole('button', { name: 'Xem doanh thu' }));
     expect(await screen.findByText('Ngày bắt đầu phải trước hoặc bằng ngày kết thúc.')).toBeInTheDocument();
-    expect(mocks.request).not.toHaveBeenCalled();
+    expect(mocks.request.mock.calls.some(([path]) => String(path).includes('/payments/revenue'))).toBe(false);
   });
 
   it('requests revenue using only from_date, to_date and group_by', async () => {

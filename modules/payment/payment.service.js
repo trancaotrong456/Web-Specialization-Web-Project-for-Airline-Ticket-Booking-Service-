@@ -27,7 +27,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, seatSelectionService, ancillaryService } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -38,6 +38,7 @@ class PaymentService {
     this.emailProvider = emailProvider;
     this.seatSelectionService = seatSelectionService;
     this.ancillaryService = ancillaryService;
+    this.notificationPublisher = notificationPublisher;
   }
   /**
    * Administrative payment history. Payment gateways can disclose only the
@@ -248,6 +249,15 @@ class PaymentService {
 
       payment.status = 'failed';
       await this.repository.save(payment, { transaction: t });
+      if (this.notificationPublisher) {
+        await this.notificationPublisher.publish({
+          eventKey: `payment:${payment.id}:failed`, eventType: 'PAYMENT_FAILED',
+          aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: booking.guest_email,
+          relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code || booking.id },
+        }, { transaction: t });
+      }
 
       const holdIsValid = booking.hold_expires_at && new Date() <= new Date(booking.hold_expires_at);
       if (holdIsValid) {
@@ -679,6 +689,17 @@ class PaymentService {
         if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
         await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
+        if (this.notificationPublisher) {
+          const notification = {
+            aggregateType: 'booking', aggregateId: lockedBooking.id,
+            recipientUserId: lockedBooking.user_id, recipientEmail: lockedBooking.guest_email,
+            relatedType: 'booking', relatedId: lockedBooking.id,
+            variables: { code: lockedBooking.booking_code || lockedBooking.id },
+          };
+          await this.notificationPublisher.publish({ ...notification, eventKey: `booking:${lockedBooking.id}:confirmed`, eventType: 'BOOKING_CONFIRMED' }, { transaction: t });
+          await this.notificationPublisher.publish({ ...notification, eventKey: `payment:${lockedPayment.id}:succeeded`, eventType: 'PAYMENT_SUCCEEDED' }, { transaction: t });
+        }
+
         bookingIdToEmail = lockedBooking.id;
       } else {
         // Báo cáo Chương 2.3 (Ngoại lệ, Chức năng 2):
@@ -689,6 +710,15 @@ class PaymentService {
         // 3. Nếu hold_expires_at đã quá hạn -> set booking.status = 'expired', giải phóng ghế và hoàn lượt promo.
         lockedPayment.status = 'failed';
         await this.repository.save(lockedPayment, { transaction: t });
+        if (this.notificationPublisher) {
+          await this.notificationPublisher.publish({
+            eventKey: `payment:${lockedPayment.id}:failed`, eventType: 'PAYMENT_FAILED',
+            aggregateType: 'booking', aggregateId: lockedBooking.id,
+            recipientUserId: lockedBooking.user_id, recipientEmail: lockedBooking.guest_email,
+            relatedType: 'booking', relatedId: lockedBooking.id,
+            variables: { code: lockedBooking.booking_code || lockedBooking.id },
+          }, { transaction: t });
+        }
 
         const now = new Date();
         const isHoldValid = lockedBooking.hold_expires_at && now <= new Date(lockedBooking.hold_expires_at);
@@ -832,11 +862,31 @@ class PaymentService {
         if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
         await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
+        if (this.notificationPublisher) {
+          const notification = {
+            aggregateType: 'booking', aggregateId: lockedBooking.id,
+            recipientUserId: lockedBooking.user_id, recipientEmail: lockedBooking.guest_email,
+            relatedType: 'booking', relatedId: lockedBooking.id,
+            variables: { code: lockedBooking.booking_code || lockedBooking.id },
+          };
+          await this.notificationPublisher.publish({ ...notification, eventKey: `booking:${lockedBooking.id}:confirmed`, eventType: 'BOOKING_CONFIRMED' }, { transaction: t });
+          await this.notificationPublisher.publish({ ...notification, eventKey: `payment:${lockedPayment.id}:succeeded`, eventType: 'PAYMENT_SUCCEEDED' }, { transaction: t });
+        }
+
         bookingIdToEmail = lockedBooking.id;
       } else {
         // payOS reports a non-success payment or cancellation.
         lockedPayment.status = 'failed';
         await this.repository.save(lockedPayment, { transaction: t });
+        if (this.notificationPublisher) {
+          await this.notificationPublisher.publish({
+            eventKey: `payment:${lockedPayment.id}:failed`, eventType: 'PAYMENT_FAILED',
+            aggregateType: 'booking', aggregateId: lockedBooking.id,
+            recipientUserId: lockedBooking.user_id, recipientEmail: lockedBooking.guest_email,
+            relatedType: 'booking', relatedId: lockedBooking.id,
+            variables: { code: lockedBooking.booking_code || lockedBooking.id },
+          }, { transaction: t });
+        }
 
         const now = new Date();
         const isHoldValid = lockedBooking.hold_expires_at && now <= new Date(lockedBooking.hold_expires_at);
@@ -998,6 +1048,19 @@ class PaymentService {
       await recordBookingStatusTransition({ booking, toStatus: 'cancelled', source: 'admin_refund', actorUserId: adminUser?.id, repository: this.repository, transaction: t });
 
       await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'refunded' });
+
+      if (this.notificationPublisher) {
+        const notification = {
+          aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: booking.guest_email,
+          relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code || booking.id },
+        };
+        await this.notificationPublisher.publish({ ...notification, eventKey: `booking:${booking.id}:cancelled`, eventType: 'BOOKING_CANCELLED' }, { transaction: t });
+        await this.notificationPublisher.publish({
+          ...notification, eventKey: `booking:${booking.id}:refunded`, eventType: 'REFUND_COMPLETED',
+        }, { transaction: t });
+      }
 
       // Return seats to flight
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });

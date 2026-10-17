@@ -13,6 +13,7 @@ const routeDefinitions = [
   ['seatSelection', '/seat-selection', '../routes/seatSelection.route'],
   ['ancillaries', '/ancillaries', '../routes/ancillaries.route'],
   ['promotions', '/promotions', '../routes/promotion.route'],
+  ['notifications', '/notifications', '../routes/notification.route'],
 ];
 
 const loadDefaultRouteModules = (overrides = {}) => Object.fromEntries(
