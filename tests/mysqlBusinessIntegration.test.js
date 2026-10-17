@@ -96,8 +96,8 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
     return {
       flight_id: flight.id,
       fare_class_id: fareClass.id,
-      user_id: fixture.user.id,
-      currentUser: { id: fixture.user.id, role: { name: 'customer' } },
+      user_id: fixture.userId,
+      currentUser: { id: fixture.userId, role: { name: 'customer' } },
       passengers: [{ passenger_name: 'CI Passenger' }],
       ...overrides,
     };
