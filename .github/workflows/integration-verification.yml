@@ -1,0 +1,138 @@
+name: Integration Verification
+
+on:
+  push:
+    branches:
+      - integration/serene-eight-features-20261017
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: integration-verification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  mysql-and-browser:
+    name: MySQL migrations, regression, and browser smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: ci_root_only_password
+          MYSQL_DATABASE: airline_booking_ci_test
+          MYSQL_USER: airline_ci
+          MYSQL_PASSWORD: ci_only_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=ci_root_only_password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      NODE_ENV: test
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_NAME: airline_booking_ci_test
+      DB_USER: airline_ci
+      DB_PASS: ci_only_password
+      DB_SSL: 'false'
+      PORT: 5000
+      DISABLE_CRON: 'true'
+      DEMO_BOOTSTRAP_REQUIRED: 'false'
+      PAYOS_MODE: demo
+    steps:
+      - name: Checkout integration candidate
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            frontend/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm ci
+
+      - name: Apply all migrations to the isolated CI database
+        run: npx sequelize-cli db:migrate --env test
+
+      - name: Verify schema, constraints, associations, and rollback
+        run: node scripts/ci/verify-mysql-schema.js
+
+      - name: Verify migrations are idempotent
+        run: npx sequelize-cli db:migrate --env test
+
+      - name: Run backend regression suite
+        run: npm test
+
+      - name: Check tracked JavaScript syntax
+        shell: bash
+        run: git ls-files -z '*.js' | xargs -0 -r -n1 node --check
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests serially
+        working-directory: frontend
+        run: npm test -- --run --maxWorkers=1 --minWorkers=1
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
+      - name: Install Chromium for browser smoke
+        run: |
+          npm install --no-save --package-lock=false playwright
+          npx playwright install --with-deps chromium
+
+      - name: Start backend and frontend
+        shell: bash
+        run: |
+          mkdir -p artifacts/e2e
+          nohup npm start > artifacts/e2e/backend.log 2>&1 &
+          echo $! > artifacts/e2e/backend.pid
+          nohup npm --prefix frontend run dev -- --host 127.0.0.1 > artifacts/e2e/frontend.log 2>&1 &
+          echo $! > artifacts/e2e/frontend.pid
+          for attempt in $(seq 1 60); do
+            if curl --silent --fail http://127.0.0.1:5000/api/v1/airlines?page=1\&limit=1 >/dev/null \
+              && curl --silent --fail http://127.0.0.1:5173/ >/dev/null; then
+              exit 0
+            fi
+            sleep 2
+          done
+          cat artifacts/e2e/backend.log
+          cat artifacts/e2e/frontend.log
+          exit 1
+
+      - name: Browser smoke test (flight search modes)
+        run: node scripts/ci/browser-smoke.cjs
+
+      - name: Document remaining real-world integration coverage
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo '### Scope limits';
+            echo '- This run verifies MySQL migrations, schema/model FK and unique-index declarations, migration idempotency, and a real rollback probe.';
+            echo '- Existing backend and frontend suites include unit/mock tests; they are not counted as MySQL concurrency tests.';
+            echo '- Business-level concurrent inventory/seat holds, payment callback races, ancillary capacity lifecycle, booking ownership/cancel, and notification outbox worker races remain **UNVERIFIED** until dedicated DB-backed scenarios exist.';
+            echo '- Browser automation currently covers the public home page, round-trip controls, multi-city controls, and adding a leg. Admin login and end-to-end booking/payment/seat/ancillary/notification workflows remain **UNVERIFIED**.';
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload browser traces and service logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-browser-diagnostics-${{ github.run_id }}
+          path: artifacts/e2e/
+          if-no-files-found: warn
+          retention-days: 7
