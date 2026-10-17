@@ -59,6 +59,7 @@ function inventory({ quota = 3, seats = 10, occupied = 0, failPassengers = false
       if (failPassengers) throw new Error('passenger insert failed');
       return rows.map((row) => { const saved = { id: nextPassengerId++, ...row }; bookings.find((b) => b.id === row.booking_id).passengers.push(saved); return saved; });
     },
+    async createStatusHistory() {},
     async findBookingDetail(id) { return bookings.find((b) => b.id === id); },
   };
   const transactionManager = {

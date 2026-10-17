@@ -137,6 +137,23 @@ const listBookingValidator = [
     .trim()
     .isLength({ min: 1, max: 191 })
     .withMessage('search must be between 1 and 191 characters'),
+
+  query('booking_code')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('booking_code must be between 1 and 20 characters'),
+
+  query('customer')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 191 })
+    .withMessage('customer must be between 1 and 191 characters'),
+
+  query('flight_id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('flight_id must be a positive integer'),
 ];
 
 const bookingAccessEmailValidator = [

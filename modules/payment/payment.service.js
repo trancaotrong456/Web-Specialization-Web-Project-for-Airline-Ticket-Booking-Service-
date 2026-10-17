@@ -12,6 +12,7 @@ const { resolvePaymentReturnUrl } = require('../../utils/paymentReturnUrl.util')
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 const { createHash } = require('node:crypto');
+const { recordBookingStatusTransition } = require('../booking/bookingStatusHistory.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -133,8 +134,7 @@ class PaymentService {
         payment.status = 'failed';
         if (idempotencyError && payment.idempotency_key) payment.idempotency_response = { error: idempotencyError };
         await this.repository.save(payment, { transaction: t });
-        booking.status = 'holding';
-        await this.repository.save(booking, { transaction: t });
+        await recordBookingStatusTransition({ booking, toStatus: 'holding', source: 'gateway_setup_failed', repository: this.repository, transaction: t });
       }
     });
   }
@@ -251,13 +251,11 @@ class PaymentService {
 
       const holdIsValid = booking.hold_expires_at && new Date() <= new Date(booking.hold_expires_at);
       if (holdIsValid) {
-        booking.status = 'holding';
-        await this.repository.save(booking, { transaction: t });
+        await recordBookingStatusTransition({ booking, toStatus: 'holding', source: 'payment_failed_retryable', repository: this.repository, transaction: t });
         return;
       }
 
-      booking.status = 'expired';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'expired', source: 'payment_failed_expired', repository: this.repository, transaction: t });
 
       await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'expired' });
 
@@ -417,8 +415,7 @@ class PaymentService {
       }
 
       // Transition to pending_payment
-      booking.status = 'pending_payment';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'pending_payment', source: 'payment_initiated', actorUserId: currentUser?.id, repository: this.repository, transaction: t });
 
       // Create pending payment record
       paymentRecord = await this.repository.createPayment(
@@ -678,8 +675,7 @@ class PaymentService {
         lockedPayment.paid_at = new Date();
         await this.repository.save(lockedPayment, { transaction: t });
 
-        lockedBooking.status = 'confirmed';
-        await this.repository.save(lockedBooking, { transaction: t });
+        await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'confirmed', source: 'payment_vnpay_success', repository: this.repository, transaction: t });
         if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
         await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
@@ -698,11 +694,9 @@ class PaymentService {
         const isHoldValid = lockedBooking.hold_expires_at && now <= new Date(lockedBooking.hold_expires_at);
 
         if (isHoldValid) {
-          lockedBooking.status = 'holding';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'holding', source: 'payment_vnpay_failed_retryable', repository: this.repository, transaction: t });
         } else {
-          lockedBooking.status = 'expired';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'expired', source: 'payment_vnpay_failed_expired', repository: this.repository, transaction: t });
 
           await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
 
@@ -834,8 +828,7 @@ class PaymentService {
         lockedPayment.paid_at = new Date();
         await this.repository.save(lockedPayment, { transaction: t });
 
-        lockedBooking.status = 'confirmed';
-        await this.repository.save(lockedBooking, { transaction: t });
+        await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'confirmed', source: 'payment_payos_success', repository: this.repository, transaction: t });
         if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
         await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
@@ -849,11 +842,9 @@ class PaymentService {
         const isHoldValid = lockedBooking.hold_expires_at && now <= new Date(lockedBooking.hold_expires_at);
 
         if (isHoldValid) {
-          lockedBooking.status = 'holding';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'holding', source: 'payment_payos_failed_retryable', repository: this.repository, transaction: t });
         } else {
-          lockedBooking.status = 'expired';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'expired', source: 'payment_payos_failed_expired', repository: this.repository, transaction: t });
 
           await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
 
@@ -1004,8 +995,7 @@ class PaymentService {
       await this.repository.save(successfulPayment, { transaction: t });
 
       // Mark booking as cancelled
-      booking.status = 'cancelled';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'cancelled', source: 'admin_refund', actorUserId: adminUser?.id, repository: this.repository, transaction: t });
 
       await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'refunded' });
 

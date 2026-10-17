@@ -33,6 +33,7 @@ function fixture(t, overrides = {}, itinerarySegments = [], omitLockedPassengers
     return booking;
   });
   t.mock.method(models.Booking, 'findByPk', async () => booking);
+  t.mock.method(models.BookingStatusHistory, 'create', async (values, options) => { assert.equal(options.transaction, tx); writes.push(values); return values; });
   t.mock.method(models.Booking, 'findAll', async () => [booking]);
   t.mock.method(models.BookingSegment, 'findAll', async () => itinerarySegments);
   t.mock.method(models.BookingSegment, 'bulkCreate', async (values, options) => {

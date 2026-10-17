@@ -25,7 +25,7 @@ describe('booking customer pages', () => {
     expect(mocks.request).toHaveBeenCalledWith('/bookings/lookup/BK123?guest_email=guest%40example.com');
   });
 
-  it('does not render normalized first segment twice beside legacy primary flight fields', async () => {
+  it('renders the legacy primary flight and each additional segment exactly once', async () => {
     mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
     mocks.request.mockResolvedValue({ id: 7, booking_code: 'BK123', status: 'holding', total_amount: 1000,
       flight: { ...flight, departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } },
@@ -37,8 +37,39 @@ describe('booking customer pages', () => {
     });
     renderBookingDetail();
     const itinerary = await screen.findByRole('list');
-    expect(within(itinerary).getAllByRole('listitem')).toHaveLength(1);
-    expect(within(itinerary).getByText('SGN → DAD')).toBeInTheDocument();
+    expect(within(itinerary).getAllByRole('listitem')).toHaveLength(2);
+    expect(within(itinerary).getAllByRole('listitem')[0]).toHaveTextContent('HAN → SGN');
+    expect(within(itinerary).getAllByRole('listitem')[1]).toHaveTextContent('SGN → DAD');
+  });
+
+  it('shows all itinerary legs and payment/refund states on a customer booking detail', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ id: 7, booking_code: 'BK-MULTI', status: 'cancelled', total_amount: 1200000,
+      flight, fareClass: { class_name: 'Economy' }, passengers: [{ id: 4, passenger_name: 'An' }],
+      itinerarySegments: [{ id: 72, leg_order: 2, flight: { ...flight, departure_airport_id: 2, arrival_airport_id: 3, departureAirport: { iata_code: 'SGN' }, arrivalAirport: { iata_code: 'DAD' } }, fareClass: { class_name: 'Business' } }],
+      payments: [{ id: 9, payment_method: 'vnpay', status: 'refunded', amount: 1200000, paid_at: '2026-10-16T10:00:00Z' }],
+    });
+    renderBookingDetail();
+    expect(await screen.findByRole('list', { name: 'Chi tiết các chặng' })).toHaveTextContent('HAN → SGN');
+    expect(screen.getByRole('list', { name: 'Chi tiết các chặng' })).toHaveTextContent('SGN → DAD');
+    expect(screen.getByText('Thanh toán và hoàn tiền')).toBeInTheDocument();
+    expect(screen.getByText('Đã hoàn tiền')).toBeInTheDocument();
+    expect(screen.queryByText('Lịch sử trạng thái')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Hủy đặt chỗ' })).not.toBeInTheDocument();
+  });
+
+  it('shows real status history and payment details only on Admin booking detail', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ id: 7, booking_code: 'BK-ADMIN', status: 'confirmed', total_amount: 1200000, flight,
+      user: { full_name: 'Demo Customer', email: 'customer@example.test' }, passengers: [],
+      payments: [{ id: 9, payment_method: 'payos', status: 'success', amount: 1200000, paid_at: '2026-10-16T10:00:00Z' }],
+      statusHistory: [{ id: 1, from_status: 'holding', to_status: 'pending_payment', source: 'payment_initiated', created_at: '2026-10-16T09:00:00Z' }, { id: 2, from_status: 'pending_payment', to_status: 'confirmed', source: 'payment_payos_success', created_at: '2026-10-16T10:00:00Z' }],
+    });
+    render(<MemoryRouter initialEntries={['/admin/bookings/7']}><Routes><Route path="/admin/bookings/:id" element={<BookingDetailPage admin />} /></Routes></MemoryRouter>);
+    expect(await screen.findByText('Lịch sử trạng thái')).toBeInTheDocument();
+    expect(screen.getByText('payment initiated')).toBeInTheDocument();
+    expect(screen.getByText('Demo Customer')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Chi tiết' })).toHaveAttribute('href', '/admin/payments/9');
   });
 
   it.each([1, 2, 3])('preserves a %i-passenger search through fare selection without creating a booking', async (count) => {
@@ -285,6 +316,16 @@ describe('booking customer pages', () => {
     expect(screen.getByText('Trang 2 / 3')).toBeInTheDocument();
   });
 
+  it('searches only the authenticated customer booking list by booking code', async () => {
+    mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ data: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    const user = userEvent.setup();
+    renderPage(<MyBookingsPage />, '/bookings/my');
+    await user.type(await screen.findByLabelText('Tìm mã đặt chỗ'), 'BK-2026');
+    await user.click(screen.getByRole('button', { name: 'Tìm' }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings/my-bookings?page=1&limit=10&search=BK-2026'));
+  });
+
   it('loads staff booking management using backend search/status filters', async () => {
     mocks.user = { id: 3, role: 'staff' }; mocks.status = 'authenticated';
     mocks.request.mockResolvedValue({ data: [{ id: 8, booking_code: 'BKSTAFF', status: 'holding', guest_email: 'guest@example.com', flight }], pagination: { page: 1, totalPages: 1, total: 1 } });
@@ -292,6 +333,18 @@ describe('booking customer pages', () => {
     expect((await screen.findAllByText('BKSTAFF')).length).toBeGreaterThan(0);
     expect(mocks.request).toHaveBeenCalledWith('/bookings/admin/all?page=1&limit=10&status=holding&search=BKSTAFF');
     expect(screen.queryByRole('link', { name: 'Chi tiết' })).not.toBeInTheDocument();
+  });
+
+  it('lets Admin filter booking management by booking code, customer and flight', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ data: [], pagination: { page: 1, totalPages: 1, total: 0 } });
+    const user = userEvent.setup();
+    renderPage(<AdminBookingsPage />, '/admin/bookings');
+    await user.type(await screen.findByLabelText('Mã đặt chỗ'), 'BK-44');
+    await user.type(screen.getByLabelText('Khách hàng'), 'an@example.com');
+    await user.type(screen.getByLabelText('ID chuyến bay'), '19');
+    await user.click(screen.getByRole('button', { name: 'Tìm' }));
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings/admin/all?page=1&limit=10&booking_code=BK-44&customer=an%40example.com&flight_id=19'));
   });
 
   it('uses report labels for booking status filter options while keeping enum values', async () => {

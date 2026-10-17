@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizePaymentRepository {
-  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat } = {}) {
+  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat, BookingStatusHistory } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat });
+    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat, BookingStatusHistory });
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
@@ -26,6 +26,10 @@ class SequelizePaymentRepository {
   findFlight(options) { return this.Flight.findOne(options); }
   findPromotion(options) { return this.Promotion.findOne(options); }
   save(instance, options) { return instance.save(options); }
+  createStatusHistory(values, options = {}) {
+    if (!this.BookingStatusHistory) throw new TypeError('BookingStatusHistory model is required');
+    return this.BookingStatusHistory.create(values, options);
+  }
   destroy(instance, options) { return instance.destroy(options); }
   decrement(instance, field, options) { return instance.decrement(field, options); }
 

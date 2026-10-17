@@ -1,9 +1,10 @@
 const crypto = require('crypto');
 const { getIO } = require('../../sockets');
-const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
+const { verifyBookingAccess, isAdmin } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 const { toMinorUnits, fromMinorUnits } = require('../ancillaries/money.util');
+const { recordBookingStatusTransition } = require('./bookingStatusHistory.util');
 
 class BookingService {
   constructor({ repository, transactionManager, socket = getIO, flightSeatService, seatSelectionService, ancillaryService } = {}) {
@@ -246,6 +247,7 @@ class BookingService {
         },
         { transaction: t }
       );
+      await recordBookingStatusTransition({ booking, fromStatusOverride: null, toStatus: 'holding', source: 'booking_created', actorUserId: user_id, repository: this.repository, transaction: t });
 
       let createdSegments = [];
       if (legs.length > 0) {
@@ -297,7 +299,7 @@ class BookingService {
    */
   async getBookingById(bookingId, currentUser = null, guestEmail = null) {
     guestEmail = normalizeGuestEmail(guestEmail);
-    const booking = await this.repository.findBookingDetail(bookingId);
+    const booking = await this.repository.findBookingDetail(bookingId, { includeStatusHistory: isAdmin(currentUser) });
 
     if (!booking) {
       const error = new Error('Booking not found');
@@ -348,9 +350,9 @@ class BookingService {
   /**
    * 3. Get list of bookings for current authenticated user
    */
-  async getUserBookings(userId, { page = 1, limit = 10, status }) {
+  async getUserBookings(userId, { page = 1, limit = 10, status, search }) {
     const offset = (page - 1) * limit;
-    const { count, rows } = await this.repository.listUserBookings(userId, { status, limit: Number(limit), offset: Number(offset) });
+    const { count, rows } = await this.repository.listUserBookings(userId, { status, search: search?.trim(), limit: Number(limit), offset: Number(offset) });
 
     return {
       total: count,
@@ -398,8 +400,7 @@ class BookingService {
       }
 
       // 3. Update status to cancelled
-      booking.status = 'cancelled';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'cancelled', source: 'customer_cancel', actorUserId: currentUser?.id, repository: this.repository, transaction: t });
     });
 
     await this._emitSeatUpdates(seatUpdates);
@@ -442,8 +443,7 @@ class BookingService {
             }
           }
 
-          lockedBooking.status = 'expired';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'expired', source: 'holding_expired', repository: this.repository, transaction: t });
           expiredCount++;
         });
 
@@ -503,8 +503,7 @@ class BookingService {
             }
           }
 
-          booking.status = 'expired';
-          await this.repository.save(booking, { transaction: t });
+          await recordBookingStatusTransition({ booking, toStatus: 'expired', source: 'payment_reconciliation_expired', repository: this.repository, transaction: t });
           reconciledCount++;
         });
 
@@ -520,9 +519,9 @@ class BookingService {
   /**
    * Admin/Staff: Get all bookings
    */
-  async getAllBookings({ page = 1, limit = 10, status, search }) {
+  async getAllBookings({ page = 1, limit = 10, status, search, booking_code, customer, flight_id }) {
     const offset = (page - 1) * limit;
-    const { count, rows } = await this.repository.listAllBookings({ status, search, limit: Number(limit), offset: Number(offset) });
+    const { count, rows } = await this.repository.listAllBookings({ status, search, booking_code: booking_code?.trim(), customer: customer?.trim(), flight_id: flight_id ? Number(flight_id) : undefined, limit: Number(limit), offset: Number(offset) });
 
     return {
       total: count,

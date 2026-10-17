@@ -155,6 +155,7 @@ test(`two concurrent ${gateway} callbacks recheck locked state and trigger one c
     async findLockedBookingWithPassengers(id, transaction) {
       assert.equal(id, 7); assert.equal(transaction, tx); lockOrder.push('Booking'); return booking;
     },
+    async createStatusHistory() {},
     async save(row, options) { assert.equal(options.transaction, tx); return row; },
   };
   let queue = Promise.resolve();

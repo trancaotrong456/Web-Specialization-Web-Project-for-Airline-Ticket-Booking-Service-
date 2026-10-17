@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizeBookingRepository {
-  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary } = {}) {
+  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary, BookingStatusHistory } = {}) {
     if (![Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport].every(Boolean)) {
       throw new TypeError('Booking repository requires all Booking association models');
     }
-    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary });
+    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary, BookingStatusHistory });
   }
 
   findFlight(options) { return this.Flight.findOne(options); }
@@ -81,7 +81,7 @@ class SequelizeBookingRepository {
   _seatAssignmentsInclude() {
     return this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['id'], required: false }] : [];
   }
-  findBookingDetail(id) {
+  findBookingDetail(id, { includeStatusHistory = false } = {}) {
     return this.Booking.findByPk(id, {
       include: [
         {
@@ -98,6 +98,7 @@ class SequelizeBookingRepository {
         ...(this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['flight_id', 'seat_no', 'leg_order', 'booking_passenger_id', 'status'] }] : []),
         { model: this.Payment, as: 'payments' },
         { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email', 'phone'] },
+        ...(includeStatusHistory && this.BookingStatusHistory ? [{ model: this.BookingStatusHistory, as: 'statusHistory', separate: true, order: [['created_at', 'ASC']], include: [{ model: this.User, as: 'actor', attributes: ['id', 'full_name'], required: false }] }] : []),
         ...this._itineraryInclude(),
       ],
     });
@@ -120,9 +121,10 @@ class SequelizeBookingRepository {
       ],
     });
   }
-  listUserBookings(userId, { status, limit, offset }) {
+  listUserBookings(userId, { status, search, limit, offset }) {
     const where = { user_id: userId };
     if (status) where.status = status;
+    if (search) where[Op.and] = [{ booking_code: { [Op.like]: `%${search}%` } }];
     return this.Booking.findAndCountAll({
       distinct: true, where, limit, offset, order: [['created_at', 'DESC']],
       include: [
@@ -138,15 +140,26 @@ class SequelizeBookingRepository {
       ],
     });
   }
-  listAllBookings({ status, search, limit, offset }) {
+  listAllBookings({ status, search, booking_code, customer, flight_id, limit, offset }) {
     const where = {};
     if (status) where.status = status;
+    if (booking_code) where.booking_code = { [Op.like]: `%${booking_code}%` };
     if (search) {
       where[Op.or] = [
         { booking_code: { [Op.like]: `%${search}%` } },
         { guest_email: { [Op.like]: `%${search}%` } },
+        { '$user.email$': { [Op.like]: `%${search}%` } },
+        { '$user.full_name$': { [Op.like]: `%${search}%` } },
       ];
     }
+    const combined = [];
+    if (customer) combined.push({ [Op.or]: [
+      { guest_email: { [Op.like]: `%${customer}%` } },
+      { '$user.email$': { [Op.like]: `%${customer}%` } },
+      { '$user.full_name$': { [Op.like]: `%${customer}%` } },
+    ] });
+    if (flight_id) combined.push({ [Op.or]: [{ '$flight.id$': Number(flight_id) }, { '$itinerarySegments.flight_id$': Number(flight_id) }] });
+    if (combined.length) where[Op.and] = combined;
     return this.Booking.findAndCountAll({
       distinct: true, where, limit, offset, order: [['created_at', 'DESC']],
       include: [
@@ -162,6 +175,10 @@ class SequelizeBookingRepository {
         ...this._itineraryInclude(),
       ],
     });
+  }
+  createStatusHistory(values, options = {}) {
+    if (!this.BookingStatusHistory) throw new TypeError('BookingStatusHistory model is required');
+    return this.BookingStatusHistory.create(values, options);
   }
   findBookings(options) { return this.Booking.findAll(options); }
   findExpiredHoldingBookings(now) {

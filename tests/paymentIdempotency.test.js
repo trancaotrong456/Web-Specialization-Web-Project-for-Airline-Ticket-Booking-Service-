@@ -16,6 +16,10 @@ function createFixture() {
   const payments = new Map();
   const calls = { created: 0, saved: 0, paymentResponsesSaved: 0 };
   const repository = {
+    async createStatusHistory(values, options) {
+      assert.equal(options.transaction, transaction);
+      return values;
+    },
     async findLockedBooking(id, tx) {
       assert.equal(id, booking.id);
       assert.equal(tx, transaction);
