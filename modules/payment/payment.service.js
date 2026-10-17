@@ -13,6 +13,7 @@ const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 const { createHash } = require('node:crypto');
 const { recordBookingStatusTransition } = require('../booking/bookingStatusHistory.util');
+const { wholeVndAmount } = require('../ancillaries/money.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -196,7 +197,7 @@ class PaymentService {
       vnp_TxnRef: transactionRef,
       vnp_OrderInfo: `Thanh toan ve may bay ${booking.booking_code}`,
       vnp_OrderType: 'other',
-      vnp_Amount: Math.round(Number(booking.total_amount) * 100),
+      vnp_Amount: wholeVndAmount(booking.total_amount) * 100,
       vnp_ReturnUrl: returnUrl,
       vnp_IpAddr: ipAddress,
       vnp_CreateDate: formatDateVnpay(new Date()),
@@ -208,7 +209,7 @@ class PaymentService {
   }
 
   async _buildPayosDemoResponse(booking, transactionRef) {
-    const amount = Math.round(Number(booking.total_amount));
+    const amount = wholeVndAmount(booking.total_amount);
     const demoData = { orderCode: Number(transactionRef), amount, status: 'success', timestamp: Date.now() };
     const signature = signPayosDemoPayload(demoData, this._getPayOSDemoSecret());
     const qrPayload = JSON.stringify({
@@ -385,6 +386,7 @@ class PaymentService {
       }
 
       verifyBookingAccess(booking, currentUser, guest_email);
+      wholeVndAmount(booking.total_amount);
 
       if (idempotency_key) {
         requestFingerprint = this._paymentRequestFingerprint({
@@ -479,7 +481,7 @@ class PaymentService {
         try {
           const paymentLink = await payOS.paymentRequests.get(Number(txnRef));
           if (Number(paymentLink.orderCode) !== Number(txnRef)
-            || Math.round(Number(paymentLink.amount)) !== Math.round(Number(bookingData.total_amount))) {
+            || Number(paymentLink.amount) !== wholeVndAmount(bookingData.total_amount)) {
             throw new Error('Existing payOS link does not match the payment record');
           }
           recoveredResponse = {
@@ -519,14 +521,14 @@ class PaymentService {
       try {
         paymentLink = await payOS.paymentRequests.create({
           orderCode: Number(txnRef),
-          amount: Math.round(Number(bookingData.total_amount)),
+          amount: wholeVndAmount(bookingData.total_amount),
           description: `Ve may bay ${bookingData.booking_code}`.slice(0, 25),
           returnUrl,
           cancelUrl,
           items: [{
             name: `Ve bay ${bookingData.booking_code}`.slice(0, 25),
             quantity: 1,
-            price: Math.round(Number(bookingData.total_amount)),
+            price: wholeVndAmount(bookingData.total_amount),
           }],
         });
 
@@ -652,7 +654,8 @@ class PaymentService {
     }
 
     // BƯỚC 5: Đối chiếu số tiền thanh toán (Amount)
-    if (Math.round(Number(payment.amount)) !== Math.round(vnpAmount)) {
+    if (!/^\d+$/.test(String(queryParams.vnp_Amount))
+      || Number(queryParams.vnp_Amount) !== wholeVndAmount(payment.amount) * 100) {
       console.warn(`[VNPay IPN] Amount mismatch: Expected ${payment.amount}, received ${vnpAmount}`);
       return { RspCode: '04', Message: 'Invalid amount' };
     }
@@ -825,7 +828,7 @@ class PaymentService {
       return { message: 'Webhook acknowledged; local order not found' };
     }
 
-    if (Math.round(Number(payment.amount)) !== Math.round(Number(amount))) {
+    if (!Number.isSafeInteger(Number(amount)) || wholeVndAmount(payment.amount) !== Number(amount)) {
       const error = new Error('Amount mismatch');
       error.statusCode = 400;
       throw error;
@@ -1034,6 +1037,12 @@ class PaymentService {
       if (!successfulPayment) {
         const error = new Error('No successful payment found for this booking to refund.');
         error.statusCode = 400;
+        throw error;
+      }
+
+      if (wholeVndAmount(successfulPayment.amount) !== wholeVndAmount(booking.total_amount)) {
+        const error = new Error('Payment and Booking VND amounts do not match; refund requires review');
+        error.statusCode = 409;
         throw error;
       }
 

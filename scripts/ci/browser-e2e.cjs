@@ -58,6 +58,9 @@ async function main() {
     const admin = await context.newPage();
     admin.on('pageerror', (error) => errors.push(`admin: ${error.message}`));
     await login(admin, fixture.adminEmail);
+    await admin.goto(`${frontendUrl}/admin/ancillaries`);
+    await admin.getByRole('heading', { name: 'Dịch vụ bổ sung' }).waitFor({ state: 'visible' });
+    await admin.getByText('CI 10 kg baggage', { exact: false }).waitFor({ state: 'visible' });
     await admin.goto(`${frontendUrl}/admin/flights/${fixture.adminFlightId}`);
     await admin.getByRole('heading', { name: 'Trạng thái và lịch sử' }).waitFor({ state: 'visible' });
     await admin.locator('#flight-status-update').selectOption('delayed');
@@ -91,7 +94,13 @@ async function main() {
     await customer.getByRole('button', { name: 'Tạo đặt chỗ và tiếp tục thanh toán' }).click();
     await customer.waitForURL(/\/bookings\/\d+\/payment/, { timeout: 30000 });
     await customer.getByRole('radio', { name: /payOS/ }).check();
+    const paymentResponsePromise = customer.waitForResponse((response) => response.url().includes('/payments/initiate') && response.request().method() === 'POST', { timeout: 30000 });
     await customer.getByRole('button', { name: 'Tiếp tục thanh toán' }).click();
+    const paymentResponse = await paymentResponsePromise;
+    assert.equal(paymentResponse.status(), 200, 'Payment initiation must succeed.');
+    const payment = (await paymentResponse.json()).data;
+    assert.equal(Number(payment.amount), payment.demo_webhook.body.amount, 'Booking total and signed demo callback amount must agree in whole VND.');
+    assert.equal(Number.isInteger(payment.demo_webhook.body.amount), true, 'Gateway amount must be whole VND.');
     await customer.getByRole('button', { name: 'Mô phỏng xác nhận demo' }).waitFor({ state: 'visible', timeout: 30000 });
     await customer.getByRole('button', { name: 'Mô phỏng xác nhận demo' }).click();
     await customer.getByRole('heading', { name: 'Kiểm tra trạng thái đặt chỗ' }).waitFor({ state: 'visible', timeout: 30000 });
@@ -112,7 +121,7 @@ async function main() {
     await assert.rejects(customer.getByRole('button', { name: 'Chọn chuyến bay' }).first().waitFor({ state: 'visible', timeout: 1500 }), 'Cancelled fixture must not be offered as bookable.');
     assert.deepEqual(errors, [], 'Browser reported uncaught JavaScript errors.');
     await context.tracing.stop({ path: path.join(artifactDirectory, 'browser-e2e-trace.zip') });
-    console.log('Browser E2E passed: Admin flight status, customer search, seat and ancillary selection, demo payment, Manage Booking, notifications, round-trip and multi-city itinerary selection, cancelled-flight exclusion.');
+    console.log('Browser E2E passed: Admin ancillaries list, flight status, customer search, seat and ancillary selection, whole-VND demo payment, Manage Booking, notifications, round-trip and multi-city itinerary selection, cancelled-flight exclusion.');
   } catch (error) {
     const page = context.pages().at(-1);
     if (page) await page.screenshot({ path: path.join(artifactDirectory, 'browser-e2e-failure.png'), fullPage: true }).catch(() => {});

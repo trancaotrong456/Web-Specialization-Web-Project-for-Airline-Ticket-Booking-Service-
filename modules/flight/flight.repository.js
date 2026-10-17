@@ -23,9 +23,27 @@ class SequelizeFlightRepository {
     if (min_seats) where.available_seats = { [this.Op.gte]: Number(min_seats) };
     if (dateStart) where.departure_time = { [this.Op.gte]: dateStart, [this.Op.lt]: dateEnd };
     if (min_seats) {
+      // Match BookingRepository.countReservedFareSeats: count distinct passengers
+      // on active bookings, including every itinerary segment for this fare.
+      const segmentJoin = this.BookingSegment
+        ? 'LEFT JOIN `booking_segments` AS `reserved_segment` ON `reserved_segment`.`booking_id` = `reserved_booking`.`id`'
+        : '';
+      const segmentFare = this.BookingSegment
+        ? ' OR `reserved_segment`.`fare_class_id` = `fareClasses`.`id`'
+        : '';
+      const remainingQuota = Sequelize.literal([
+        '(`fareClasses`.`seat_quota` - (',
+        'SELECT COUNT(DISTINCT `reserved_passenger`.`id`)',
+        'FROM `booking_passengers` AS `reserved_passenger`',
+        'JOIN `bookings` AS `reserved_booking` ON `reserved_booking`.`id` = `reserved_passenger`.`booking_id`',
+        segmentJoin,
+        "WHERE `reserved_booking`.`status` IN ('holding', 'pending_payment', 'confirmed')",
+        `AND (\`reserved_booking\`.\`fare_class_id\` = \`fareClasses\`.\`id\`${segmentFare})`,
+        '))',
+      ].join(' '));
       fareWhere[this.Op.or] = [
         { seat_quota: { [this.Op.is]: null } },
-        { seat_quota: { [this.Op.gte]: Number(min_seats) } },
+        Sequelize.where(remainingQuota, '>=', Number(min_seats)),
       ];
     }
     if (min_price !== undefined || max_price !== undefined) {
@@ -107,7 +125,7 @@ class SequelizeFlightRepository {
     const [legacyBookings, itinerarySegments] = await Promise.all([
       this.Booking.findAll({
         where: { flight_id: flightId, status: activeStatuses },
-        attributes: ['id', 'user_id', 'booking_code'],
+        attributes: ['id', 'user_id', 'guest_email', 'booking_code'],
         transaction,
       }),
       this.BookingSegment ? this.BookingSegment.findAll({
@@ -117,7 +135,7 @@ class SequelizeFlightRepository {
           model: this.Booking,
           as: 'booking',
           where: { status: activeStatuses },
-          attributes: ['id', 'user_id', 'booking_code'],
+          attributes: ['id', 'user_id', 'guest_email', 'booking_code'],
           required: true,
         }],
         transaction,
@@ -126,7 +144,12 @@ class SequelizeFlightRepository {
     const bookings = [...legacyBookings, ...itinerarySegments.map((segment) => segment.booking)];
     const unique = new Map();
     for (const booking of bookings) {
-      if (booking?.user_id) unique.set(String(booking.id), { userId: booking.user_id, flightCode: String(flightId) });
+      if (!booking?.id) continue;
+      const email = typeof booking.guest_email === 'string' ? booking.guest_email.trim().toLowerCase() : null;
+      if (booking.user_id || email) unique.set(String(booking.id), {
+        bookingId: booking.id, userId: booking.user_id || null, email: booking.user_id ? null : email,
+        flightCode: String(flightId),
+      });
     }
     return [...unique.values()];
   }

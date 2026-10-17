@@ -23,6 +23,7 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
   const { signPayosDemoPayload } = require('../utils/checksum.util');
   const FlightService = require('../modules/flight/flight.service');
   const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
+  const { createFlightStatusNotificationAdapter } = require('../modules/notification/flightStatusNotificationAdapter');
   const { NotificationEventPublisher } = require('../modules/notification/notificationEventPublisher');
   const { SequelizeNotificationOutboxRepository } = require('../modules/notification/notificationOutbox.repository');
 
@@ -149,6 +150,38 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
       assert.equal(await db.BookingPassenger.count({ where: { booking_id: f.fixture.bookingIds } }), 1);
       assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 3);
       assert.equal(await f.bookingRepository.countReservedFareSeats(fareClass.id), 1);
+    });
+
+    await t.test('SQL search excludes a held-out fare quota and restores it after cancellation', async () => {
+      const f = await createFixture();
+      const { flight, fareClass } = await f.makeFlight({ seats: 3, quota: 1 });
+      const search = () => f.flightService.searchFlights({ departure_airport_id: flight.departure_airport_id,
+        arrival_airport_id: flight.arrival_airport_id, min_seats: 1, page: 1, limit: 5 });
+      assert.equal((await search()).data.some((row) => Number(row.id) === Number(flight.id)), true);
+      const booking = await f.bookingService.createHoldingBooking(requestFor(f.fixture, flight, fareClass));
+      f.fixture.bookingIds.push(booking.id);
+      assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 2);
+      assert.equal((await search()).data.some((row) => Number(row.id) === Number(flight.id)), false);
+      await f.bookingService.cancelHoldingBooking(booking.id, { id: f.user.id, role: { name: 'customer' } });
+      assert.equal((await search()).data.some((row) => Number(row.id) === Number(flight.id)), true);
+    });
+
+    await t.test('fractional VND is rejected before booking inventory or payment intent changes', async () => {
+      const f = await createFixture();
+      const { flight, fareClass } = await f.makeFlight({ seats: 3, quota: 3 });
+      await fareClass.update({ price: '1250000.50' });
+      await assert.rejects(f.bookingService.createHoldingBooking(requestFor(f.fixture, flight, fareClass)),
+        (error) => error.statusCode === 400 && /VND/.test(error.message));
+      assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 3);
+      await fareClass.update({ price: '1250000.00' });
+      const booking = await f.bookingService.createHoldingBooking(requestFor(f.fixture, flight, fareClass));
+      f.fixture.bookingIds.push(booking.id);
+      await db.Booking.update({ total_amount: '1250000.49' }, { where: { id: booking.id } });
+      await assert.rejects(f.paymentService.initiatePayment({ booking_id: booking.id, payment_method: 'payos',
+        idempotency_key: `ci:${prefix}:fractional`, currentUser: { id: f.user.id, role: { name: 'customer' } } }),
+      (error) => error.statusCode === 400 && /VND/.test(error.message));
+      assert.equal(await db.Payment.count({ where: { booking_id: booking.id } }), 0);
+      assert.equal((await db.Booking.findByPk(booking.id)).status, 'holding');
     });
 
     await t.test('seat conflict on a later itinerary segment rolls back earlier inventory and seat holds', async () => {
@@ -319,6 +352,33 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
       const results = await f.flightService.searchFlights({ departure_airport_id: flight.departure_airport_id, arrival_airport_id: flight.arrival_airport_id, min_price: '1000000', sort_by: 'price_low', page: 1, limit: 5 });
       assert.equal(results.data.some((row) => Number(row.id) === Number(flight.id)), false, 'cancelled flights must not appear in bookable search results');
       assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 3);
+    });
+
+    await t.test('flight delay queues one registered inbox and one guest email without guest realtime disclosure', async () => {
+      const f = await createFixture();
+      const { flight, fareClass } = await f.makeFlight({ seats: 4, quota: 4 });
+      const registered = await f.bookingService.createHoldingBooking(requestFor(f.fixture, flight, fareClass));
+      f.fixture.bookingIds.push(registered.id);
+      const guestEmail = `${prefix}@example.test`;
+      const guest = await f.bookingService.createHoldingBooking(requestFor(f.fixture, flight, fareClass,
+        { user_id: null, currentUser: null, guest_email: guestEmail }));
+      f.fixture.bookingIds.push(guest.id);
+      const service = new FlightService({ repository: f.flightService.repository, getIO: noopSocket,
+        flightStatusNotifier: createFlightStatusNotificationAdapter({ publisher }) });
+      const change = { status: 'delayed', reason: 'CI weather delay', actorUserId: f.user.id };
+      await service.updateFlightStatus(flight.id, change);
+      await service.updateFlightStatus(flight.id, change);
+      const events = await db.NotificationOutbox.findAll({ where: { aggregate_type: 'flight', aggregate_id: flight.id, event_type: 'FLIGHT_DELAYED' } });
+      f.fixture.outboxIds.push(...events.map((event) => event.id));
+      assert.equal(events.length, 2);
+      const guestEvent = events.find((event) => Number(event.recipient_user_id || 0) === 0);
+      assert.equal(guestEvent.recipient_email, guestEmail);
+      assert.equal(guestEvent.email_status, 'pending');
+      assert.equal(guestEvent.realtime_status, 'skipped');
+      assert.equal(await db.Notification.count({ where: { outbox_id: guestEvent.id } }), 0);
+      const registeredEvent = events.find((event) => Number(event.recipient_user_id) === Number(f.user.id));
+      assert.equal(await db.Notification.count({ where: { outbox_id: registeredEvent.id, user_id: f.user.id } }), 1);
+      assert.equal(await db.FlightStatusHistory.count({ where: { flight_id: flight.id, to_status: 'delayed' } }), 1);
     });
 
     await t.test('notification outbox rolls back with domain transaction, deduplicates and claims one event once', async () => {

@@ -21,4 +21,15 @@ function addAmounts(values) {
   return fromMinorUnits(Number(total));
 }
 
-module.exports = { toMinorUnits, fromMinorUnits, addAmounts };
+function wholeVndAmount(value) {
+  let minor;
+  try { minor = toMinorUnits(value); } catch (_error) { minor = null; }
+  if (minor === null || minor % 100 !== 0) {
+    const error = new Error('VND amount must be a non-negative whole number');
+    error.statusCode = 400;
+    throw error;
+  }
+  return minor / 100;
+}
+
+module.exports = { toMinorUnits, fromMinorUnits, addAmounts, wholeVndAmount };

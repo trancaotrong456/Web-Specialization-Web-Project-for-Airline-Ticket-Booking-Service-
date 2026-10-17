@@ -117,13 +117,13 @@ test('booking creation stores passenger/segment-linked ancillary snapshots and a
   const ancillaryService = { async reserveForBooking(args) {
     received = args;
     return { snapshots: [{ id: 1, booking_id: args.booking.id, passenger_id: args.passengers[0].id,
-      booking_segment_id: args.segments[0].id, line_total_snapshot: '250.50' }], subtotal: '250.50' };
+      booking_segment_id: args.segments[0].id, line_total_snapshot: '250.00' }], subtotal: '250.00' };
   } };
   const f = inventory({ ancillaryService });
   const request = f.request(2, 11, true);
   request.ancillary_selections = [{ offer_id: 12, passenger_index: 0, leg_order: 1, quantity: 1 }];
   const booking = await f.service.createHoldingBooking(request);
-  assert.equal(booking.total_amount, 1050.5);
+  assert.equal(booking.total_amount, 1050);
   assert.equal(received.booking.id, booking.id);
   assert.equal(received.passengers[0].id, 901);
   assert.deepEqual(received.segments.map(({ id, leg_order }) => [id, leg_order]), [[501, 1], [502, 2]]);

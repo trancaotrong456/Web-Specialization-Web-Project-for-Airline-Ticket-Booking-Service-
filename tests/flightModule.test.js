@@ -18,16 +18,22 @@ test('Flight repository preserves scheduled search filters, distinct count, asso
   const dateStart = new Date('2026-10-12T17:00:00.000Z');
   const dateEnd = new Date('2026-10-13T17:00:00.000Z');
   await repository.searchPage({ departure_airport_id: '1', arrival_airport_id: '2', airline_id: '9', min_seats: '3', dateStart, dateEnd, page: '2', limit: '7' });
-  assert.deepEqual(calls[0], {
-    where: { status: 'scheduled', departure_airport_id: '1', arrival_airport_id: '2', airline_id: '9', available_seats: { [gte]: 3 }, departure_time: { [gte]: dateStart, [lt]: dateEnd } },
-    distinct: true, limit: 7, offset: 7, order: [['departure_time', 'ASC']],
-    include: [
-      { model: models.Airline, as: 'airline', attributes: ['id', 'name', 'iata_code', 'logo_url'] },
-      { model: models.Airport, as: 'departureAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
-      { model: models.Airport, as: 'arrivalAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
-      { model: models.FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price', 'seat_quota'], required: true, where: { [or]: [{ seat_quota: { [is]: null } }, { seat_quota: { [gte]: 3 } }] } },
-    ],
-  });
+  assert.deepEqual(calls[0].where, { status: 'scheduled', departure_airport_id: '1', arrival_airport_id: '2', airline_id: '9', available_seats: { [gte]: 3 }, departure_time: { [gte]: dateStart, [lt]: dateEnd } });
+  assert.equal(calls[0].distinct, true);
+  assert.deepEqual([calls[0].limit, calls[0].offset, calls[0].order], [7, 7, [['departure_time', 'ASC']]]);
+  assert.deepEqual(calls[0].include.slice(0, 3), [
+    { model: models.Airline, as: 'airline', attributes: ['id', 'name', 'iata_code', 'logo_url'] },
+    { model: models.Airport, as: 'departureAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
+    { model: models.Airport, as: 'arrivalAirport', attributes: ['id', 'name', 'iata_code', 'city', 'country'] },
+  ]);
+  const fare = calls[0].include[3];
+  assert.equal(fare.as, 'fareClasses');
+  assert.equal(fare.required, true);
+  assert.deepEqual(fare.attributes, ['id', 'class_name', 'price', 'seat_quota']);
+  assert.deepEqual(fare.where[or][0], { seat_quota: { [is]: null } });
+  assert.match(fare.where[or][1].attribute.val, /booking_passengers/);
+  assert.equal(fare.where[or][1].comparator, '>=');
+  assert.equal(fare.where[or][1].logic, 3);
   await repository.findAdminPage({ page: 1, limit: 20, status: 'cancelled' });
   assert.deepEqual(calls[1].where, { status: 'cancelled' });
   assert.equal(calls[1].distinct, true);

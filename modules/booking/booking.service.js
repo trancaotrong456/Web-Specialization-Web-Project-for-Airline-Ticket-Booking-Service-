@@ -3,7 +3,7 @@ const { getIO } = require('../../sockets');
 const { verifyBookingAccess, isAdmin } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
-const { toMinorUnits, fromMinorUnits } = require('../ancillaries/money.util');
+const { toMinorUnits, fromMinorUnits, wholeVndAmount } = require('../ancillaries/money.util');
 const { recordBookingStatusTransition } = require('./bookingStatusHistory.util');
 
 class BookingService {
@@ -169,7 +169,7 @@ class BookingService {
       }
 
       const baseAmountMinor = legs.reduce((sum, leg) => {
-        const legMinor = toMinorUnits(leg.fareClass.price) * passengerCount;
+        const legMinor = wholeVndAmount(leg.fareClass.price) * 100 * passengerCount;
         if (!Number.isSafeInteger(legMinor) || !Number.isSafeInteger(sum + legMinor)) throw new RangeError('Booking fare total exceeds safe money range');
         return sum + legMinor;
       }, 0);
@@ -214,6 +214,8 @@ class BookingService {
         // Increment promotion usage
         await this.repository.increment(promo, 'used_count', { by: 1, transaction: t });
       }
+
+      wholeVndAmount(fromMinorUnits(totalAmountMinor));
 
       // 4. Hold seats on every selected flight atomically.
       for (const leg of legs) {
@@ -282,7 +284,7 @@ class BookingService {
           booking, passengers: createdPassengers, segments: createdSegments,
           selections: ancillary_selections, transaction: t,
         });
-        booking.total_amount = Number(fromMinorUnits(toMinorUnits(booking.total_amount) + toMinorUnits(reserved.subtotal)));
+        booking.total_amount = wholeVndAmount(fromMinorUnits(toMinorUnits(booking.total_amount) + toMinorUnits(reserved.subtotal)));
         await this.repository.save(booking, { transaction: t });
       }
 

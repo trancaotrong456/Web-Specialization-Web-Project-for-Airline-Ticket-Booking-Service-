@@ -53,6 +53,27 @@ test('worker retries temporary channel failure with bounded attempts and keeps t
   assert.equal(savedEvent.available_at.getTime(), 6000);
 });
 
+test('guest flight notification retries email without emitting to any Socket.IO room', async () => {
+  const queued = event({ event_type: 'FLIGHT_DELAYED', recipient_user_id: null,
+    recipient_email: 'guest@example.test', realtime_status: 'skipped', email_status: 'pending' });
+  const mails = [];
+  let attempts = 0;
+  const worker = new NotificationDeliveryWorker({
+    repository: { claimNext: async () => ({ event: queued, leaseToken: 'lease' }), saveClaimed: async () => {} },
+    emailConfigured: () => true,
+    emailProvider: { sendMail: async (mail) => { attempts += 1; if (attempts === 1) throw new Error('temporary'); mails.push(mail); } },
+    getSocket: () => { throw new Error('guest must not use Socket.IO'); }, logger: { error() {} },
+  });
+  await worker.runOne();
+  assert.equal(queued.status, 'pending');
+  assert.equal(queued.email_attempts, 1);
+  await worker.runOne();
+  assert.equal(queued.status, 'processed');
+  assert.equal(mails.length, 1);
+  assert.equal(mails[0].to, 'guest@example.test');
+  assert.equal(queued.realtime_status, 'skipped');
+});
+
 test('worker marks a channel terminal after the configured retry limit', async () => {
   const queued = event({ email_attempts: 2, realtime_status: 'sent' });
   const worker = new NotificationDeliveryWorker({

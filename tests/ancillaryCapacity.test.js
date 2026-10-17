@@ -27,9 +27,9 @@ function makeService(offers) {
 
 test('reserves configured baggage, meal, and priority for concrete passengers and itinerary segments using server prices', async () => {
   const offers = new Map([
-    [1, offer(1, 'baggage', '20 kg bag', 10, 101, '1250.50')],
-    [2, offer(2, 'meal', 'Vegetarian meal', 11, 202, '250.25')],
-    [3, offer(3, 'priority', 'Priority boarding', 10, 101, '99.99')],
+    [1, offer(1, 'baggage', '20 kg bag', 10, 101, '1250.00')],
+    [2, offer(2, 'meal', 'Vegetarian meal', 11, 202, '250.00')],
+    [3, offer(3, 'priority', 'Priority boarding', 10, 101, '100.00')],
   ]);
   const f = makeService(offers);
   const result = await f.service.reserveForBooking({
@@ -44,9 +44,9 @@ test('reserves configured baggage, meal, and priority for concrete passengers an
     transaction: {},
   });
   assert.deepEqual(result.snapshots.map(({ booking_id, passenger_id, booking_segment_id, line_total_snapshot }) => [booking_id, passenger_id, booking_segment_id, line_total_snapshot]), [
-    [50, 700, 800, '1250.50'], [50, 701, 801, '500.50'], [50, 700, 800, '99.99'],
+    [50, 700, 800, '1250.00'], [50, 701, 801, '500.00'], [50, 700, 800, '100.00'],
   ]);
-  assert.equal(result.subtotal, '1850.99');
+  assert.equal(result.subtotal, '1850.00');
   assert.deepEqual([...offers.values()].map((item) => item.reserved_quantity), [1, 2, 1]);
 });
 

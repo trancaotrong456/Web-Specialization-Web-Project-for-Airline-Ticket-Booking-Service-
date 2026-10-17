@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const FlightService = require('../modules/flight/flight.service');
+const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
+const { Op } = require('sequelize');
 
 test('Flight Status publishes delayed/cancelled events through the same transaction for active booking users', async () => {
   const flight = {
@@ -82,4 +84,19 @@ test('exact Flight Status retry creates neither history nor duplicate notificati
   });
 
   assert.equal(sideEffects, 0);
+});
+
+test('recipient lookup includes registered and guest bookings once across primary and itinerary legs', async () => {
+  const registered = { id: 1, user_id: 7, guest_email: null };
+  const guest = { id: 2, user_id: null, guest_email: 'guest@example.test' };
+  const repository = new SequelizeFlightRepository({
+    sequelize: {}, Flight: {}, Airline: {}, Airport: {}, FareClass: {}, Op,
+    Booking: { findAll: async () => [registered, guest] },
+    BookingSegment: { findAll: async () => [{ booking: guest }] },
+  });
+  const recipients = await repository.findStatusNotificationRecipients(41, {});
+  assert.deepEqual(recipients, [
+    { bookingId: 1, userId: 7, email: null, flightCode: '41' },
+    { bookingId: 2, userId: null, email: 'guest@example.test', flightCode: '41' },
+  ]);
 });

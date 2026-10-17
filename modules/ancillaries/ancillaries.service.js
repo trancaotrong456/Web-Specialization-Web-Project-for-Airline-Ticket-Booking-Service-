@@ -1,6 +1,6 @@
 'use strict';
 
-const { toMinorUnits, fromMinorUnits } = require('./money.util');
+const { toMinorUnits, fromMinorUnits, wholeVndAmount } = require('./money.util');
 
 function httpError(message, statusCode = 400) {
   const error = new Error(message);
@@ -52,7 +52,7 @@ class AncillariesService {
     const capacity = Number(input.capacity);
     const maxQuantity = input.max_quantity_per_passenger == null || input.max_quantity_per_passenger === '' ? null : Number(input.max_quantity_per_passenger);
     const name = typeof input.offer_name === 'string' ? input.offer_name.trim() : '';
-    const price = fromMinorUnits(toMinorUnits(input.unit_price));
+    const price = fromMinorUnits(wholeVndAmount(input.unit_price) * 100);
     if (![serviceId, flightId, fareClassId].every((value) => Number.isSafeInteger(value) && value > 0)
       || !Number.isSafeInteger(capacity) || capacity < 0
       || (maxQuantity !== null && (!Number.isSafeInteger(maxQuantity) || maxQuantity < 1))
@@ -107,7 +107,7 @@ class AncillariesService {
       if (!offer) throw httpError('Ancillary offer not found', 404);
       if (!offer.is_active || !offer.service?.is_active) throw httpError('Ancillary offer is no longer available');
       if (String(offer.currency).toUpperCase() !== 'VND') throw httpError('Ancillary offer currency is not supported');
-      const unitMinor = toMinorUnits(offer.unit_price);
+      const unitMinor = wholeVndAmount(offer.unit_price) * 100;
       if (!Number.isSafeInteger(Number(offer.capacity)) || Number(offer.capacity) < 0
         || !Number.isSafeInteger(Number(offer.reserved_quantity)) || Number(offer.reserved_quantity) < 0) {
         throw httpError('Ancillary offer capacity is invalid');
@@ -225,6 +225,7 @@ class AncillariesService {
       const newResult = await this.reserveForBooking({ booking, passengers: booking.passengers || [], segments: booking.itinerarySegments || [], selections: selections || [], transaction });
       const nextAmountMinor = toMinorUnits(booking.total_amount) - oldSubtotal + toMinorUnits(newResult.subtotal);
       if (nextAmountMinor < 0) throw new Error('Booking total invariant violated during ancillary replacement');
+      wholeVndAmount(fromMinorUnits(nextAmountMinor));
       booking.total_amount = fromMinorUnits(nextAmountMinor);
       await this.repository.save(booking, transaction);
       return { booking, subtotal: newResult.subtotal, ancillaries: newResult.snapshots };

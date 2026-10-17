@@ -16,13 +16,15 @@ function createFlightStatusNotificationAdapter({ publisher } = {}) {
       }
       const results = [];
       for (const recipient of recipients) {
-        if (!recipient?.userId) continue;
+        if (!recipient?.userId && (!recipient?.bookingId || !recipient?.email)) continue;
+        const identity = recipient.userId ? `user:${recipient.userId}` : `booking:${recipient.bookingId}`;
         results.push(await publisher.publish({
-          eventKey: `flight:${flightId}:status:${eventId}:user:${recipient.userId}`,
+          eventKey: `flight:${flightId}:status:${eventId}:${identity}`,
           eventType,
           aggregateType: 'flight',
           aggregateId: flightId,
-          recipientUserId: recipient.userId,
+          recipientUserId: recipient.userId || null,
+          recipientEmail: recipient.userId ? null : recipient.email,
           relatedType: 'flight',
           relatedId: flightId,
           variables: { flight: recipient.flightCode || flightId },

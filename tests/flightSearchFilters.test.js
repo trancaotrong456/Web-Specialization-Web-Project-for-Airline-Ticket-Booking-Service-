@@ -43,13 +43,11 @@ test('Flight search applies fare, airline, seat, local-time and duration filters
   assert.equal(options.offset, 7);
   const fares = options.include.find((item) => item.as === 'fareClasses');
   assert.equal(fares.required, true);
-  assert.deepEqual(fares.where, {
-    [Op.or]: [
-      { seat_quota: { [Op.is]: null } },
-      { seat_quota: { [Op.gte]: 2 } },
-    ],
-    price: { [Op.gte]: '500000', [Op.lte]: '2500000' }, class_name: 'Business',
-  });
+  assert.deepEqual(fares.where[Op.or][0], { seat_quota: { [Op.is]: null } });
+  assert.equal(fares.where[Op.or][1].comparator, '>=');
+  assert.equal(fares.where[Op.or][1].logic, 2);
+  assert.deepEqual(fares.where.price, { [Op.gte]: '500000', [Op.lte]: '2500000' });
+  assert.equal(fares.where.class_name, 'Business');
   assert.equal(options.where[Op.and].length, 4);
   assert.equal(options.where[Op.and][0].attribute.fn, 'TIME');
   assert.equal(options.where[Op.and][0].attribute.args[0].val, 'DATE_ADD(`departure_time`, INTERVAL 7 HOUR)');
@@ -78,6 +76,21 @@ test('Flight search maps advanced filters without changing the Vietnam-local dat
   assert.equal(received.min_duration_minutes, 60);
   assert.equal(received.max_duration_minutes, 360);
   assert.equal(received.sort_by, 'duration_shortest');
+});
+
+test('Flight search fare eligibility uses remaining quota after active booking passengers', async () => {
+  let options;
+  const repository = new SequelizeFlightRepository({
+    sequelize: {}, Flight: { findAndCountAll: async (query) => { options = query; return { count: 0, rows: [] }; } },
+    Airline: {}, Airport: {}, FareClass: {}, Booking: {}, BookingSegment: {}, Op: Sequelize.Op,
+  });
+  await repository.searchPage({ min_seats: 2, page: 1, limit: 10 });
+  const fareCondition = options.include.find((item) => item.as === 'fareClasses').where[Sequelize.Op.or][1];
+  assert.match(fareCondition.attribute.val, /booking_passengers/i);
+  assert.match(fareCondition.attribute.val, /booking_segments/i);
+  assert.match(fareCondition.attribute.val, /holding.*pending_payment.*confirmed/i);
+  assert.equal(fareCondition.comparator, '>=');
+  assert.equal(fareCondition.logic, 2);
 });
 
 test('Flight search rejects unknown, invalid, or contradictory filter parameters', async () => {

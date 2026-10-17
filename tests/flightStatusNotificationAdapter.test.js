@@ -18,10 +18,13 @@ test('Flight Status event contract maps delayed, cancelled and schedule changes 
   assert.equal(events.length, 3);
 });
 
-test('Flight Status contract rejects unstable event identity and ignores guests without an account', async () => {
+test('Flight Status contract rejects unstable event identity and publishes guest email without a user room', async () => {
   const events = [];
   const adapter = createFlightStatusNotificationAdapter({ publisher: { publish: async (...args) => events.push(args) } });
   await assert.rejects(adapter.handleFlightStatusChanged({ flightId: 88, changeType: 'cancelled' }), /stable eventId/);
-  assert.deepEqual(await adapter.handleFlightStatusChanged({ eventId: 'e1', flightId: 88, changeType: 'cancelled', recipients: [{ email: 'guest@example.test' }] }), []);
-  assert.equal(events.length, 0);
+  await adapter.handleFlightStatusChanged({ eventId: 'e1', flightId: 88, changeType: 'cancelled', recipients: [{ bookingId: 5, email: 'guest@example.test' }] });
+  assert.equal(events.length, 1);
+  assert.equal(events[0][0].recipientEmail, 'guest@example.test');
+  assert.equal(events[0][0].recipientUserId, null);
+  assert.equal(events[0][0].eventKey, 'flight:88:status:e1:booking:5');
 });
