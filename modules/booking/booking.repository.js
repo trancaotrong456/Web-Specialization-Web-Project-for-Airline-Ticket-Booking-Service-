@@ -1,11 +1,11 @@
 const { Op } = require('sequelize');
 
 class SequelizeBookingRepository {
-  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport } = {}) {
+  constructor({ Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary, BookingStatusHistory } = {}) {
     if (![Booking, BookingPassenger, Flight, FareClass, Promotion, User, Payment, Airline, Airport].every(Boolean)) {
       throw new TypeError('Booking repository requires all Booking association models');
     }
-    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport });
+    Object.assign(this, { Booking, BookingPassenger, BookingSegment, Flight, FareClass, Promotion, User, Payment, Airline, Airport, FlightSeat, BookingAncillary, BookingStatusHistory });
   }
 
   findFlight(options) { return this.Flight.findOne(options); }
@@ -14,7 +14,25 @@ class SequelizeBookingRepository {
   }
   findFareClass(options) { return this.FareClass.findOne(options); }
   findFareClassForFlight(id, flightId, transaction) {
-    return this.FareClass.findOne({ where: { id, flight_id: flightId }, transaction });
+    return this.FareClass.findOne({ where: { id, flight_id: flightId }, lock: transaction.LOCK.UPDATE, transaction });
+  }
+  countReservedFareSeats(fareClassId, transaction) {
+    // Count passengers, not bookings. DISTINCT avoids multiplying passengers by
+    // the additional legs joined to their booking. Expiry frees quota only when
+    // its status transition and physical seat release commit together.
+    const fares = [{ '$booking.fare_class_id$': fareClassId }];
+    if (this.BookingSegment) fares.push({ '$booking.itinerarySegments.fare_class_id$': fareClassId });
+    return this.BookingPassenger.count({
+      distinct: true, col: 'id', transaction,
+      where: { [Op.or]: fares },
+      include: [{
+        model: this.Booking, as: 'booking', required: true, attributes: [],
+        where: { status: { [Op.in]: ['holding', 'pending_payment', 'confirmed'] } },
+        include: this.BookingSegment ? [{
+          model: this.BookingSegment, as: 'itinerarySegments', required: false, attributes: [],
+        }] : [],
+      }],
+    });
   }
   findPromotion(options) { return this.Promotion.findOne(options); }
   findPromotionByCodeForUpdate(code, transaction) {
@@ -28,16 +46,17 @@ class SequelizeBookingRepository {
     return this.Booking.findOne({ where: { booking_code: code }, transaction });
   }
   findBookingForCancellation(id, transaction) {
-    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._itineraryInclude()] });
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._seatAssignmentsInclude(), ...this._itineraryInclude()] });
   }
   findHoldingBookingForExpiry(id, transaction) {
     return this.Booking.findOne({ where: { id, status: 'holding' }, lock: transaction.LOCK.UPDATE, transaction, include: [
       { model: this.BookingPassenger, as: 'passengers' },
+      ...this._seatAssignmentsInclude(),
       ...this._itineraryInclude(),
     ] });
   }
   findBookingForReconciliation(id, transaction) {
-    return this.Booking.findOne({ where: { id }, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._itineraryInclude()], lock: transaction.LOCK.UPDATE, transaction });
+    return this.Booking.findOne({ where: { id }, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._seatAssignmentsInclude(), ...this._itineraryInclude()], lock: transaction.LOCK.UPDATE, transaction });
   }
   findBookingByPk(id, options) { return this.Booking.findByPk(id, options); }
   findBookingSegments(bookingId, transaction) {
@@ -50,7 +69,7 @@ class SequelizeBookingRepository {
   }
   _itineraryInclude() {
     if (!this.BookingSegment) return [];
-    return [{ model: this.BookingSegment, as: 'itinerarySegments', include: [
+    return [{ model: this.BookingSegment, as: 'itinerarySegments', required: false, where: { leg_order: { [Op.gt]: 1 } }, include: [
       { model: this.Flight, as: 'flight', include: [
         { model: this.Airline, as: 'airline' },
         { model: this.Airport, as: 'departureAirport' },
@@ -59,7 +78,10 @@ class SequelizeBookingRepository {
       { model: this.FareClass, as: 'fareClass' },
     ] }];
   }
-  findBookingDetail(id) {
+  _seatAssignmentsInclude() {
+    return this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['id'], required: false }] : [];
+  }
+  findBookingDetail(id, { includeStatusHistory = false } = {}) {
     return this.Booking.findByPk(id, {
       include: [
         {
@@ -72,8 +94,11 @@ class SequelizeBookingRepository {
         { model: this.FareClass, as: 'fareClass' },
         { model: this.Promotion, as: 'promotion' },
         { model: this.BookingPassenger, as: 'passengers' },
+        ...(this.BookingAncillary ? [{ model: this.BookingAncillary, as: 'ancillaries', include: [{ model: this.BookingPassenger, as: 'passenger' }, ...(this.BookingSegment ? [{ model: this.BookingSegment, as: 'segment' }] : [])] }] : []),
+        ...(this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['flight_id', 'seat_no', 'leg_order', 'booking_passenger_id', 'status'] }] : []),
         { model: this.Payment, as: 'payments' },
         { model: this.User, as: 'user', attributes: ['id', 'full_name', 'email', 'phone'] },
+        ...(includeStatusHistory && this.BookingStatusHistory ? [{ model: this.BookingStatusHistory, as: 'statusHistory', separate: true, order: [['created_at', 'ASC']], include: [{ model: this.User, as: 'actor', attributes: ['id', 'full_name'], required: false }] }] : []),
         ...this._itineraryInclude(),
       ],
     });
@@ -90,14 +115,16 @@ class SequelizeBookingRepository {
         { model: this.FareClass, as: 'fareClass' },
         { model: this.Promotion, as: 'promotion' },
         { model: this.BookingPassenger, as: 'passengers' },
+        ...(this.BookingAncillary ? [{ model: this.BookingAncillary, as: 'ancillaries', include: [{ model: this.BookingPassenger, as: 'passenger' }, ...(this.BookingSegment ? [{ model: this.BookingSegment, as: 'segment' }] : [])] }] : []),
         { model: this.Payment, as: 'payments' },
         ...this._itineraryInclude(),
       ],
     });
   }
-  listUserBookings(userId, { status, limit, offset }) {
+  listUserBookings(userId, { status, search, limit, offset }) {
     const where = { user_id: userId };
     if (status) where.status = status;
+    if (search) where[Op.and] = [{ booking_code: { [Op.like]: `%${search}%` } }];
     return this.Booking.findAndCountAll({
       distinct: true, where, limit, offset, order: [['created_at', 'DESC']],
       include: [
@@ -113,15 +140,26 @@ class SequelizeBookingRepository {
       ],
     });
   }
-  listAllBookings({ status, search, limit, offset }) {
+  listAllBookings({ status, search, booking_code, customer, flight_id, limit, offset }) {
     const where = {};
     if (status) where.status = status;
+    if (booking_code) where.booking_code = { [Op.like]: `%${booking_code}%` };
     if (search) {
       where[Op.or] = [
         { booking_code: { [Op.like]: `%${search}%` } },
         { guest_email: { [Op.like]: `%${search}%` } },
+        { '$user.email$': { [Op.like]: `%${search}%` } },
+        { '$user.full_name$': { [Op.like]: `%${search}%` } },
       ];
     }
+    const combined = [];
+    if (customer) combined.push({ [Op.or]: [
+      { guest_email: { [Op.like]: `%${customer}%` } },
+      { '$user.email$': { [Op.like]: `%${customer}%` } },
+      { '$user.full_name$': { [Op.like]: `%${customer}%` } },
+    ] });
+    if (flight_id) combined.push({ [Op.or]: [{ '$flight.id$': Number(flight_id) }, { '$itinerarySegments.flight_id$': Number(flight_id) }] });
+    if (combined.length) where[Op.and] = combined;
     return this.Booking.findAndCountAll({
       distinct: true, where, limit, offset, order: [['created_at', 'DESC']],
       include: [
@@ -137,6 +175,10 @@ class SequelizeBookingRepository {
         ...this._itineraryInclude(),
       ],
     });
+  }
+  createStatusHistory(values, options = {}) {
+    if (!this.BookingStatusHistory) throw new TypeError('BookingStatusHistory model is required');
+    return this.BookingStatusHistory.create(values, options);
   }
   findBookings(options) { return this.Booking.findAll(options); }
   findExpiredHoldingBookings(now) {

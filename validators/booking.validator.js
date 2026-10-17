@@ -83,6 +83,17 @@ const createBookingValidator = [
     .isArray({ min: 1 })
     .withMessage('passengers must contain at least 1 passenger'),
 
+  body('seat_selections').optional().isArray({ max: 400 }).withMessage('seat_selections must be an array'),
+  body('seat_selections.*.leg_order').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isInt({ min: 1, max: 4 }),
+  body('seat_selections.*.passenger_index').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isInt({ min: 0, max: 99 }),
+  body('seat_selections.*.seat_no').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isString().trim().isLength({ min: 2, max: 10 }),
+
+  body('ancillary_selections').optional().isArray({ max: 400 }).withMessage('ancillary_selections must be an array'),
+  body('ancillary_selections.*.offer_id').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 1 }),
+  body('ancillary_selections.*.leg_order').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 1, max: 4 }),
+  body('ancillary_selections.*.passenger_index').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 0, max: 99 }),
+  body('ancillary_selections.*.quantity').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 1, max: 100 }),
+
   body('passengers.*.passenger_name')
     .trim()
     .notEmpty()
@@ -126,6 +137,23 @@ const listBookingValidator = [
     .trim()
     .isLength({ min: 1, max: 191 })
     .withMessage('search must be between 1 and 191 characters'),
+
+  query('booking_code')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('booking_code must be between 1 and 20 characters'),
+
+  query('customer')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 191 })
+    .withMessage('customer must be between 1 and 191 characters'),
+
+  query('flight_id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('flight_id must be a positive integer'),
 ];
 
 const bookingAccessEmailValidator = [

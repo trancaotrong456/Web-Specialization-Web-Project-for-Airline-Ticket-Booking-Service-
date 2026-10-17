@@ -42,6 +42,7 @@ router.get('/:id', optionalAuth, bookingAccessEmailValidator, validate, bookingC
 
 // Cancel holding booking
 router.put('/:id/cancel', optionalAuth, cancelBookingValidator, validate, bookingController.cancelBooking);
+router.put('/:id/ancillaries', optionalAuth, bookingAccessEmailValidator, validate, bookingController.replaceAncillaries);
 
 return router;
 }

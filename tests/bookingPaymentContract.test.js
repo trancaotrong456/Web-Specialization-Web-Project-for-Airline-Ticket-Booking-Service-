@@ -75,6 +75,13 @@ test('booking detail requires guest_email for guests but not authenticated owner
   assert.deepEqual(await runValidators(bookingValidators.bookingAccessEmailValidator, owner), []);
 });
 
+test('booking management filters validate booking code, customer text and positive flight id', async () => {
+  const valid = request({ query: { booking_code: 'BK123', customer: 'an@example.com', flight_id: '19' }, user: { id: 1 } });
+  assert.deepEqual(await runValidators(bookingValidators.listBookingValidator, valid), []);
+  const invalid = request({ query: { flight_id: '0' }, user: { id: 1 } });
+  assert.ok((await runValidators(bookingValidators.listBookingValidator, invalid)).some((error) => error.path === 'flight_id'));
+});
+
 test('lookup accepts canonical guest_email and the legacy email alias, rejecting conflicts', async () => {
   const canonical = request({ params: { code: 'BK123456' }, query: { guest_email: ' Guest@Example.com ' } });
   assert.deepEqual(await runValidators(bookingValidators.lookupBookingValidator, canonical), []);

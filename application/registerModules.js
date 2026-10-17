@@ -10,6 +10,8 @@ const routeDefinitions = [
   ['fareClasses', '/fare-classes', '../routes/fareClass.route'],
   ['bookings', '/bookings', '../routes/booking.route'],
   ['payments', '/payments', '../routes/payment.route'],
+  ['seatSelection', '/seat-selection', '../routes/seatSelection.route'],
+  ['ancillaries', '/ancillaries', '../routes/ancillaries.route'],
   ['promotions', '/promotions', '../routes/promotion.route'],
 ];
 

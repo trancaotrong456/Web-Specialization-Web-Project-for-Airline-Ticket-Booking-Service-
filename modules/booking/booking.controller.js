@@ -6,7 +6,7 @@ class BookingController {
     if (!service) throw new TypeError('A Booking service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['createBooking', 'getMyBookings', 'getBookingById', 'lookupBooking', 'cancelBooking', 'getAllBookings']) {
+    for (const name of ['createBooking', 'getMyBookings', 'getBookingById', 'lookupBooking', 'cancelBooking', 'getAllBookings', 'replaceAncillaries']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -74,6 +74,13 @@ class BookingController {
     } catch (error) {
       next(error);
     }
+  }
+
+  async replaceAncillaries(req, res, next) {
+    try {
+      const result = await this.service.replaceAncillaries(req.params.id, req.body.ancillary_selections, req.user || null, normalizeGuestEmail(req.body.guest_email));
+      return this.apiResponse.success(res, result, 'Booking ancillary selections updated');
+    } catch (error) { next(error); }
   }
 
   async getAllBookings(req, res, next) {

@@ -121,7 +121,9 @@ class TicketService {
         }
         doc.moveDown(0.5);
 
-        const additionalSegments = [...(booking.itinerarySegments || [])].sort((a, b) => Number(a.leg_order) - Number(b.leg_order));
+        const additionalSegments = [...(booking.itinerarySegments || [])]
+          .filter((segment) => Number(segment.leg_order) > 1)
+          .sort((a, b) => Number(a.leg_order) - Number(b.leg_order));
         additionalSegments.forEach((segment) => {
           const segmentFlight = segment.flight;
           if (!segmentFlight) return;
@@ -162,6 +164,16 @@ class TicketService {
             } else {
               doc.text('');
             }
+          });
+        }
+
+        if (booking.ancillaries?.length) {
+          doc.moveDown(0.4).fontSize(13).fillColor('#1a73e8').text('DỊCH VỤ BỔ SUNG', 50);
+          doc.fontSize(10).fillColor('#333');
+          booking.ancillaries.forEach((line) => {
+            const leg = Number(line.segment?.leg_order || 1);
+            const passengerName = line.passenger?.passenger_name || 'Hành khách';
+            doc.text(`Chặng ${leg} · ${passengerName}: ${line.service_name_snapshot} — ${line.offer_name_snapshot} × ${line.quantity} · ${Number(line.line_total_snapshot).toLocaleString('vi-VN')} ${line.currency_snapshot}`, 50);
           });
         }
 

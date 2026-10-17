@@ -1,14 +1,22 @@
 const { Op } = require('sequelize');
 
 class SequelizePaymentRepository {
-  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat, BookingStatusHistory } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User, FlightSeat, BookingStatusHistory });
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
+  findPaymentByIdempotencyKey(key, transaction) {
+    const options = { where: { idempotency_key: key } };
+    if (transaction) {
+      options.lock = transaction.LOCK.UPDATE;
+      options.transaction = transaction;
+    }
+    return this.Payment.findOne(options);
+  }
   findPaymentByPk(id, options) { return this.Payment.findByPk(id, options); }
   findAndCountPayments(options) { return this.Payment.findAndCountAll(options); }
   findPayments(options) { return this.Payment.findAll(options); }
@@ -18,6 +26,10 @@ class SequelizePaymentRepository {
   findFlight(options) { return this.Flight.findOne(options); }
   findPromotion(options) { return this.Promotion.findOne(options); }
   save(instance, options) { return instance.save(options); }
+  createStatusHistory(values, options = {}) {
+    if (!this.BookingStatusHistory) throw new TypeError('BookingStatusHistory model is required');
+    return this.BookingStatusHistory.create(values, options);
+  }
   destroy(instance, options) { return instance.destroy(options); }
   decrement(instance, field, options) { return instance.decrement(field, options); }
 
@@ -25,10 +37,10 @@ class SequelizePaymentRepository {
     return this.Payment.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
   }
   findLockedBookingWithPassengers(id, transaction) {
-    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }] });
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [{ model: this.BookingPassenger, as: 'passengers' }, ...this._seatAssignmentsInclude()] });
   }
   findLockedBooking(id, transaction) {
-    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
+    return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: this._seatAssignmentsInclude() });
   }
   findPendingPaymentForGatewayFailure(bookingId, transactionRef, transaction) {
     return this.Payment.findOne({ where: { booking_id: bookingId, transaction_ref: transactionRef, status: 'pending' }, lock: transaction.LOCK.UPDATE, transaction });
@@ -49,20 +61,24 @@ class SequelizePaymentRepository {
   findRefundBooking(id, transaction) {
     return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction, include: [
       { model: this.BookingPassenger, as: 'passengers' },
+      ...this._seatAssignmentsInclude(),
       { model: this.Payment, as: 'payments' },
     ] });
+  }
+  _seatAssignmentsInclude() {
+    return this.FlightSeat ? [{ model: this.FlightSeat, as: 'seatAssignments', attributes: ['id'], required: false }] : [];
   }
   findSuccessfulPaymentForRefund(bookingId, transaction) {
     return this.Payment.findOne({ where: { booking_id: bookingId, status: 'success' }, lock: transaction.LOCK.UPDATE, transaction });
   }
   listPayments({ where, limit, offset }) {
-    return this.Payment.findAndCountAll({ where, limit, offset, order: [['created_at', 'DESC']], include: [{
+    return this.Payment.findAndCountAll({ where, limit, offset, order: [['created_at', 'DESC']], attributes: { exclude: ['idempotency_key', 'request_fingerprint', 'idempotency_response'] }, include: [{
       model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status', 'user_id', 'guest_email', 'total_amount'],
       include: [{ model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'], required: false }],
     }] });
   }
   findPaymentDetail(id) {
-    return this.Payment.findByPk(id, { include: [{
+    return this.Payment.findByPk(id, { attributes: { exclude: ['idempotency_key', 'request_fingerprint', 'idempotency_response'] }, include: [{
       model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status', 'user_id', 'guest_email', 'total_amount'],
       include: [{ model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'], required: false }],
     }] });

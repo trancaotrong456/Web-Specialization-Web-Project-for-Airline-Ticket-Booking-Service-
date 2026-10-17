@@ -27,6 +27,7 @@ describe('payment pages', () => {
     await user.click(screen.getByRole('button', { name: 'Tiếp tục thanh toán' }));
     expect(await screen.findByRole('img', { name: 'Mã QR do payOS trả về' })).toHaveAttribute('src', 'data:image/png;base64,serverQr');
     expect(mocks.request).toHaveBeenCalledWith('/payments/initiate', expect.objectContaining({ method: 'POST', body: expect.objectContaining({ booking_id: 7, payment_method: 'payos', guest_email: 'guest@example.com' }) }));
+    expect(mocks.request.mock.calls.find(([path]) => path === '/payments/initiate')[1].headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
   it('shows every itinerary leg in the payment summary and keeps the server total', async () => {
@@ -34,6 +35,7 @@ describe('payment pages', () => {
       ...booking,
       total_amount: 3750000,
       itinerarySegments: [
+        { id: 20, leg_order: 1, flight: { departure_time: '2026-10-12T10:00:00Z', departureAirport: { iata_code: 'HAN' }, arrivalAirport: { iata_code: 'SGN' } } },
         { id: 22, leg_order: 3, flight: { departure_time: '2026-10-14T10:00:00Z', departureAirport: { iata_code: 'DAD' }, arrivalAirport: { iata_code: 'CXR' } } },
         { id: 21, leg_order: 2, flight: { departure_time: '2026-10-13T10:00:00Z', departureAirport: { iata_code: 'SGN' }, arrivalAirport: { iata_code: 'DAD' } } },
       ],

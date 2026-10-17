@@ -66,6 +66,36 @@ test('Booking repository preserves detail, guest lookup and paginated associatio
   assert.deepEqual(calls[3].options.include[4].attributes, ['id', 'full_name', 'email']);
 });
 
+test('Booking repository applies owner-safe customer search and Admin customer/flight filters', async () => {
+  const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
+  const calls = [];
+  const booking = { findAndCountAll: async (options) => { calls.push(options); return { count: 0, rows: [] }; } };
+  const repository = new SequelizeBookingRepository({ Booking: booking, BookingPassenger: {}, Flight: {}, FareClass: {}, Promotion: {}, User: {}, Payment: {}, Airline: {}, Airport: {} });
+
+  await repository.listUserBookings(7, { search: 'BK12', limit: 10, offset: 0 });
+  await repository.listAllBookings({ booking_code: 'BK12', customer: 'an@example.com', flight_id: 19, limit: 10, offset: 0 });
+
+  assert.equal(calls[0].where.user_id, 7);
+  assert.equal(calls[0].where[Op.and][0].booking_code[Op.like], '%BK12%');
+  assert.equal(calls[1].where.booking_code[Op.like], '%BK12%');
+  assert.equal(calls[1].where[Op.and][0][Op.or][0].guest_email[Op.like], '%an@example.com%');
+  assert.equal(calls[1].where[Op.and][1][Op.or][0]['$flight.id$'], 19);
+  assert.equal(calls[1].where[Op.and][1][Op.or][1]['$itinerarySegments.flight_id$'], 19);
+});
+
+test('Admin booking detail includes status history only on the Admin request', async () => {
+  const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
+  const calls = [];
+  const booking = { findByPk: async (_id, options) => { calls.push(options); return null; } };
+  const repository = new SequelizeBookingRepository({ Booking: booking, BookingPassenger: {}, Flight: {}, FareClass: {}, Promotion: {}, User: {}, Payment: {}, Airline: {}, Airport: {}, BookingStatusHistory: {} });
+
+  await repository.findBookingDetail(5);
+  await repository.findBookingDetail(5, { includeStatusHistory: true });
+
+  assert.equal(calls[0].include.some((include) => include.as === 'statusHistory'), false);
+  assert.equal(calls[1].include.find((include) => include.as === 'statusHistory').model, repository.BookingStatusHistory);
+});
+
 test('Booking module uses one injected controller, service and repository graph', () => {
   const { createBookingModule } = require('../modules/booking');
   const repository = { findBookingById: async () => null };
@@ -76,7 +106,7 @@ test('Booking module uses one injected controller, service and repository graph'
   assert.equal(typeof module.router, 'function');
 });
 
-test('multi-leg booking validates connected real flights, prices each fare and stores additional legs atomically', async () => {
+test('multi-leg booking validates connected real flights, prices each fare and persists every real segment atomically', async () => {
   const BookingService = require('../modules/booking/booking.service');
   const events = [];
   const flights = new Map([
@@ -90,6 +120,7 @@ test('multi-leg booking validates connected real flights, prices each fare and s
     save: async (entity) => { events.push(['save-flight', entity.id, entity.available_seats]); },
     findBookingCode: async () => null,
     createBooking: async (values) => { events.push(['booking', values]); return booking; },
+    createStatusHistory: async (values, { transaction }) => { assert.ok(transaction); events.push(['status-history', values]); },
     createBookingSegments: async (segments) => { events.push(['segments', segments]); },
     createPassengers: async (passengers) => { events.push(['passengers', passengers]); },
     findBookingDetail: async () => booking,
@@ -116,7 +147,9 @@ test('multi-leg booking validates connected real flights, prices each fare and s
   const created = events.find(([type]) => type === 'booking')[1];
   assert.equal(created.total_amount, 2600000);
   assert.equal(created.flight_id, 11);
+  assert.deepEqual(events.find(([type]) => type === 'status-history')[1], { booking_id: 90, from_status: null, to_status: 'holding', source: 'booking_created', actor_user_id: 7 });
   assert.deepEqual(events.find(([type]) => type === 'segments')[1], [
+    { booking_id: 90, leg_order: 1, flight_id: 11, fare_class_id: 101, price_per_passenger: 900000 },
     { booking_id: 90, leg_order: 2, flight_id: 12, fare_class_id: 102, price_per_passenger: 400000 },
   ]);
 });
@@ -198,7 +231,7 @@ test('legacy Booking imports and cron resolve the canonical module', () => {
   const routes = module.router.stack.filter((layer) => layer.route).map((layer) => [layer.route.stack[0].method, layer.route.path]);
   assert.deepEqual(routes, [
     ['post', '/'], ['get', '/my-bookings'], ['get', '/lookup/:code'], ['get', '/admin/all'],
-    ['get', '/:id/ticket'], ['get', '/:id'], ['put', '/:id/cancel'],
+    ['get', '/:id/ticket'], ['get', '/:id'], ['put', '/:id/cancel'], ['put', '/:id/ancillaries'],
   ]);
   const ticket = module.router.stack.find((layer) => layer.route?.path === '/:id/ticket');
   assert.equal(ticket.route.stack.at(-1).handle, require('../controllers/ticket.controller').downloadTicket);

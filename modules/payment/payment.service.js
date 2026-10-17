@@ -11,6 +11,8 @@ const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { resolvePaymentReturnUrl } = require('../../utils/paymentReturnUrl.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
+const { createHash } = require('node:crypto');
+const { recordBookingStatusTransition } = require('../booking/bookingStatusHistory.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -25,7 +27,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, seatSelectionService, ancillaryService } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -34,6 +36,8 @@ class PaymentService {
     this.payOSFactory = payOSFactory;
     this.qrCode = qrCode;
     this.emailProvider = emailProvider;
+    this.seatSelectionService = seatSelectionService;
+    this.ancillaryService = ancillaryService;
   }
   /**
    * Administrative payment history. Payment gateways can disclose only the
@@ -117,18 +121,119 @@ class PaymentService {
     });
   }
 
-  async _restoreHoldingAfterGatewayFailure(bookingId, transactionRef) {
+  async _restoreHoldingAfterGatewayFailure(bookingId, transactionRef, idempotencyError = null) {
     await this.transactionManager.transaction(async (t) => {
       const booking = await this.repository.findLockedBooking(bookingId, t);
       const payment = await this.repository.findPendingPaymentForGatewayFailure(bookingId, transactionRef, t);
 
       // Do not overwrite a webhook or another workflow that already changed state.
       if (booking && payment && booking.status === 'pending_payment') {
-        await this.repository.destroy(payment, { transaction: t });
-        booking.status = 'holding';
-        await this.repository.save(booking, { transaction: t });
+        // Keep every created intent as an audit record. Ancillary repricing is
+        // intentionally forbidden once any provider intent has existed, even
+        // when gateway setup later fails.
+        payment.status = 'failed';
+        if (idempotencyError && payment.idempotency_key) payment.idempotency_response = { error: idempotencyError };
+        await this.repository.save(payment, { transaction: t });
+        await recordBookingStatusTransition({ booking, toStatus: 'holding', source: 'gateway_setup_failed', repository: this.repository, transaction: t });
       }
     });
+  }
+
+  _paymentRequestFingerprint({ booking, payment_method, return_url, currentUser, guest_email }) {
+    const canonicalRequest = JSON.stringify({
+      booking_id: String(booking.id),
+      amount: String(booking.total_amount),
+      payment_method,
+      return_url: return_url || null,
+      user_id: currentUser?.id == null ? null : String(currentUser.id),
+      guest_email: guest_email || null,
+    });
+    return createHash('sha256').update(canonicalRequest).digest('hex');
+  }
+
+  _throwIdempotencyReplay(response) {
+    if (response?.error) {
+      const error = new Error(response.error.message);
+      error.statusCode = response.error.statusCode;
+      throw error;
+    }
+    return response;
+  }
+
+  _isIdempotencyRaceError(error) {
+    return error?.name === 'SequelizeUniqueConstraintError'
+      || error?.original?.code === 'ER_DUP_ENTRY'
+      || error?.parent?.code === 'ER_DUP_ENTRY'
+      || error?.original?.code === 'ER_LOCK_DEADLOCK'
+      || error?.parent?.code === 'ER_LOCK_DEADLOCK'
+      || error?.original?.errno === 1213
+      || error?.parent?.errno === 1213;
+  }
+
+  async _saveIdempotencyResponse(idempotencyKey, response) {
+    if (!idempotencyKey) return response;
+    return this.transactionManager.transaction(async (transaction) => {
+      const payment = await this.repository.findPaymentByIdempotencyKey(idempotencyKey, transaction);
+      if (!payment) throw new Error('Payment idempotency record disappeared before response was stored');
+      if (payment.idempotency_response) return payment.idempotency_response;
+      payment.idempotency_response = response;
+      await this.repository.save(payment, { transaction });
+      return response;
+    });
+  }
+
+  _buildVnpayPaymentUrl({ booking, transactionRef, ipAddress, returnUrl }) {
+    const tmnCode = process.env.VNP_TMN_CODE || 'SANDBOX01';
+    const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
+    const vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
+    const vnpParams = {
+      vnp_Version: '2.1.0',
+      vnp_Command: 'pay',
+      vnp_TmnCode: tmnCode,
+      vnp_Locale: 'vn',
+      vnp_CurrCode: 'VND',
+      vnp_TxnRef: transactionRef,
+      vnp_OrderInfo: `Thanh toan ve may bay ${booking.booking_code}`,
+      vnp_OrderType: 'other',
+      vnp_Amount: Math.round(Number(booking.total_amount) * 100),
+      vnp_ReturnUrl: returnUrl,
+      vnp_IpAddr: ipAddress,
+      vnp_CreateDate: formatDateVnpay(new Date()),
+    };
+    const query = Object.keys(vnpParams).sort()
+      .map((key) => `${key}=${encodeURIComponent(vnpParams[key]).replace(/%20/g, '+')}`);
+    query.push(`vnp_SecureHash=${signVnpayParams(vnpParams, secretKey)}`);
+    return `${vnpUrl}?${query.join('&')}`;
+  }
+
+  async _buildPayosDemoResponse(booking, transactionRef) {
+    const amount = Math.round(Number(booking.total_amount));
+    const demoData = { orderCode: Number(transactionRef), amount, status: 'success', timestamp: Date.now() };
+    const signature = signPayosDemoPayload(demoData, this._getPayOSDemoSecret());
+    const qrPayload = JSON.stringify({
+      type: 'VIETQR_ACADEMIC_DEMO',
+      provider: 'payOS-demo-adapter',
+      bookingCode: booking.booking_code,
+      orderCode: demoData.orderCode,
+      amount,
+      currency: 'VND',
+      transferContent: `DATVE ${booking.booking_code}`,
+      warning: 'MO PHONG - KHONG CHUYEN TIEN THAT',
+    });
+    const qrCode = await this.qrCode.toDataURL(qrPayload, { errorCorrectionLevel: 'M', margin: 2, width: 320 });
+    return {
+      payment_url: null,
+      qr_code: qrCode,
+      qr_payload: qrPayload,
+      payment_link_id: `demo_${transactionRef}`,
+      transaction_ref: transactionRef,
+      booking_id: booking.id,
+      amount: booking.total_amount,
+      status: 'pending_payment',
+      mode: 'demo',
+      demo_notice: 'Academic simulation only. No real bank transfer is performed.',
+      demo_webhook: { method: 'POST', url: '/api/v1/payments/payos/demo-webhook', body: { ...demoData, signature } },
+    };
   }
 
   async _markPayosPaymentFailed(paymentId, bookingId) {
@@ -146,15 +251,16 @@ class PaymentService {
 
       const holdIsValid = booking.hold_expires_at && new Date() <= new Date(booking.hold_expires_at);
       if (holdIsValid) {
-        booking.status = 'holding';
-        await this.repository.save(booking, { transaction: t });
+        await recordBookingStatusTransition({ booking, toStatus: 'holding', source: 'payment_failed_retryable', repository: this.repository, transaction: t });
         return;
       }
 
-      booking.status = 'expired';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'expired', source: 'payment_failed_expired', repository: this.repository, transaction: t });
+
+      await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'expired' });
 
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+      if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
       if (booking.promotion_id) {
         const promo = await this.repository.findLockedPromotion(booking.promotion_id, t);
@@ -207,14 +313,18 @@ class PaymentService {
   /**
    * 1. Initiate Payment: holding -> pending_payment -> build gateway URL
    */
-  async initiatePayment({ booking_id, payment_method, ip_addr = '127.0.0.1', return_url, currentUser = null, guest_email = null }) {
+  async initiatePayment({ booking_id, payment_method, ip_addr = '127.0.0.1', return_url, currentUser = null, guest_email = null, idempotency_key = null }) {
     guest_email = normalizeGuestEmail(guest_email);
     // payOS requires a numeric orderCode. Timestamp plus three random digits
     // stays below Number.MAX_SAFE_INTEGER and avoids same-millisecond collisions.
-    const txnRef = payment_method === 'payos'
+    let txnRef = payment_method === 'payos'
       ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
       : `TXN_${booking_id}_${Date.now()}`;
     let bookingData = null;
+    let paymentRecord = null;
+    let replayResponse = null;
+    let requestFingerprint = null;
+    let existingIdempotencyPayment = false;
     const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
 
     if (payment_method === 'payos' && payosMode === 'disabled') {
@@ -254,7 +364,8 @@ class PaymentService {
     }
 
     // STEP 1: Update status to pending_payment in transaction with row-lock
-    await this.transactionManager.transaction(async (t) => {
+    try {
+      await this.transactionManager.transaction(async (t) => {
       const booking = await this.repository.findLockedBooking(booking_id, t);
 
       if (!booking) {
@@ -264,6 +375,30 @@ class PaymentService {
       }
 
       verifyBookingAccess(booking, currentUser, guest_email);
+
+      if (idempotency_key) {
+        requestFingerprint = this._paymentRequestFingerprint({
+          booking,
+          payment_method,
+          return_url: resolvedReturnUrl || return_url,
+          currentUser,
+          guest_email,
+        });
+        const existingPayment = await this.repository.findPaymentByIdempotencyKey(idempotency_key, t);
+        if (existingPayment) {
+          if (existingPayment.request_fingerprint !== requestFingerprint) {
+            const error = new Error('Idempotency-Key was already used for a different payment request.');
+            error.statusCode = 409;
+            throw error;
+          }
+          paymentRecord = existingPayment;
+          replayResponse = existingPayment.idempotency_response || null;
+          txnRef = existingPayment.transaction_ref;
+          bookingData = booking;
+          existingIdempotencyPayment = true;
+          return;
+        }
+      }
 
       // CRITICAL: Must be in holding status
       if (booking.status !== 'holding') {
@@ -280,111 +415,99 @@ class PaymentService {
       }
 
       // Transition to pending_payment
-      booking.status = 'pending_payment';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'pending_payment', source: 'payment_initiated', actorUserId: currentUser?.id, repository: this.repository, transaction: t });
 
       // Create pending payment record
-      await this.repository.createPayment(
+      paymentRecord = await this.repository.createPayment(
         {
           booking_id: booking.id,
           amount: booking.total_amount,
           payment_method,
           status: 'pending',
           transaction_ref: txnRef,
+          ...(idempotency_key ? { idempotency_key, request_fingerprint: requestFingerprint } : {}),
         },
         { transaction: t }
       );
 
       bookingData = booking;
-    });
+      });
+    } catch (error) {
+      if (!idempotency_key || !requestFingerprint || !this._isIdempotencyRaceError(error)) throw error;
+      const existingPayment = await this.repository.findPaymentByIdempotencyKey(idempotency_key);
+      if (!existingPayment) throw error;
+      if (existingPayment.request_fingerprint !== requestFingerprint) {
+        const conflict = new Error('Idempotency-Key was already used for a different payment request.');
+        conflict.statusCode = 409;
+        throw conflict;
+      }
+      if (existingPayment.idempotency_response) return this._throwIdempotencyReplay(existingPayment.idempotency_response);
+      const conflict = new Error('Payment initiation is still processing. Retry with the same Idempotency-Key.');
+      conflict.statusCode = 409;
+      throw conflict;
+    }
+
+    if (paymentRecord && replayResponse) return this._throwIdempotencyReplay(replayResponse);
+    if (existingIdempotencyPayment) {
+      if (paymentRecord.status !== 'pending') {
+        const error = new Error('This idempotent payment request has already reached a terminal state.');
+        error.statusCode = 409;
+        throw error;
+      }
+      let recoveredResponse;
+      if (payment_method === 'vnpay') {
+        recoveredResponse = {
+          payment_url: this._buildVnpayPaymentUrl({ booking: bookingData, transactionRef: txnRef, ipAddress: ip_addr, returnUrl: resolvedReturnUrl }),
+          transaction_ref: txnRef,
+          booking_id: bookingData.id,
+          amount: bookingData.total_amount,
+          status: 'pending_payment',
+        };
+      } else if (payosMode === 'demo') {
+        recoveredResponse = await this._buildPayosDemoResponse(bookingData, txnRef);
+      } else {
+        try {
+          const paymentLink = await payOS.paymentRequests.get(Number(txnRef));
+          if (Number(paymentLink.orderCode) !== Number(txnRef)
+            || Math.round(Number(paymentLink.amount)) !== Math.round(Number(bookingData.total_amount))) {
+            throw new Error('Existing payOS link does not match the payment record');
+          }
+          recoveredResponse = {
+            payment_url: paymentLink.checkoutUrl,
+            qr_code: paymentLink.qrCode,
+            payment_link_id: paymentLink.paymentLinkId,
+            transaction_ref: txnRef,
+            booking_id: bookingData.id,
+            amount: bookingData.total_amount,
+            status: 'pending_payment',
+          };
+        } catch (_error) {
+          const error = new Error('Payment initiation is still processing. Retry with the same Idempotency-Key.');
+          error.statusCode = 409;
+          throw error;
+        }
+      }
+      return this._saveIdempotencyResponse(idempotency_key, recoveredResponse);
+    }
 
     // STEP 2: Build Payment Gateway URL
     let paymentUrl = '';
 
     if (payment_method === 'vnpay') {
-      const tmnCode = process.env.VNP_TMN_CODE || 'SANDBOX01';
-      const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
-      const vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
-      const finalReturnUrl = resolvedReturnUrl;
-
-      const createDate = formatDateVnpay(new Date());
-      const amountInVnd = Math.round(Number(bookingData.total_amount) * 100);
-
-      const vnpParams = {
-        vnp_Version: '2.1.0',
-        vnp_Command: 'pay',
-        vnp_TmnCode: tmnCode,
-        vnp_Locale: 'vn',
-        vnp_CurrCode: 'VND',
-        vnp_TxnRef: txnRef,
-        vnp_OrderInfo: `Thanh toan ve may bay ${bookingData.booking_code}`,
-        vnp_OrderType: 'other',
-        vnp_Amount: amountInVnd,
-        vnp_ReturnUrl: finalReturnUrl,
-        vnp_IpAddr: ip_addr,
-        vnp_CreateDate: createDate,
-      };
-
-      const secureHash = signVnpayParams(vnpParams, secretKey);
-
-      // Construct final URL
-      const queryStringParts = [];
-      Object.keys(vnpParams).sort().forEach((key) => {
-        queryStringParts.push(`${key}=${encodeURIComponent(vnpParams[key]).replace(/%20/g, '+')}`);
-      });
-      queryStringParts.push(`vnp_SecureHash=${secureHash}`);
-
-      paymentUrl = `${vnpUrl}?${queryStringParts.join('&')}`;
+      paymentUrl = this._buildVnpayPaymentUrl({ booking: bookingData, transactionRef: txnRef, ipAddress: ip_addr, returnUrl: resolvedReturnUrl });
     } else if (payment_method === 'payos') {
       if (payosMode === 'demo') {
-        const amount = Math.round(Number(bookingData.total_amount));
-        const demoData = {
-          orderCode: Number(txnRef),
-          amount,
-          status: 'success',
-          timestamp: Date.now(),
-        };
-        const signature = signPayosDemoPayload(demoData, this._getPayOSDemoSecret());
-        const qrPayload = JSON.stringify({
-          type: 'VIETQR_ACADEMIC_DEMO',
-          provider: 'payOS-demo-adapter',
-          bookingCode: bookingData.booking_code,
-          orderCode: demoData.orderCode,
-          amount,
-          currency: 'VND',
-          transferContent: `DATVE ${bookingData.booking_code}`,
-          warning: 'MO PHONG - KHONG CHUYEN TIEN THAT',
-        });
-        const qrCode = await this.qrCode.toDataURL(qrPayload, {
-          errorCorrectionLevel: 'M',
-          margin: 2,
-          width: 320,
-        });
-
-        return {
-          payment_url: null,
-          qr_code: qrCode,
-          qr_payload: qrPayload,
-          payment_link_id: `demo_${txnRef}`,
-          transaction_ref: txnRef,
-          booking_id: bookingData.id,
-          amount: bookingData.total_amount,
-          status: 'pending_payment',
-          mode: 'demo',
-          demo_notice: 'Academic simulation only. No real bank transfer is performed.',
-          demo_webhook: {
-            method: 'POST',
-            url: '/api/v1/payments/payos/demo-webhook',
-            body: { ...demoData, signature },
-          },
-        };
+        const result = await this._buildPayosDemoResponse(bookingData, txnRef);
+        await this._saveIdempotencyResponse(idempotency_key, result);
+        return result;
       }
 
       const returnUrl = resolvedReturnUrl;
       const cancelUrl = resolvedCancelUrl;
 
+      let paymentLink;
       try {
-        const paymentLink = await payOS.paymentRequests.create({
+        paymentLink = await payOS.paymentRequests.create({
           orderCode: Number(txnRef),
           amount: Math.round(Number(bookingData.total_amount)),
           description: `Ve may bay ${bookingData.booking_code}`.slice(0, 25),
@@ -397,31 +520,38 @@ class PaymentService {
           }],
         });
 
-        paymentUrl = paymentLink.checkoutUrl;
-        return {
-          payment_url: paymentUrl,
-          qr_code: paymentLink.qrCode,
-          payment_link_id: paymentLink.paymentLinkId,
-          transaction_ref: txnRef,
-          booking_id: bookingData.id,
-          amount: bookingData.total_amount,
-          status: 'pending_payment',
-        };
       } catch (gatewayError) {
-        await this._restoreHoldingAfterGatewayFailure(bookingData.id, txnRef);
         const error = new Error(`Unable to create payOS payment link: ${gatewayError.message}`);
         error.statusCode = 502;
+        await this._restoreHoldingAfterGatewayFailure(bookingData.id, txnRef, {
+          statusCode: error.statusCode,
+          message: error.message,
+        });
         throw error;
       }
+      paymentUrl = paymentLink.checkoutUrl;
+      const result = {
+        payment_url: paymentUrl,
+        qr_code: paymentLink.qrCode,
+        payment_link_id: paymentLink.paymentLinkId,
+        transaction_ref: txnRef,
+        booking_id: bookingData.id,
+        amount: bookingData.total_amount,
+        status: 'pending_payment',
+      };
+      await this._saveIdempotencyResponse(idempotency_key, result);
+      return result;
     }
 
-    return {
+    const result = {
       payment_url: paymentUrl,
       transaction_ref: txnRef,
       booking_id: bookingData.id,
       amount: bookingData.total_amount,
       status: 'pending_payment',
     };
+    await this._saveIdempotencyResponse(idempotency_key, result);
+    return result;
   }
 
   /**
@@ -545,8 +675,9 @@ class PaymentService {
         lockedPayment.paid_at = new Date();
         await this.repository.save(lockedPayment, { transaction: t });
 
-        lockedBooking.status = 'confirmed';
-        await this.repository.save(lockedBooking, { transaction: t });
+        await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'confirmed', source: 'payment_vnpay_success', repository: this.repository, transaction: t });
+        if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
+        await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
         bookingIdToEmail = lockedBooking.id;
       } else {
@@ -563,14 +694,15 @@ class PaymentService {
         const isHoldValid = lockedBooking.hold_expires_at && now <= new Date(lockedBooking.hold_expires_at);
 
         if (isHoldValid) {
-          lockedBooking.status = 'holding';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'holding', source: 'payment_vnpay_failed_retryable', repository: this.repository, transaction: t });
         } else {
-          lockedBooking.status = 'expired';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'expired', source: 'payment_vnpay_failed_expired', repository: this.repository, transaction: t });
+
+          await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
 
           // Giải phóng ghế về chuyến bay
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
 
           // Hoàn lượt dùng mã khuyến mãi
           if (lockedBooking.promotion_id) {
@@ -696,8 +828,9 @@ class PaymentService {
         lockedPayment.paid_at = new Date();
         await this.repository.save(lockedPayment, { transaction: t });
 
-        lockedBooking.status = 'confirmed';
-        await this.repository.save(lockedBooking, { transaction: t });
+        await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'confirmed', source: 'payment_payos_success', repository: this.repository, transaction: t });
+        if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.confirmBookingSeats(lockedBooking.id, t);
+        await this.ancillaryService?.confirmBooking(lockedBooking.id, t);
 
         bookingIdToEmail = lockedBooking.id;
       } else {
@@ -709,13 +842,14 @@ class PaymentService {
         const isHoldValid = lockedBooking.hold_expires_at && now <= new Date(lockedBooking.hold_expires_at);
 
         if (isHoldValid) {
-          lockedBooking.status = 'holding';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'holding', source: 'payment_payos_failed_retryable', repository: this.repository, transaction: t });
         } else {
-          lockedBooking.status = 'expired';
-          await this.repository.save(lockedBooking, { transaction: t });
+          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'expired', source: 'payment_payos_failed_expired', repository: this.repository, transaction: t });
+
+          await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
 
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
 
           if (lockedBooking.promotion_id) {
             const promo = await this.repository.findLockedPromotion(lockedBooking.promotion_id, t);
@@ -853,16 +987,21 @@ class PaymentService {
         throw error;
       }
 
+      // Validate before mutating Payment, Booking, seats, or ancillary inventory.
+      await this.ancillaryService?.assertWholeBookingRefundAllowed(bookingId, t);
+
       // Mark payment as refunded
       successfulPayment.status = 'refunded';
       await this.repository.save(successfulPayment, { transaction: t });
 
       // Mark booking as cancelled
-      booking.status = 'cancelled';
-      await this.repository.save(booking, { transaction: t });
+      await recordBookingStatusTransition({ booking, toStatus: 'cancelled', source: 'admin_refund', actorUserId: adminUser?.id, repository: this.repository, transaction: t });
+
+      await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'refunded' });
 
       // Return seats to flight
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+      if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
       console.log(`[Refund] Admin ${adminUser.email} refunded booking #${booking.id} (${successfulPayment.amount} VND). Reason: ${reason}`);
 
