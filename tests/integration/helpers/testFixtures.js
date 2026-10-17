@@ -1,0 +1,141 @@
+'use strict';
+
+const crypto = require('node:crypto');
+const { models } = require('./mysqlTestDatabase');
+
+const created = {
+  airlineIds: new Set(),
+  airportIds: new Set(),
+  flightIds: new Set(),
+  fareClassIds: new Set(),
+  promotionIds: new Set(),
+  bookingIds: new Set(),
+  paymentIds: new Set(),
+};
+
+function randomLetters(length) {
+  const bytes = crypto.randomBytes(length);
+  return Array.from(bytes, (byte) => String.fromCharCode(65 + (byte % 26))).join('');
+}
+
+async function createFlightFixture({ availableSeats = 1, totalSeats = availableSeats } = {}) {
+  const suffix = crypto.randomUUID().slice(0, 8);
+  const airline = await models.Airline.create({
+    name: `IT Airline ${suffix}`,
+    iata_code: randomLetters(3),
+  });
+  created.airlineIds.add(airline.id);
+
+  let departure;
+  let arrival;
+  while (!departure) {
+    try {
+      departure = await models.Airport.create({
+        iata_code: randomLetters(3),
+        name: `IT Departure ${suffix}`,
+        city: 'Integration City A',
+        country: 'Vietnam',
+      });
+    } catch (error) {
+      if (error.name !== 'SequelizeUniqueConstraintError') throw error;
+    }
+  }
+  created.airportIds.add(departure.id);
+
+  while (!arrival) {
+    try {
+      arrival = await models.Airport.create({
+        iata_code: randomLetters(3),
+        name: `IT Arrival ${suffix}`,
+        city: 'Integration City B',
+        country: 'Vietnam',
+      });
+    } catch (error) {
+      if (error.name !== 'SequelizeUniqueConstraintError') throw error;
+    }
+  }
+  created.airportIds.add(arrival.id);
+
+  const departureTime = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const flight = await models.Flight.create({
+    airline_id: airline.id,
+    departure_airport_id: departure.id,
+    arrival_airport_id: arrival.id,
+    departure_time: departureTime,
+    arrival_time: new Date(departureTime.getTime() + 2 * 60 * 60 * 1000),
+    total_seats: totalSeats,
+    available_seats: availableSeats,
+    status: 'scheduled',
+  });
+  created.flightIds.add(flight.id);
+
+  const fareClass = await models.FareClass.create({
+    flight_id: flight.id,
+    class_name: `IT Economy ${suffix}`,
+    price: 1000000,
+    seat_quota: totalSeats,
+  });
+  created.fareClassIds.add(fareClass.id);
+
+  return { airline, departure, arrival, flight, fareClass, suffix };
+}
+
+async function createPromotionFixture({ maxUses = 1 } = {}) {
+  const suffix = crypto.randomUUID().replaceAll('-', '').slice(0, 12).toUpperCase();
+  const promotion = await models.Promotion.create({
+    code: `IT${suffix}`,
+    discount_type: 'percent',
+    discount_value: 10,
+    valid_from: new Date(Date.now() - 60 * 60 * 1000),
+    valid_to: new Date(Date.now() + 24 * 60 * 60 * 1000),
+    max_uses: maxUses,
+    used_count: 0,
+  });
+  return trackPromotion(promotion);
+}
+
+function trackBooking(booking) {
+  created.bookingIds.add(booking.id);
+  return booking;
+}
+
+function trackPromotion(promotion) {
+  created.promotionIds.add(promotion.id);
+  return promotion;
+}
+
+function trackPayment(payment) {
+  created.paymentIds.add(payment.id);
+  return payment;
+}
+
+async function cleanupTrackedFixtures() {
+  const ids = (set) => [...set];
+  const bookingIds = ids(created.bookingIds);
+  if (bookingIds.length > 0) {
+    await models.Payment.destroy({ where: { booking_id: bookingIds }, force: true });
+    await models.BookingPassenger.destroy({ where: { booking_id: bookingIds }, force: true });
+    await models.Booking.destroy({ where: { id: bookingIds }, force: true });
+  }
+  const fareClassIds = ids(created.fareClassIds);
+  if (fareClassIds.length > 0) await models.FareClass.destroy({ where: { id: fareClassIds }, force: true });
+  const flightIds = ids(created.flightIds);
+  if (flightIds.length > 0) await models.Flight.destroy({ where: { id: flightIds }, force: true });
+  const promotionIds = ids(created.promotionIds);
+  if (promotionIds.length > 0) await models.Promotion.destroy({ where: { id: promotionIds }, force: true });
+  const airlineIds = ids(created.airlineIds);
+  if (airlineIds.length > 0) await models.Airline.destroy({ where: { id: airlineIds }, force: true });
+  const airportIds = ids(created.airportIds);
+  if (airportIds.length > 0) await models.Airport.destroy({ where: { id: airportIds }, force: true });
+
+  Object.values(created).forEach((set) => set.clear());
+}
+
+module.exports = {
+  cleanupTrackedFixtures,
+  createFlightFixture,
+  createPromotionFixture,
+  trackBooking,
+  trackPayment,
+  trackPromotion,
+};
