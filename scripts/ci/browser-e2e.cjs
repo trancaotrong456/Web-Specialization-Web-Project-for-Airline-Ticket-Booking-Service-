@@ -25,7 +25,10 @@ async function chooseLeg(page, expectedLegCount, itinerary) {
     const fareResponsePromise = page.waitForResponse((response) => /\/fare-classes\/flight\/\d+(?:\?|$)/.test(response.url()), { timeout: 20000 })
       .then(async (response) => ({ status: response.status(), url: response.url(), body: (await response.text()).slice(0, 1500) }))
       .catch((error) => ({ error: error.message }));
-    await page.getByRole('button', { name: 'Chọn chuyến bay' }).first().click();
+    const selectFlight = page.getByRole('button', { name: 'Chọn chuyến bay' }).first();
+    try { await selectFlight.waitFor({ state: 'visible', timeout: 20000 }); }
+    catch { throw new Error(`No selectable flight for leg ${index + 1}/${itinerary.length} at ${page.url()}: ${(await page.locator('main').innerText()).slice(0, 3000)}`); }
+    await selectFlight.click();
     const fareResponse = await fareResponsePromise;
     const economyFare = page.getByRole('radio', { name: /Economy/ });
     try { await economyFare.waitFor({ state: 'visible', timeout: 15000 }); }
