@@ -24,7 +24,7 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
   const FlightService = require('../modules/flight/flight.service');
   const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
   const { NotificationEventPublisher } = require('../modules/notification/notificationEventPublisher');
-  const SequelizeNotificationOutboxRepository = require('../modules/notification/notificationOutbox.repository');
+  const { SequelizeNotificationOutboxRepository } = require('../modules/notification/notificationOutbox.repository');
 
   await db.sequelize.authenticate();
   const [identityRows] = await db.sequelize.query(
@@ -232,7 +232,7 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
       ]);
       const winners = results.filter((result) => result.status === 'fulfilled');
       for (const result of winners) f.fixture.bookingIds.push(result.value.id);
-      assert.equal(winners.length, 1, 'one slot of ancillary capacity must not be oversold');
+      assert.equal(winners.length, 1, `one slot of ancillary capacity must not be oversold; outcomes: ${results.map((result) => result.status === 'rejected' ? String(result.reason?.stack || result.reason) : 'fulfilled').join(' | ')}`);
       const snapshot = await db.BookingAncillary.findOne({ where: { booking_id: winners[0].value.id } });
       assert.equal(snapshot.unit_price_snapshot, '12500.00');
       assert.equal(snapshot.line_total_snapshot, '12500.00');
@@ -297,7 +297,7 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
       await db.Booking.update({ hold_expires_at: new Date(Date.now() - 20 * 60 * 1000) }, { where: { id: booking.id } });
       assert.deepEqual(await f.bookingService.reconcileStalePendingPayments(), { reconciledCount: 1 });
       const lateCallback = await f.paymentService.handlePayosDemoWebhook(paymentResponse.demo_webhook.body);
-      assert.match(lateCallback.Message, /invalid state/i);
+      assert.match(lateCallback.message, /invalid state/i);
       assert.equal((await db.Booking.findByPk(booking.id)).status, 'expired');
       assert.equal((await db.Payment.findOne({ where: { booking_id: booking.id } })).status, 'failed');
       assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 2);
