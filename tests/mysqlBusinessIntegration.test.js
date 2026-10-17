@@ -229,7 +229,7 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
             const selection = args.selections[0];
             const segment = args.segments.find((row) => Number(row.leg_order) === Number(selection.leg_order));
             const offer = await db.AncillaryOffer.findByPk(selection.offer_id);
-            error.message += `; CI diagnostics ${JSON.stringify({ selectedOfferId: selection.offer_id, offerFlightId: offer?.flight_id, segmentFlightId: segment?.flight_id, offerFareClassId: offer?.fare_class_id, segmentFareClassId: segment?.fare_class_id })}`;
+            error.message += `; CI diagnostics ${JSON.stringify({ selectedOfferId: selection.offer_id, offerFlightId: offer?.flight_id, segmentFlightId: segment?.flight_id, offerFareClassId: offer?.fare_class_id, segmentFareClassId: segment?.fare_class_id, passedSegments: args.segments.map((row) => ({ id: row.id, leg_order: row.leg_order, flight_id: row.flight_id, fare_class_id: row.fare_class_id, plain: row.get ? row.get({ plain: true }) : row })) })}`;
           }
           throw error;
         }
