@@ -33,9 +33,22 @@ async function main() {
     await page.getByRole('button', { name: /thêm chặng/i }).click();
     await page.getByRole('group', { name: 'Chặng 3' }).waitFor({ state: 'visible' });
 
+    // The same booking entry point must remain usable at a phone viewport.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('heading', { level: 1 }).first().waitFor({ state: 'visible' });
+    const mobileMenu = page.getByRole('button', { name: 'Mở menu' });
+    await mobileMenu.click();
+    await page.getByRole('navigation', { name: 'Điều hướng tài khoản' }).getByRole('link', { name: 'Trang chủ' }).waitFor({ state: 'visible' });
+    await page.getByRole('button', { name: 'Đóng menu' }).click();
+    await page.getByRole('tab', { name: 'Khứ hồi' }).click();
+    await page.getByText('Ngày về', { exact: false }).first().waitFor({ state: 'visible' });
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1), true,
+      'Mobile booking entry must not overflow the viewport horizontally.');
+
     assert.deepEqual(pageErrors, [], 'Browser reported uncaught page errors.');
     await context.tracing.stop();
-    console.log('Browser smoke passed: home page, round-trip form, multi-city form, and adding a third itinerary leg.');
+    console.log('Browser smoke passed: desktop itinerary modes and mobile navigation, round-trip form, and viewport fit.');
   } catch (error) {
     await page.screenshot({ path: path.join(artifactDirectory, 'browser-failure.png'), fullPage: true }).catch(() => {});
     await context.tracing.stop({ path: path.join(artifactDirectory, 'browser-failure-trace.zip') }).catch(() => {});
