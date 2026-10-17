@@ -88,6 +88,7 @@ async function main() {
 
     await customer.goto(`${frontendUrl}/bookings/my`);
     await customer.getByRole('heading', { name: 'Đặt chỗ của tôi' }).waitFor({ state: 'visible', timeout: 20000 });
+    await customer.getByRole('link', { name: 'Chi tiết' }).first().click();
     await customer.getByText('CI Passenger One').waitFor({ state: 'visible' });
     await customer.getByRole('button', { name: /Thông báo/ }).click();
     await customer.getByRole('region', { name: 'Thông báo' }).getByText(/đặt chỗ|thanh toán/i).first().waitFor({ state: 'visible', timeout: 20000 });
