@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - integration/serene-eight-features-20261017
+      - develop
+  pull_request:
+    branches:
+      - develop
   workflow_dispatch:
 
 permissions:
@@ -46,7 +50,7 @@ jobs:
       DEMO_BOOTSTRAP_REQUIRED: 'false'
       PAYOS_MODE: demo
     steps:
-      - name: Checkout integration candidate
+      - name: Checkout integration candidate or develop
         uses: actions/checkout@v4
 
       - name: Set up Node.js 20
