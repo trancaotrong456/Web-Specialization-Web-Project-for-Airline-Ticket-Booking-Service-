@@ -29,12 +29,15 @@ import {
   AirlineDetailPage,
   AirlineFormPage,
   AirlineListPage,
+  AirlineStatisticsPage,
   AirportDetailPage,
   AirportFormPage,
   AirportListPage,
 } from '../features/airline-airport/AirlineAirportPages';
 import { PromotionDetailPage, PromotionFormPage, PromotionsPage } from '../features/promotions/PromotionPages';
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
+import { SeatMapAdminPage } from '../features/bookings/SeatMapAdminPage';
+import { AncillariesAdminPage } from '../features/admin/AncillariesAdminPage';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -91,6 +94,7 @@ export function AppRoutes() {
         </Route>
         <Route element={<AdminRoute />}>
           <Route path="/admin/airlines" element={<AirlineListPage />} />
+          <Route path="/admin/airlines/statistics" element={<AirlineStatisticsPage />} />
           <Route path="/admin/airlines/new" element={<AirlineFormPage mode="create" />} />
           <Route path="/admin/airlines/:id" element={<AirlineDetailPage />} />
           <Route path="/admin/airlines/:id/edit" element={<AirlineFormPage mode="edit" />} />
@@ -102,6 +106,8 @@ export function AppRoutes() {
           <Route path="/admin/promotions/new" element={<PromotionFormPage mode="create" />} />
           <Route path="/admin/promotions/:id" element={<PromotionDetailPage />} />
           <Route path="/admin/promotions/:id/edit" element={<PromotionFormPage mode="edit" />} />
+          <Route path="/admin/seat-maps" element={<SeatMapAdminPage />} />
+          <Route path="/admin/ancillaries" element={<AncillariesAdminPage />} />
           <Route path="/admin/users" element={<UsersPage />} />
           <Route path="/admin/users/:id" element={<UserDetailPage />} />
           <Route path="/admin/roles" element={<RolesPage />} />

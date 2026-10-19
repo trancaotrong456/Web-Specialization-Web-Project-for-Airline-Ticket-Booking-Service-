@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
@@ -25,7 +25,9 @@ function usePaymentApi() { const { request } = useAuth(); return useMemo(() => c
 export function PaymentInitiatePage() {
   const api = usePaymentApi(); const { id } = useParams(); const location = useLocation(); const navigate = useNavigate(); const { user, status } = useAuth();
   const guestEmail = location.state?.guestEmail || sessionStorage.getItem(emailKey(id)) || '';
+  const idempotencyKey = useRef(null);
   const [booking, setBooking] = useState(location.state?.booking || null); const [method, setMethod] = useState('vnpay'); const [state, setState] = useState({ loading: !location.state?.booking, submitting: false, error: '', result: null });
+  const additionalSegments = (booking?.itinerarySegments || []).filter((segment) => Number(segment.leg_order) > 1);
   useEffect(() => {
     if (booking || status === 'loading') return;
     let active = true;
@@ -37,12 +39,13 @@ export function PaymentInitiatePage() {
     event.preventDefault();
     setState((current) => ({ ...current, submitting: true, error: '', result: null }));
     const returnUrl = `${window.location.origin}/payments/result`;
+    if (!idempotencyKey.current) idempotencyKey.current = window.crypto.randomUUID();
     try {
-      const result = await api.initiatePayment({ booking_id: Number(id), payment_method: method, return_url: returnUrl, ...(!user ? { guest_email: guestEmail } : {}) });
+      const result = await api.initiatePayment({ booking_id: Number(id), payment_method: method, return_url: returnUrl, ...(!user ? { guest_email: guestEmail } : {}) }, idempotencyKey.current);
       setState({ loading: false, submitting: false, error: '', result });
       sessionStorage.setItem(PAYMENT_CONTEXT_KEY, JSON.stringify({ bookingId: id, guestEmail, paymentMethod: method }));
       if (result?.payment_url) window.location.assign(result.payment_url);
-    } catch (error) { setState((current) => ({ ...current, submitting: false, error: errorText(error, 'Không thể bắt đầu thanh toán.') })); }
+    } catch (error) { if (error?.status === 502) idempotencyKey.current = null; setState((current) => ({ ...current, submitting: false, error: errorText(error, 'Không thể bắt đầu thanh toán.') })); }
   };
   const simulatePayos = async () => {
     if (!state.result?.demo_webhook?.body) return;
@@ -54,8 +57,8 @@ export function PaymentInitiatePage() {
   if (state.error && !booking) return <PaymentShell><Heading title="Không thể tiếp tục thanh toán" /><section className="surface-card booking-panel"><Notice type="error">{state.error}</Notice><Link className="button button-outline" to="/bookings/lookup">Tra cứu đặt chỗ</Link></section></PaymentShell>;
   return <PaymentShell><Heading title="Thanh toán đặt chỗ" description="Chọn cổng thanh toán khả dụng cho đặt chỗ đang giữ." actions={<Link className="button button-outline" to={`/bookings/${id}`} state={{ guestEmail }}>Chi tiết đặt chỗ</Link>} />
     {state.error ? <Notice type="error">{state.error}</Notice> : null}
-    <div className="payment-layout"><section className="surface-card booking-panel"><h2>Tóm tắt</h2><dl className="booking-facts"><div><dt>Mã đặt chỗ</dt><dd>{booking?.booking_code || `#${id}`}</dd></div><div><dt>Chặng bay</dt><dd>{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div><div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div><div><dt>Số hành khách</dt><dd>{booking?.passengers?.length || '—'}</dd></div><div><dt>Thành tiền</dt><dd><strong>{money(booking?.total_amount)}</strong></dd></div><div><dt>Giữ chỗ đến</dt><dd>{time(booking?.hold_expires_at)}</dd></div></dl></section>
-      <section className="surface-card booking-panel"><h2>Phương thức thanh toán</h2><form onSubmit={startPayment}><div className="payment-method-options"><label className={method === 'vnpay' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => setMethod('vnpay')} /><span><strong>VNPay</strong><small>Cổng thanh toán sandbox của đồ án.</small></span></label><label className={method === 'payos' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => setMethod('payos')} /><span><strong>payOS · VietQR</strong><small>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small></span></label></div><button className="button button-primary" type="submit" disabled={state.submitting || booking?.status !== 'holding'}>{state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}</button>{booking?.status !== 'holding' ? <p className="field-hint">Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}</form>
+    <div className="payment-layout"><section className="surface-card booking-panel"><h2>Tóm tắt</h2><dl className="booking-facts"><div><dt>Mã đặt chỗ</dt><dd>{booking?.booking_code || `#${id}`}</dd></div><div><dt>Chặng đầu</dt><dd>{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div><div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div><div><dt>Số hành khách</dt><dd>{booking?.passengers?.length || '—'}</dd></div><div><dt>Thành tiền</dt><dd><strong>{money(booking?.total_amount)}</strong></dd></div><div><dt>Giữ chỗ đến</dt><dd>{time(booking?.hold_expires_at)}</dd></div></dl>{additionalSegments.length ? <><h3>Các chặng tiếp theo</h3><ol className="booking-itinerary-summary">{[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => <li key={segment.id}><div><strong>{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong><span>{time(segment.flight?.departure_time)}</span></div></li>)}</ol></> : null}{booking?.ancillaries?.length ? <><h3>Dịch vụ bổ sung</h3><ul>{booking.ancillaries.map((line) => <li key={line.id}>{line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · {line.service_name_snapshot} × {line.quantity}: {money(line.line_total_snapshot)}</li>)}</ul></> : null}</section>
+        <section className="surface-card booking-panel"><h2>Phương thức thanh toán</h2><form onSubmit={startPayment}><div className="payment-method-options"><label className={method === 'vnpay' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => { idempotencyKey.current = null; setMethod('vnpay'); }} /><span><strong>VNPay</strong><small>Cổng thanh toán sandbox của đồ án.</small></span></label><label className={method === 'payos' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => { idempotencyKey.current = null; setMethod('payos'); }} /><span><strong>payOS · VietQR</strong><small>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small></span></label></div><button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}>{state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}</button>{booking?.status !== 'holding' ? <p className="field-hint">Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}</form>
         {state.result?.qr_code ? <div className="payment-qr-result"><Notice>payOS trả về dữ liệu thanh toán ở chế độ {state.result.mode || 'gateway'}. Kiểm tra thông tin đích chuyển trước khi thao tác.</Notice><img src={state.result.qr_code} alt="Mã QR do payOS trả về" /><p>Mã giao dịch: <code>{state.result.transaction_ref}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
       </section></div>
   </PaymentShell>;

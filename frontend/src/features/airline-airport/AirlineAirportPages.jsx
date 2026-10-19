@@ -8,6 +8,7 @@ import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
 import { createAirlineAirportApi } from './airlineAirportApi';
+import './airlineAirport.css';
 
 const PAGE_LIMIT = 20;
 const rowsFrom = (result) => Array.isArray(result) ? result : result?.data || [];
@@ -90,7 +91,13 @@ function CatalogListPage({ kind }) {
   const detailPath = (id) => `/admin/${airlineMode ? 'airlines' : 'airports'}/${id}`;
   const createPath = `/admin/${airlineMode ? 'airlines' : 'airports'}/new`;
   if (state.loading) return <CatalogShell><LoadingView label={`Đang tải danh sách ${entityLabel}…`} /></CatalogShell>;
-  return <CatalogShell><CatalogFrame eyebrow="DỮ LIỆU KHAI THÁC" title={`Quản lý ${entityLabel}`} description={`Tìm kiếm, cập nhật và quản lý danh mục ${entityLabel} trong hệ thống.`} actions={<Link className="button button-primary" to={createPath}>Thêm {airlineMode ? 'hãng hàng không' : 'sân bay'}</Link>}>
+  const listActions = (
+    <div className="catalog-heading-actions">
+      {airlineMode ? <Link className="button button-outline" to="/admin/airlines/statistics">Thống kê chuyến bay</Link> : null}
+      <Link className="button button-primary" to={createPath}>Thêm {airlineMode ? 'hãng hàng không' : 'sân bay'}</Link>
+    </div>
+  );
+  return <CatalogShell><CatalogFrame eyebrow="DỮ LIỆU KHAI THÁC" title={`Quản lý ${entityLabel}`} description={`Tìm kiếm, cập nhật và quản lý danh mục ${entityLabel} trong hệ thống.`} actions={listActions}>
     {state.error ? <RequestError message={state.error} onRetry={() => void load()} /> : <section className="surface-card admin-card catalog-card">
       <div className="catalog-toolbar"><SearchBar value={searchInput} onChange={setSearchInput} onSubmit={() => updateParams({ page: 1, search: searchInput.trim() })} label={`Tìm ${entityLabel}`} placeholder={airlineMode ? 'Tên hãng hoặc mã IATA' : 'Tên, mã IATA hoặc thành phố'} /><label className="catalog-limit" htmlFor="catalog-limit">Số dòng<select id="catalog-limit" value={limit} onChange={(event) => updateParams({ page: 1, limit: event.target.value })}><option value="10">10 / trang</option><option value="20">20 / trang</option><option value="50">50 / trang</option><option value="100">100 / trang</option></select></label><span className="catalog-total">{state.pagination?.total ?? state.rows.length} mục</span></div>
       {state.rows.length === 0 ? <div className="empty-state catalog-empty"><span className="catalog-empty-mark" aria-hidden="true">{airlineMode ? '✈' : '◎'}</span><h2>{search ? `Không tìm thấy ${entityLabel} phù hợp` : `Chưa có ${entityLabel} nào`}</h2><p>{search ? 'Thử từ khóa khác hoặc xóa nội dung tìm kiếm.' : `Thêm ${entityLabel} để sử dụng trong các chuyến bay.`}</p>{search ? <button className="button button-outline" type="button" onClick={() => { setSearchInput(''); updateParams({ page: 1, search: '' }); }}>Xóa tìm kiếm</button> : null}</div> : <>
@@ -178,6 +185,10 @@ function CatalogFormPage({ kind, mode }) {
   const [form, setForm] = useState(emptyForm);
   const [state, setState] = useState({ loading: editing, submitting: false, error: '', fields: {} });
   const [logoFailed, setLogoFailed] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState(null);
+  const [localPreview, setLocalPreview] = useState(null);
+
   useEffect(() => {
     if (!editing) return undefined;
     let active = true;
@@ -199,8 +210,60 @@ function CatalogFormPage({ kind, mode }) {
     const value = key === 'iata_code' ? event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) : event.target.value;
     setForm((current) => ({ ...current, [key]: value }));
     setState((current) => ({ ...current, fields: { ...current.fields, [key]: undefined } }));
-    if (key === 'logo_url') setLogoFailed(false);
+    if (key === 'logo_url') {
+      setLogoFailed(false);
+      setLocalPreview(null);
+    }
   };
+
+  const handleLogoFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setUploadFeedback({ type: 'error', message: 'Chỉ chấp nhận định dạng ảnh PNG, JPEG hoặc WebP.' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadFeedback({ type: 'error', message: 'Kích thước tệp vượt quá giới hạn 5MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setLocalPreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+
+    setUploadingLogo(true);
+    setUploadFeedback(null);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const fileReader = new FileReader();
+        fileReader.onload = () => resolve(fileReader.result);
+        fileReader.onerror = reject;
+        fileReader.readAsDataURL(file);
+      });
+
+      const res = await api.uploadAirlineLogo({ file: base64, filename: file.name });
+      const uploadedUrl = res?.url || res?.data?.url;
+      if (uploadedUrl) {
+        setForm((current) => ({ ...current, logo_url: uploadedUrl }));
+        setLogoFailed(false);
+        setUploadFeedback({ type: 'success', message: 'Tải logo lên thành công!' });
+      }
+    } catch (err) {
+      setUploadFeedback({
+        type: 'error',
+        message: getErrorMessage(err, 'Không thể tải logo lên máy chủ.'),
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     const errors = airlineMode ? validateAirline(form) : validateAirport(form);
@@ -228,6 +291,7 @@ function CatalogFormPage({ kind, mode }) {
   const fieldError = (key) => state.fields[key] || state.fields[`body.${key}`];
   const logoUrl = airlineMode ? form.logo_url.trim() : '';
   const previewableLogo = /^https?:\/\//i.test(logoUrl) || /^\/[a-zA-Z0-9_.-]+/.test(logoUrl);
+  const previewSource = localPreview || (previewableLogo && !logoFailed ? logoUrl : null);
   const fallbackInitials = (form.iata_code || form.name || '✈').slice(0, 3).toUpperCase();
   return <CatalogShell><CatalogFrame eyebrow="DỮ LIỆU KHAI THÁC" title={`${editing ? 'Chỉnh sửa' : 'Thêm'} ${noun}`} description={editing ? `Cập nhật thông tin ${noun}; mã IATA sẽ được chuẩn hóa thành chữ hoa.` : `Khai báo thông tin ${noun} để dùng trong quản lý chuyến bay.`} actions={<Link className="button button-outline" to={editing ? `/admin/${pluralPath}/${id}` : `/admin/${pluralPath}`}>{editing ? 'Quay lại chi tiết' : 'Hủy'}</Link>}>
     <section className="surface-card admin-card catalog-form-card">
@@ -236,7 +300,35 @@ function CatalogFormPage({ kind, mode }) {
         {airlineMode ? <>
           <Field id="catalog-name" label="Tên hãng hàng không" value={form.name} onChange={setValue('name')} maxLength={150} required error={fieldError('name')} />
           <Field id="catalog-iata" label="Mã IATA" value={form.iata_code} onChange={setValue('iata_code')} maxLength={3} required hint="2–3 ký tự chữ hoặc số; hệ thống tự chuyển thành chữ hoa." error={fieldError('iata_code')} />
-          <div className="catalog-logo-form-row"><Field id="catalog-logo-url" label="Logo URL (không bắt buộc)" value={form.logo_url} onChange={setValue('logo_url')} maxLength={500} hint="Dùng URL http(s) hoặc đường dẫn nội bộ. Không hỗ trợ tải tệp." error={fieldError('logo_url')} /><div className="catalog-logo-preview" aria-label="Xem trước logo">{previewableLogo && !logoFailed ? <img src={form.logo_url.trim()} alt="Xem trước logo hãng hàng không" onError={() => setLogoFailed(true)} /> : <span>{fallbackInitials}</span>}<small>{previewableLogo && !logoFailed ? 'Xem trước' : 'Logo dự phòng'}</small></div></div>
+          <div className="catalog-logo-form-row">
+            <div className="catalog-logo-inputs">
+              <Field id="catalog-logo-url" label="Logo URL (không bắt buộc)" value={form.logo_url} onChange={setValue('logo_url')} maxLength={500} hint="Dùng URL http(s) hoặc đường dẫn nội bộ." error={fieldError('logo_url')} />
+              <div className="logo-upload-box">
+                <label htmlFor="catalog-logo-file" className="field-label">Tải tệp logo từ máy tính</label>
+                <div className="file-input-wrapper">
+                  <input
+                    id="catalog-logo-file"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleLogoFileChange}
+                    disabled={uploadingLogo}
+                  />
+                  {uploadingLogo ? <span className="upload-loading">Đang tải lên…</span> : null}
+                </div>
+                {uploadFeedback ? (
+                  <span className={`upload-feedback ${uploadFeedback.type}`}>
+                    {uploadFeedback.message}
+                  </span>
+                ) : (
+                  <small className="field-hint">Chấp nhận PNG, JPEG, WebP. Tối đa 5MB.</small>
+                )}
+              </div>
+            </div>
+            <div className="catalog-logo-preview" aria-label="Xem trước logo">
+              {previewSource ? <img src={previewSource} alt="Xem trước logo hãng hàng không" onError={() => setLogoFailed(true)} /> : <span>{fallbackInitials}</span>}
+              <small>{previewSource ? 'Xem trước' : 'Logo dự phòng'}</small>
+            </div>
+          </div>
         </> : <>
           <Field id="catalog-iata" label="Mã IATA" value={form.iata_code} onChange={setValue('iata_code')} maxLength={3} required hint="Đúng 3 chữ cái hoặc chữ số; hệ thống tự chuyển thành chữ hoa." error={fieldError('iata_code')} />
           <Field id="catalog-name" label="Tên sân bay" value={form.name} onChange={setValue('name')} maxLength={200} required error={fieldError('name')} />
@@ -247,6 +339,223 @@ function CatalogFormPage({ kind, mode }) {
       </form>
     </section>
   </CatalogFrame></CatalogShell>;
+}
+
+export function AirlineStatisticsPage() {
+  const api = useCatalogApi();
+  const [state, setState] = useState({ loading: true, data: null, error: '' });
+
+  const load = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const result = await api.getAirlineStatistics();
+      setState({ loading: false, data: result?.data || result, error: '' });
+    } catch (error) {
+      setState({
+        loading: false,
+        data: null,
+        error: getErrorMessage(error, 'Không thể tải thống kê chuyến bay theo hãng.'),
+      });
+    }
+  }, [api]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  if (state.loading) {
+    return (
+      <CatalogShell>
+        <LoadingView label="Đang tải thống kê chuyến bay theo hãng…" />
+      </CatalogShell>
+    );
+  }
+
+  if (state.error || !state.data) {
+    return (
+      <CatalogShell>
+        <CatalogFrame
+          eyebrow="BÁO CÁO VẬN HÀNH"
+          title="Thống kê chuyến bay theo hãng"
+          description="Không thể tải dữ liệu thống kê từ hệ thống."
+          actions={
+            <Link className="button button-outline" to="/admin/airlines">
+              Danh sách hãng
+            </Link>
+          }
+        >
+          <RequestError message={state.error || 'Dữ liệu không khả dụng.'} onRetry={() => void load()} />
+        </CatalogFrame>
+      </CatalogShell>
+    );
+  }
+
+  const { total_airlines = 0, total_flights = 0, airlines = [] } = state.data;
+  const maxFlights = airlines.length > 0 ? Math.max(1, ...airlines.map((a) => a.total_flights || 0)) : 1;
+  const topAirline = airlines.length > 0 ? [...airlines].sort((a, b) => (b.total_flights || 0) - (a.total_flights || 0))[0] : null;
+
+  return (
+    <CatalogShell>
+      <CatalogFrame
+        eyebrow="BÁO CÁO VẬN HÀNH"
+        title="Thống kê chuyến bay theo hãng"
+        description="Tổng hợp số lượng và tỷ trọng các chuyến bay thuộc từng hãng hàng không từ dữ liệu thực tế."
+        actions={
+          <div className="catalog-heading-actions">
+            <Link className="button button-outline" to="/admin/airlines">
+              Danh sách hãng
+            </Link>
+            <Link className="button button-primary" to="/admin/airlines/new">
+              Thêm hãng hàng không
+            </Link>
+          </div>
+        }
+      >
+        <div className="statistics-kpi-grid">
+          <div className="statistics-kpi-card">
+            <span className="statistics-kpi-label">Tổng số hãng hàng không</span>
+            <strong className="statistics-kpi-value">{total_airlines}</strong>
+            <small>Đang quản lý trong hệ thống</small>
+          </div>
+          <div className="statistics-kpi-card accent-primary">
+            <span className="statistics-kpi-label">Tổng số chuyến bay</span>
+            <strong className="statistics-kpi-value">{total_flights}</strong>
+            <small>Chuyến bay thực tế được ghi nhận</small>
+          </div>
+          <div className="statistics-kpi-card accent-secondary">
+            <span className="statistics-kpi-label">Hãng nhiều chuyến bay nhất</span>
+            <strong className="statistics-kpi-value">
+              {topAirline && topAirline.total_flights > 0 ? topAirline.name : '—'}
+            </strong>
+            <small>
+              {topAirline && topAirline.total_flights > 0
+                ? `${topAirline.total_flights} chuyến (${total_flights > 0 ? Math.round((topAirline.total_flights / total_flights) * 100) : 0}%)`
+                : 'Chưa có chuyến bay nào'}
+            </small>
+          </div>
+        </div>
+
+        {airlines.length === 0 ? (
+          <div className="empty-state catalog-empty">
+            <span className="catalog-empty-mark" aria-hidden="true">✈</span>
+            <h2>Chưa có dữ liệu hãng hàng không</h2>
+            <p>Thêm hãng hàng không vào hệ thống để bắt đầu theo dõi thống kê.</p>
+          </div>
+        ) : (
+          <>
+            <section className="airline-bar-chart-card" aria-label="Biểu đồ so sánh số chuyến bay giữa các hãng">
+              <h3>Biểu đồ so sánh số chuyến bay giữa các hãng</h3>
+              <div className="airline-bar-chart">
+                {airlines.map((row) => {
+                  const pct = Math.round(((row.total_flights || 0) / maxFlights) * 100);
+                  return (
+                    <div className="bar-row" key={row.id}>
+                      <div className="bar-label">
+                        <span className="bar-airline-name">{row.name}</span>
+                        <span className="catalog-code">{row.iata_code}</span>
+                      </div>
+                      <div className="bar-track">
+                        <div
+                          className="bar-fill"
+                          style={{ width: `${Math.max(pct, row.total_flights > 0 ? 3 : 0)}%` }}
+                          role="progressbar"
+                          aria-valuenow={row.total_flights}
+                          aria-valuemin={0}
+                          aria-valuemax={maxFlights}
+                          title={`${row.name}: ${row.total_flights} chuyến bay`}
+                        />
+                      </div>
+                      <span className="bar-value">{row.total_flights}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+
+            <section className="surface-card admin-card catalog-card">
+              <header className="catalog-toolbar">
+                <strong>Bảng thống kê chi tiết</strong>
+                <span className="catalog-total">{airlines.length} mục</span>
+              </header>
+              <div className="catalog-table-wrap">
+                <table className="catalog-table" aria-label="Bảng thống kê số chuyến bay theo từng hãng">
+                  <thead>
+                    <tr>
+                      <th>Hãng hàng không</th>
+                      <th>Mã IATA</th>
+                      <th>Logo</th>
+                      <th>Tổng chuyến bay</th>
+                      <th>Tỷ trọng</th>
+                      <th>Trạng thái chi tiết</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {airlines.map((row) => {
+                      const share = total_flights > 0 ? Math.round(((row.total_flights || 0) / total_flights) * 100) : 0;
+                      const hasBreakdown = row.status_breakdown && Object.keys(row.status_breakdown).length > 0;
+                      return (
+                        <tr key={row.id}>
+                          <td>
+                            <strong>{row.name}</strong>
+                            <small>ID #{row.id}</small>
+                          </td>
+                          <td><span className="catalog-code">{row.iata_code}</span></td>
+                          <td><Logo airline={row} /></td>
+                          <td><strong className="flight-count-badge">{row.total_flights || 0}</strong></td>
+                          <td>
+                            <div className="share-cell">
+                              <span>{share}%</span>
+                              <div className="share-bar"><div style={{ width: `${share}%` }} /></div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="status-chips">
+                              {hasBreakdown ? (
+                                Object.entries(row.status_breakdown).map(([status, count]) => (
+                                  <span key={status} className={`status-chip status-${status}`}>
+                                    {status}: {count}
+                                  </span>
+                                ))
+                              ) : (
+                                <span className="status-chip-empty">0 chuyến bay</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="catalog-mobile-list">
+                {airlines.map((row) => {
+                  const share = total_flights > 0 ? Math.round(((row.total_flights || 0) / total_flights) * 100) : 0;
+                  return (
+                    <article className="catalog-mobile-card" key={row.id}>
+                      <div className="catalog-mobile-heading">
+                        <Logo airline={row} />
+                        <div>
+                          <h2>{row.name}</h2>
+                          <span className="catalog-code">{row.iata_code}</span>
+                        </div>
+                      </div>
+                      <dl>
+                        <div>
+                          <dt>Tổng chuyến bay</dt>
+                          <dd><strong>{row.total_flights || 0}</strong> ({share}%)</dd>
+                        </div>
+                      </dl>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          </>
+        )}
+      </CatalogFrame>
+    </CatalogShell>
+  );
 }
 
 export const AirlineListPage = () => <CatalogListPage kind="airline" />;

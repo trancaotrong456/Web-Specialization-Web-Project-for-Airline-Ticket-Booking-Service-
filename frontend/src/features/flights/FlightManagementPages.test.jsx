@@ -106,7 +106,6 @@ describe('Flight and Fare Class management screens', () => {
     expect(JSON.parse(options.body)).toEqual({
       departure_time: '2026-11-05T06:30:00.000Z',
       arrival_time: '2026-11-05T08:30:00.000Z',
-      status: 'scheduled',
     });
     expect(options.body).not.toContain('available_seats');
     expect(screen.queryByLabelText('Số ghế còn trống')).not.toBeInTheDocument();
@@ -144,21 +143,46 @@ describe('Flight and Fare Class management screens', () => {
     await user.click(await screen.findByRole('button', { name: 'Hủy chuyến bay' }));
     expect(screen.getByRole('dialog', { name: 'Xác nhận hủy chuyến bay' })).toBeInTheDocument();
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/flights/5/cancel'))).toBe(false);
+    await user.type(screen.getByLabelText('Lý do hủy chuyến'), 'Thời tiết xấu');
     await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận hủy chuyến' }));
     await waitFor(() => expect(fetch.mock.calls.some(([url, options]) => url.endsWith('/flights/5/cancel') && options.method === 'PUT')).toBe(true));
+    const [, cancelOptions] = fetch.mock.calls.find(([url, options]) => url.endsWith('/flights/5/cancel') && options.method === 'PUT');
+    expect(JSON.parse(cancelOptions.body)).toEqual({ reason: 'Thời tiết xấu' });
     expect(fetch.mock.calls.some(([url, options]) => url.endsWith('/flights/5') && options.method === 'DELETE')).toBe(false);
+  });
+
+  it('lets Admin update flight status and inspect the recorded timeline', async () => {
+    const user = userEvent.setup();
+    const delayed = { ...flight, status: 'delayed', departure_time: '2026-11-05T07:30:00.000Z', status_reason: 'Thời tiết' };
+    const fetch = renderAs('admin', '/admin/flights/5', (url, options) => {
+      if (url.endsWith('/flights/status/5') && options.method === 'PATCH') return delayed;
+      if (url.endsWith('/flights/status/5')) return { flight, history: [{ id: 2, from_status: 'scheduled', to_status: 'delayed', reason: 'Thời tiết', created_at: '2026-11-04T12:00:00.000Z', actor: { full_name: 'Demo Admin' } }] };
+      if (url.endsWith('/flights/5')) return delayed;
+      throw new Error(`Unexpected request ${url}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Trạng thái và lịch sử' })).toBeInTheDocument();
+    expect(await screen.findByText(/Theo lịch → Hoãn chuyến/)).toBeInTheDocument();
+    await user.selectOptions(screen.getByLabelText('Trạng thái chuyến bay'), 'delayed');
+    await user.clear(screen.getByLabelText('Lý do hoãn/hủy hoặc ghi chú'));
+    await user.type(screen.getByLabelText('Lý do hoãn/hủy hoặc ghi chú'), 'Thời tiết');
+    await user.click(screen.getByRole('button', { name: 'Cập nhật trạng thái' }));
+    await waitFor(() => expect(fetch.mock.calls.some(([url, options]) => url.endsWith('/flights/status/5') && options.method === 'PATCH')).toBe(true));
+    const [, options] = fetch.mock.calls.find(([url, candidate]) => url.endsWith('/flights/status/5') && candidate.method === 'PATCH');
+    expect(JSON.parse(options.body)).toMatchObject({ status: 'delayed', reason: 'Thời tiết' });
+    expect(await screen.findByText('Trạng thái chuyến bay đã được cập nhật.')).toBeInTheDocument();
   });
 
   it('keeps Delete separate and explains 409 without auto-canceling', async () => {
     const user = userEvent.setup();
     const fetch = renderAs('admin', '/admin/flights/5', (url, options) => {
+      if (url.endsWith('/flights/status/5')) return { flight, history: [] };
       if (url.endsWith('/flights/5') && options.method === 'DELETE') return new Response(JSON.stringify({ message: 'Không thể xóa chuyến bay vì đã có lịch sử đặt vé.' }), { status: 409, headers: { 'Content-Type': 'application/json' } });
       if (url.endsWith('/flights/5')) return flight;
       throw new Error(`Unexpected request ${url}`);
     });
     await user.click(await screen.findByRole('button', { name: 'Xóa chuyến bay' }));
     await user.click(within(screen.getByRole('dialog', { name: 'Xác nhận xóa chuyến bay' })).getByRole('button', { name: 'Xóa chuyến bay' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Không thể xóa chuyến bay vì đã có lịch sử đặt vé. Bạn có thể hủy chuyến để giữ nguyên lịch sử.');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không thể xóa chuyến bay vì đã có lịch sử đặt vé. Bạn có thể hủy chuyến để giữ nguyên lịch sử đặt vé.');
     expect(fetch.mock.calls.some(([url]) => url.endsWith('/flights/5/cancel'))).toBe(false);
   });
 

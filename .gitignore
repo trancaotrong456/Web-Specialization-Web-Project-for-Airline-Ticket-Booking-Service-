@@ -5,6 +5,7 @@ node_modules/
 .env.*
 !.env.example
 /demo-seed.local.env
+/docker.env
 *.log
 dist/
 build/
