@@ -173,6 +173,7 @@ test('Airline module router protects GET /statistics with authentication and adm
     update: () => {},
     delete: () => {},
     getStatistics: () => {},
+    uploadLogo: () => {},
   };
 
   const validation = { validate: (req, res, next) => next() };

@@ -62,6 +62,16 @@ class AirlineController {
       next(error);
     }
   }
+
+  async uploadLogo(req, res, next) {
+    try {
+      const { file, filename } = req.body || {};
+      const result = await this.service.uploadLogo({ file, filename });
+      return this.apiResponse.success(res, result, 'Logo uploaded successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = AirlineController;

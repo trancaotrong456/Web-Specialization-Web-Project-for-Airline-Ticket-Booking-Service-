@@ -88,6 +88,90 @@ class AirlineService {
     return this.repository.getFlightStatistics();
   }
 
+  async uploadLogo({ file, filename } = {}) {
+    if (!file) {
+      const error = new Error('File payload is required');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let buffer;
+    if (Buffer.isBuffer(file)) {
+      buffer = file;
+    } else if (typeof file === 'string') {
+      const base64Data = file.replace(/^data:image\/[a-zA-Z0-9-.+]+;base64,/, '');
+      try {
+        buffer = Buffer.from(base64Data, 'base64');
+      } catch {
+        const error = new Error('Invalid base64 image data');
+        error.statusCode = 400;
+        throw error;
+      }
+    } else {
+      const error = new Error('File payload must be a buffer or base64 string');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    if (!buffer || buffer.length === 0) {
+      const error = new Error('Uploaded file is empty');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+    if (buffer.length > MAX_FILE_SIZE) {
+      const error = new Error('File size exceeds maximum limit of 5MB');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const detected = this.detectImageFormat(buffer);
+    if (!detected) {
+      const error = new Error('Invalid image format. Allowed formats are PNG, JPEG, and WebP');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const fs = require('fs');
+    const path = require('path');
+    const crypto = require('crypto');
+
+    const safeFilename = `${crypto.randomUUID()}.${detected.ext}`;
+    const targetDir = path.join(__dirname, '..', '..', 'public', 'uploads', 'airlines');
+
+    fs.mkdirSync(targetDir, { recursive: true });
+    const targetPath = path.join(targetDir, safeFilename);
+    fs.writeFileSync(targetPath, buffer);
+
+    return {
+      url: `/public/uploads/airlines/${safeFilename}`,
+      filename: safeFilename,
+      mime_type: detected.mime,
+      size: buffer.length,
+    };
+  }
+
+  detectImageFormat(buf) {
+    if (!buf || buf.length < 12) return null;
+    // PNG: 89 50 4E 47
+    if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) {
+      return { ext: 'png', mime: 'image/png' };
+    }
+    // JPEG: FF D8 FF
+    if (buf[0] === 0xFF && buf[1] === 0xD8 && buf[2] === 0xFF) {
+      return { ext: 'jpg', mime: 'image/jpeg' };
+    }
+    // WebP: RIFF .... WEBP
+    if (
+      buf[0] === 0x52 && buf[1] === 0x49 && buf[2] === 0x46 && buf[3] === 0x46 &&
+      buf[8] === 0x57 && buf[9] === 0x45 && buf[10] === 0x42 && buf[11] === 0x50
+    ) {
+      return { ext: 'webp', mime: 'image/webp' };
+    }
+    return null;
+  }
+
   createDuplicateIataError() {
     const error = new Error('Airline with this IATA code already exists');
     error.statusCode = 409;

@@ -9,6 +9,7 @@ test('airline module exposes documented CRUD and search endpoints', () => {
 
   assert.deepEqual(routes, [
     { path: '/statistics', methods: ['get'] },
+    { path: '/upload-logo', methods: ['post'] },
     { path: '/', methods: ['get'] },
     { path: '/:id', methods: ['get'] },
     { path: '/', methods: ['post'] },

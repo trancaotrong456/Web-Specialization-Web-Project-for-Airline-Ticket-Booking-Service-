@@ -309,4 +309,37 @@ describe('Airline and Airport administration', () => {
     await waitFor(() => expect(attempts).toBe(2));
     expect((await screen.findAllByText('VN Air')).length).toBeGreaterThan(0);
   });
+
+  it('uploads airline logo file and updates logo URL field', async () => {
+    const fetch = renderAs('admin', '/admin/airlines/new', (url, options) => {
+      if (url.endsWith('/airlines/upload-logo') && options.method === 'POST') {
+        return { url: '/public/uploads/airlines/custom-logo.png', filename: 'custom-logo.png' };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Thêm hãng hàng không' })).toBeInTheDocument();
+    const fileInput = screen.getByLabelText('Tải tệp logo từ máy tính');
+
+    const file = new File(['dummy-png-content'], 'airline-logo.png', { type: 'image/png' });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(screen.getByText('Tải logo lên thành công!')).toBeInTheDocument());
+    expect(screen.getByLabelText('Logo URL (không bắt buộc)')).toHaveValue('/public/uploads/airlines/custom-logo.png');
+    expect(fetch.mock.calls.some(([url, options]) => url.endsWith('/airlines/upload-logo') && options.method === 'POST')).toBe(true);
+  });
+
+  it('rejects unsupported file format during logo file upload', async () => {
+    renderAs('admin', '/admin/airlines/new', () => {
+      throw new Error('Should not call upload API for invalid files');
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Thêm hãng hàng không' })).toBeInTheDocument();
+    const fileInput = screen.getByLabelText('Tải tệp logo từ máy tính');
+
+    const txtFile = new File(['plain text'], 'document.txt', { type: 'text/plain' });
+    fireEvent.change(fileInput, { target: { files: [txtFile] } });
+
+    expect(await screen.findByText('Chỉ chấp nhận định dạng ảnh PNG, JPEG hoặc WebP.')).toBeInTheDocument();
+  });
 });

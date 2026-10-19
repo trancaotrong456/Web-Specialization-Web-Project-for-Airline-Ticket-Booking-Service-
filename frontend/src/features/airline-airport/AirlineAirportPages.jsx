@@ -185,6 +185,10 @@ function CatalogFormPage({ kind, mode }) {
   const [form, setForm] = useState(emptyForm);
   const [state, setState] = useState({ loading: editing, submitting: false, error: '', fields: {} });
   const [logoFailed, setLogoFailed] = useState(false);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [uploadFeedback, setUploadFeedback] = useState(null);
+  const [localPreview, setLocalPreview] = useState(null);
+
   useEffect(() => {
     if (!editing) return undefined;
     let active = true;
@@ -206,8 +210,60 @@ function CatalogFormPage({ kind, mode }) {
     const value = key === 'iata_code' ? event.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3) : event.target.value;
     setForm((current) => ({ ...current, [key]: value }));
     setState((current) => ({ ...current, fields: { ...current.fields, [key]: undefined } }));
-    if (key === 'logo_url') setLogoFailed(false);
+    if (key === 'logo_url') {
+      setLogoFailed(false);
+      setLocalPreview(null);
+    }
   };
+
+  const handleLogoFileChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const validTypes = ['image/png', 'image/jpeg', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setUploadFeedback({ type: 'error', message: 'Chỉ chấp nhận định dạng ảnh PNG, JPEG hoặc WebP.' });
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadFeedback({ type: 'error', message: 'Kích thước tệp vượt quá giới hạn 5MB.' });
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      setLocalPreview(e.target.result);
+    };
+    reader.readAsDataURL(file);
+
+    setUploadingLogo(true);
+    setUploadFeedback(null);
+    try {
+      const base64 = await new Promise((resolve, reject) => {
+        const fileReader = new FileReader();
+        fileReader.onload = () => resolve(fileReader.result);
+        fileReader.onerror = reject;
+        fileReader.readAsDataURL(file);
+      });
+
+      const res = await api.uploadAirlineLogo({ file: base64, filename: file.name });
+      const uploadedUrl = res?.url || res?.data?.url;
+      if (uploadedUrl) {
+        setForm((current) => ({ ...current, logo_url: uploadedUrl }));
+        setLogoFailed(false);
+        setUploadFeedback({ type: 'success', message: 'Tải logo lên thành công!' });
+      }
+    } catch (err) {
+      setUploadFeedback({
+        type: 'error',
+        message: getErrorMessage(err, 'Không thể tải logo lên máy chủ.'),
+      });
+    } finally {
+      setUploadingLogo(false);
+    }
+  };
+
   const submit = async (event) => {
     event.preventDefault();
     const errors = airlineMode ? validateAirline(form) : validateAirport(form);
@@ -235,6 +291,7 @@ function CatalogFormPage({ kind, mode }) {
   const fieldError = (key) => state.fields[key] || state.fields[`body.${key}`];
   const logoUrl = airlineMode ? form.logo_url.trim() : '';
   const previewableLogo = /^https?:\/\//i.test(logoUrl) || /^\/[a-zA-Z0-9_.-]+/.test(logoUrl);
+  const previewSource = localPreview || (previewableLogo && !logoFailed ? logoUrl : null);
   const fallbackInitials = (form.iata_code || form.name || '✈').slice(0, 3).toUpperCase();
   return <CatalogShell><CatalogFrame eyebrow="DỮ LIỆU KHAI THÁC" title={`${editing ? 'Chỉnh sửa' : 'Thêm'} ${noun}`} description={editing ? `Cập nhật thông tin ${noun}; mã IATA sẽ được chuẩn hóa thành chữ hoa.` : `Khai báo thông tin ${noun} để dùng trong quản lý chuyến bay.`} actions={<Link className="button button-outline" to={editing ? `/admin/${pluralPath}/${id}` : `/admin/${pluralPath}`}>{editing ? 'Quay lại chi tiết' : 'Hủy'}</Link>}>
     <section className="surface-card admin-card catalog-form-card">
@@ -243,7 +300,35 @@ function CatalogFormPage({ kind, mode }) {
         {airlineMode ? <>
           <Field id="catalog-name" label="Tên hãng hàng không" value={form.name} onChange={setValue('name')} maxLength={150} required error={fieldError('name')} />
           <Field id="catalog-iata" label="Mã IATA" value={form.iata_code} onChange={setValue('iata_code')} maxLength={3} required hint="2–3 ký tự chữ hoặc số; hệ thống tự chuyển thành chữ hoa." error={fieldError('iata_code')} />
-          <div className="catalog-logo-form-row"><Field id="catalog-logo-url" label="Logo URL (không bắt buộc)" value={form.logo_url} onChange={setValue('logo_url')} maxLength={500} hint="Dùng URL http(s) hoặc đường dẫn nội bộ. Không hỗ trợ tải tệp." error={fieldError('logo_url')} /><div className="catalog-logo-preview" aria-label="Xem trước logo">{previewableLogo && !logoFailed ? <img src={form.logo_url.trim()} alt="Xem trước logo hãng hàng không" onError={() => setLogoFailed(true)} /> : <span>{fallbackInitials}</span>}<small>{previewableLogo && !logoFailed ? 'Xem trước' : 'Logo dự phòng'}</small></div></div>
+          <div className="catalog-logo-form-row">
+            <div className="catalog-logo-inputs">
+              <Field id="catalog-logo-url" label="Logo URL (không bắt buộc)" value={form.logo_url} onChange={setValue('logo_url')} maxLength={500} hint="Dùng URL http(s) hoặc đường dẫn nội bộ." error={fieldError('logo_url')} />
+              <div className="logo-upload-box">
+                <label htmlFor="catalog-logo-file" className="field-label">Tải tệp logo từ máy tính</label>
+                <div className="file-input-wrapper">
+                  <input
+                    id="catalog-logo-file"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={handleLogoFileChange}
+                    disabled={uploadingLogo}
+                  />
+                  {uploadingLogo ? <span className="upload-loading">Đang tải lên…</span> : null}
+                </div>
+                {uploadFeedback ? (
+                  <span className={`upload-feedback ${uploadFeedback.type}`}>
+                    {uploadFeedback.message}
+                  </span>
+                ) : (
+                  <small className="field-hint">Chấp nhận PNG, JPEG, WebP. Tối đa 5MB.</small>
+                )}
+              </div>
+            </div>
+            <div className="catalog-logo-preview" aria-label="Xem trước logo">
+              {previewSource ? <img src={previewSource} alt="Xem trước logo hãng hàng không" onError={() => setLogoFailed(true)} /> : <span>{fallbackInitials}</span>}
+              <small>{previewSource ? 'Xem trước' : 'Logo dự phòng'}</small>
+            </div>
+          </div>
         </> : <>
           <Field id="catalog-iata" label="Mã IATA" value={form.iata_code} onChange={setValue('iata_code')} maxLength={3} required hint="Đúng 3 chữ cái hoặc chữ số; hệ thống tự chuyển thành chữ hoa." error={fieldError('iata_code')} />
           <Field id="catalog-name" label="Tên sân bay" value={form.name} onChange={setValue('name')} maxLength={200} required error={fieldError('name')} />

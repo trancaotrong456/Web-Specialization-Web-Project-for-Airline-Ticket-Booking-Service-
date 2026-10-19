@@ -30,7 +30,7 @@ function createAirlineModule({
     throw new TypeError('controller, guards, validation, and validators are required');
   }
 
-  for (const method of ['getAll', 'getById', 'create', 'update', 'delete', 'getStatistics']) {
+  for (const method of ['getAll', 'getById', 'create', 'update', 'delete', 'getStatistics', 'uploadLogo']) {
     if (typeof resolvedController[method] !== 'function') {
       throw new TypeError(`controller.${method} must be a function`);
     }
@@ -40,6 +40,7 @@ function createAirlineModule({
   const bind = (method) => resolvedController[method].bind(resolvedController);
 
   router.get('/statistics', guards.authenticate, guards.authorize('admin'), bind('getStatistics'));
+  router.post('/upload-logo', guards.authenticate, guards.authorize('admin'), bind('uploadLogo'));
   router.get('/', validators.listAirlineValidator, validation.validate, bind('getAll'));
   router.get('/:id', validators.airlineIdValidator, validation.validate, bind('getById'));
   router.post(
