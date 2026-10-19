@@ -4,7 +4,6 @@
  */
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const path = require('path');
 
 // Test logic kiểm tra múi giờ Việt Nam (UTC+7)
 test('#22 – tính dateStart/dateEnd UTC từ ngày VN (UTC+7)', () => {
@@ -87,6 +86,72 @@ test('#21 – createFlightValidator rejects arrival before departure', async () 
   assert.ok(result.array().some((err) => err.msg.includes('arrival_time must be after departure_time')));
 });
 
+test('#21 – createFlight rejects client-supplied available_seats and system fields', async () => {
+  const flightService = require('../services/flight.service');
+
+  await assert.rejects(
+    async () => {
+      await flightService.createFlight({
+        airline_id: 1,
+        departure_airport_id: 1,
+        arrival_airport_id: 2,
+        departure_time: '2026-10-10T10:00:00Z',
+        arrival_time: '2026-10-10T12:00:00Z',
+        total_seats: 100,
+        available_seats: 50,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('available_seats'));
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    async () => {
+      await flightService.createFlight({
+        id: 999,
+        airline_id: 1,
+        departure_airport_id: 1,
+        arrival_airport_id: 2,
+        departure_time: '2026-10-10T10:00:00Z',
+        arrival_time: '2026-10-10T12:00:00Z',
+        total_seats: 100,
+      });
+    },
+    (err) => {
+      assert.equal(err.statusCode, 400);
+      assert.ok(err.message.includes('trường hệ thống'));
+      return true;
+    }
+  );
+});
+
+test('#21 – createFlightValidator rejects available_seats and system fields', async () => {
+  const { validationResult } = require('express-validator');
+  const { createFlightValidator } = require('../validators/flight.validator');
+
+  const req = {
+    body: {
+      airline_id: 1,
+      departure_airport_id: 1,
+      arrival_airport_id: 2,
+      departure_time: '2026-10-10T10:00:00Z',
+      arrival_time: '2026-10-10T12:00:00Z',
+      total_seats: 100,
+      available_seats: 80,
+    },
+  };
+
+  for (const middleware of createFlightValidator) {
+    await middleware(req, {}, () => {});
+  }
+  const result = validationResult(req);
+  assert.ok(!result.isEmpty(), 'Validation must fail when available_seats is supplied');
+});
+
+
 // Test edit flight business rules
 test('#21 – updateFlight rejects direct mutation of available_seats (400)', async () => {
   const flightService = require('../services/flight.service');
@@ -96,36 +161,92 @@ test('#21 – updateFlight rejects direct mutation of available_seats (400)', as
     },
     (err) => {
       assert.equal(err.statusCode, 400);
-      assert.ok(err.message.includes('available_seats'));
+      assert.ok(err.message.includes('available_seats') || err.message.includes('Không được phép'));
       return true;
     }
   );
 });
 
-test('#21 – updateFlightValidator does not allow available_seats', async () => {
-  const { updateFlightValidator } = require('../validators/flight.validator');
-  assert.ok(Array.isArray(updateFlightValidator));
-  // Ensure available_seats is not in update validators
-  const fieldNames = updateFlightValidator.map((v) => v.builder?.fields?.[0] || '');
-  assert.ok(!fieldNames.includes('available_seats'), 'available_seats should not be validated/allowed in update');
+test('#21 – updateFlight rejects mass assignment of total_seats, airline_id, airport IDs, timestamps', async () => {
+  const flightService = require('../services/flight.service');
+  const disallowedPayloads = [
+    { total_seats: 200 },
+    { airline_id: 2 },
+    { departure_airport_id: 5 },
+    { arrival_airport_id: 6 },
+    { id: 999 },
+    { created_at: new Date() },
+    { updatedAt: new Date() },
+  ];
+
+  for (const payload of disallowedPayloads) {
+    await assert.rejects(
+      async () => {
+        await flightService.updateFlight(1, payload);
+      },
+      (err) => {
+        assert.equal(err.statusCode, 400);
+        return true;
+      }
+    );
+  }
 });
 
-// Test delete flight rules
-test('#21 – deleteFlight contract verifies transaction and 409 when booking exists', () => {
-  const fs = require('fs');
-  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/flight.service.js'), 'utf8');
+test('#21 – updateFlightValidator enforces allowlist and rejects disallowed fields', async () => {
+  const { validationResult } = require('express-validator');
+  const { updateFlightValidator } = require('../validators/flight.validator');
 
-  assert.ok(serviceCode.includes('sequelize.transaction'), 'deleteFlight must execute within a sequelize.transaction');
-  assert.ok(serviceCode.includes('Booking.count'), 'deleteFlight must check Booking.count before deletion');
-  assert.ok(serviceCode.includes('statusCode = 409'), 'deleteFlight must reject deletion with 409 Conflict if bookings exist');
+  const invalidReq = {
+    body: {
+      available_seats: 50,
+      total_seats: 100,
+    },
+  };
+  for (const middleware of updateFlightValidator) {
+    await middleware(invalidReq, {}, () => {});
+  }
+  const result = validationResult(invalidReq);
+  assert.ok(!result.isEmpty(), 'Disallowed update fields must fail validation');
+
+  const emptyReq = { body: {} };
+  for (const middleware of updateFlightValidator) {
+    await middleware(emptyReq, {}, () => {});
+  }
+  const emptyResult = validationResult(emptyReq);
+  assert.ok(!emptyResult.isEmpty(), 'Empty update body must fail validation');
+});
+
+
+// Test delete flight rules
+test('#21 – deleteFlight contract verifies transaction and 409 when booking exists', async () => {
+  const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
+  const FlightService = require('../modules/flight/flight.service');
+  const calls = [];
+  const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+  const models = {
+    sequelize: { transaction: async (work) => { calls.push('begin'); try { return await work(transaction); } catch (error) { calls.push('rollback'); throw error; } } },
+    Flight: { findByPk: async (_id, options) => { calls.push(['flight', options]); return { id: 8, destroy: async () => calls.push('flight deleted') }; } },
+    Booking: { count: async (options) => { calls.push(['bookings', options]); return 1; } },
+    FareClass: { destroy: async () => calls.push('fares deleted') }, Airline: {}, Airport: {}, Op: {},
+  };
+  const service = new FlightService({ repository: new SequelizeFlightRepository(models) });
+  await assert.rejects(service.deleteFlight('8'), (error) => error.statusCode === 409);
+  assert.deepEqual(calls, [
+    'begin', ['flight', { lock: 'UPDATE', transaction }],
+    ['bookings', { where: { flight_id: '8' }, transaction }], 'rollback',
+  ]);
 });
 
 // Test flight list & search rules
-test('#22 – searchFlights enforces status=scheduled only', () => {
-  const fs = require('fs');
-  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/flight.service.js'), 'utf8');
-
-  assert.ok(serviceCode.includes("status: 'scheduled'"), 'searchFlights must only filter status scheduled');
+test('#22 – searchFlights enforces status=scheduled only', async () => {
+  const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
+  let options;
+  const repository = new SequelizeFlightRepository({
+    sequelize: {}, Flight: { findAndCountAll: async (value) => { options = value; return { count: 0, rows: [] }; } },
+    Airline: {}, Airport: {}, FareClass: {}, Booking: {}, Op: {},
+  });
+  await repository.searchPage({ page: 1, limit: 20, min_seats: 0 });
+  assert.deepEqual(options.where, { status: 'scheduled' });
 });
 
 test('#22 – searchFlightValidator validates query parameters', async () => {
@@ -164,13 +285,18 @@ test('#22 – searchFlightValidator validates query parameters', async () => {
 });
 
 // Test flight detail
-test('#23 – getFlightById contract verifies associations and error handling', () => {
-  const fs = require('fs');
-  const serviceCode = fs.readFileSync(path.join(__dirname, '../services/flight.service.js'), 'utf8');
-
-  assert.ok(serviceCode.includes('Flight.findByPk(id'), 'getFlightById must search flight by primary key');
-  assert.ok(serviceCode.includes('FareClass'), 'getFlightById must include FareClass associations for ticket classes and seats');
-  assert.ok(serviceCode.includes("statusCode = 404"), 'getFlightById must throw 404 when flight is not found');
+test('#23 – getFlightById contract verifies associations and error handling', async () => {
+  const { SequelizeFlightRepository } = require('../modules/flight/flight.repository');
+  const FlightService = require('../modules/flight/flight.service');
+  const FareClass = {};
+  let lookup;
+  const repository = new SequelizeFlightRepository({
+    sequelize: {}, Flight: { findByPk: async (id, options) => { lookup = [id, options]; return null; } },
+    Airline: {}, Airport: {}, FareClass, Booking: {}, Op: {},
+  });
+  await assert.rejects(new FlightService({ repository }).getFlightById('404'), (error) => error.statusCode === 404);
+  assert.equal(lookup[0], '404');
+  assert.deepEqual(lookup[1].include[3], { model: FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price', 'seat_quota'] });
 });
 
 // Regression: JOIN fareClasses must not inflate pagination totals for either endpoint.

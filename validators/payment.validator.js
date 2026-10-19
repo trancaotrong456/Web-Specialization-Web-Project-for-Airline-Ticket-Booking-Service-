@@ -1,4 +1,4 @@
-const { body, param, query } = require('express-validator');
+const { body, header, param, query } = require('express-validator');
 const { normalizeGuestEmail } = require('../utils/guestEmail.util');
 
 const paymentGuestEmailValidator = [
@@ -23,6 +23,12 @@ const paymentGuestEmailValidator = [
 ];
 
 const initiatePaymentValidator = [
+  header('idempotency-key')
+    .optional()
+    .isString()
+    .isLength({ min: 8, max: 128 })
+    .matches(/^[A-Za-z0-9._:-]+$/)
+    .withMessage('Idempotency-Key must be 8-128 safe characters'),
   body('booking_id')
     .notEmpty()
     .withMessage('booking_id is required')

@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../app/AuthProvider';
 import './adminSidebar.css';
+import { NotificationBell } from '../features/notifications/NotificationBell';
 
 const sidebarIcons = {
   overview: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9" /><path d="M9 20v-6h6v6" /></>,
@@ -38,6 +39,28 @@ export function AppHeader() {
   const lastPathnameRef = useRef(location.pathname);
   const previousNarrowRef = useRef(narrow);
   const isAdminArea = user?.role === 'admin' && location.pathname.startsWith('/admin');
+
+  useEffect(() => {
+    if (isAdminArea) {
+      document.body.classList.add('has-admin-sidebar');
+    } else {
+      document.body.classList.remove('has-admin-sidebar');
+    }
+    return () => {
+      document.body.classList.remove('has-admin-sidebar');
+    };
+  }, [isAdminArea]);
+
+  useEffect(() => {
+    if (isAdminArea && adminSidebarCollapsed) {
+      document.body.classList.add('admin-sidebar-collapsed');
+    } else {
+      document.body.classList.remove('admin-sidebar-collapsed');
+    }
+    return () => {
+      document.body.classList.remove('admin-sidebar-collapsed');
+    };
+  }, [isAdminArea, adminSidebarCollapsed]);
 
   useEffect(() => {
     setAccountMenuOpen(false);
@@ -243,6 +266,7 @@ export function AppHeader() {
       </nav> : null}
       {isAdminArea && narrow ? <button ref={adminSidebarToggleRef} className="admin-sidebar-trigger" type="button" aria-label={adminSidebarOpen ? 'Đóng điều hướng quản trị' : 'Mở điều hướng quản trị'} aria-expanded={adminSidebarOpen} aria-controls="admin-sidebar-navigation" onClick={() => setAdminSidebarOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="admin-sidebar-trigger-label">Quản trị</span></button> : null}
       {authenticated ? <div className="account-actions">
+        <NotificationBell />
         {isAdminArea ? <span className="admin-header-avatar" aria-hidden="true">{(user?.full_name || user?.email || 'A').trim().charAt(0).toUpperCase()}</span> : null}
         <div ref={accountMenuRef} className={`account-menu ${accountMenuOpen ? 'is-open' : ''}`} onMouseEnter={() => setAccountMenuOpen(true)} onKeyDown={(event) => {
           if (event.key === 'Escape') {

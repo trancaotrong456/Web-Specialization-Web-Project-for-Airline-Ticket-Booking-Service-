@@ -9,6 +9,7 @@ module.exports = (sequelize, DataTypes) => {
       Flight.belongsTo(models.Airport, { foreignKey: 'arrival_airport_id', as: 'arrivalAirport' });
       Flight.hasMany(models.FareClass, { foreignKey: 'flight_id', as: 'fareClasses' });
       Flight.hasMany(models.Booking, { foreignKey: 'flight_id', as: 'bookings' });
+      Flight.hasMany(models.FlightStatusHistory, { foreignKey: 'flight_id', as: 'statusHistory' });
     }
   }
 
@@ -48,9 +49,12 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: false,
       },
       status: {
-        type: DataTypes.ENUM('scheduled', 'cancelled', 'completed'),
+        type: DataTypes.ENUM('scheduled', 'delayed', 'boarding', 'departed', 'arrived', 'cancelled', 'completed'),
         defaultValue: 'scheduled',
       },
+      actual_departure_time: { type: DataTypes.DATE, allowNull: true },
+      actual_arrival_time: { type: DataTypes.DATE, allowNull: true },
+      status_reason: { type: DataTypes.STRING(500), allowNull: true },
     },
     {
       sequelize,

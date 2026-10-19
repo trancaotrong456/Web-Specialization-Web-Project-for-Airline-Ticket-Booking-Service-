@@ -3,7 +3,7 @@ import { AppHeader } from '../../components/AppHeader';
 
 export function ProfileLayout({ title, description, children }) {
   return (
-    <div className="account-page">
+    <div className="public-page account-page">
       <AppHeader />
       <main className="account-main">
         <header className="page-heading">
@@ -17,6 +17,10 @@ export function ProfileLayout({ title, description, children }) {
         </nav>
         {children}
       </main>
+      <footer className="site-footer">
+        <span>Serene Flightways</span>
+        <span>Thông tin tài khoản được bảo vệ theo chính sách của hệ thống.</span>
+      </footer>
     </div>
   );
 }

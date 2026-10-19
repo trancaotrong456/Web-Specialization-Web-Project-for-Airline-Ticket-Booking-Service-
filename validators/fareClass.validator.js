@@ -1,6 +1,14 @@
 const { body, param } = require('express-validator');
 
 const createFareClassValidator = [
+  body().custom((value, { req }) => {
+    const ALLOWED_FIELDS = ['flight_id', 'class_name', 'price', 'seat_quota'];
+    const extraFields = Object.keys(req.body || {}).filter((k) => !ALLOWED_FIELDS.includes(k));
+    if (extraFields.length > 0) {
+      throw new Error(`Các trường không hợp lệ ngoài hợp đồng: ${extraFields.join(', ')}`);
+    }
+    return true;
+  }),
   body('flight_id')
     .notEmpty()
     .isInt({ min: 1 })
@@ -14,12 +22,30 @@ const createFareClassValidator = [
     .isFloat({ min: 0 })
     .withMessage('price is required and must be non-negative'),
   body('seat_quota')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 0 })
     .withMessage('seat_quota must be a non-negative integer'),
 ];
 
 const updateFareClassValidator = [
+  body().custom((value, { req }) => {
+    if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+      throw new Error('Dữ liệu cập nhật phải là object');
+    }
+    const keys = Object.keys(req.body);
+    if (keys.length === 0) {
+      throw new Error('Vui lòng cung cấp ít nhất một trường cần cập nhật');
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'flight_id')) {
+      throw new Error('Không thể thay đổi chuyến bay (flight_id) của hạng vé đã tạo');
+    }
+    const ALLOWED = ['class_name', 'price', 'seat_quota'];
+    const disallowed = keys.filter((k) => !ALLOWED.includes(k));
+    if (disallowed.length > 0) {
+      throw new Error(`Không được phép chỉnh sửa các trường: ${disallowed.join(', ')}`);
+    }
+    return true;
+  }),
   body('class_name')
     .optional()
     .trim()
@@ -30,7 +56,7 @@ const updateFareClassValidator = [
     .isFloat({ min: 0 })
     .withMessage('price must be non-negative'),
   body('seat_quota')
-    .optional()
+    .optional({ nullable: true })
     .isInt({ min: 0 })
     .withMessage('seat_quota must be a non-negative integer'),
 ];
