@@ -31,10 +31,12 @@ describe('createApiClient', () => {
   });
 
   it('returns a PDF response as a Blob when explicitly requested', async () => {
-    const pdf = new Blob(['%PDF-demo'], { type: 'application/pdf' });
-    const fetchImpl = vi.fn().mockResolvedValue(new Response(pdf, { status: 200, headers: { 'Content-Type': 'application/pdf' } }));
+    const pdfContent = '%PDF-demo';
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(pdfContent, { status: 200, headers: { 'Content-Type': 'application/pdf' } }));
     const { request } = makeClient({ fetchImpl });
-    await expect(request('/bookings/7/ticket', { responseType: 'blob' })).resolves.toBeInstanceOf(Blob);
+    const result = await request('/bookings/7/ticket', { responseType: 'blob' });
+    expect(result.type).toBe('application/pdf');
+    expect(result.size).toBe(pdfContent.length);
     expect(fetchImpl.mock.calls[0][1].responseType).toBe('blob');
   });
 

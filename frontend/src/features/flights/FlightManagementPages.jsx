@@ -7,10 +7,10 @@ import { Field } from '../../components/Field';
 import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
-import { StatusBadge } from '../../components/StatusBadge';
 import { createFlightManagementApi } from './flightManagementApi';
 
-const statusLabels = { scheduled: 'Theo lịch', cancelled: 'Đã hủy', completed: 'Hoàn tất' };
+const statusLabels = { scheduled: 'Theo lịch', delayed: 'Hoãn chuyến', boarding: 'Đang lên máy bay', departed: 'Đã khởi hành', arrived: 'Đã đến nơi', cancelled: 'Đã hủy', completed: 'Hoàn tất' };
+const statusOptions = Object.entries(statusLabels).map(([value, label]) => ({ value, label }));
 const LIMIT = 20;
 const displayTime = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const money = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
@@ -57,7 +57,7 @@ function useFlight(id) {
   const api = useManagementApi();
   const [state, setState] = useState({ loading: true, data: null, error: '' });
   const reload = useCallback(async () => {
-    setState((current) => ({ ...current, loading: true, error: '' }));
+    setState((current) => ({ ...current, loading: current.data === null, error: '' }));
     try { setState({ loading: false, data: await api.getFlight(id), error: '' }); }
     catch (error) { setState({ loading: false, data: null, error: errorMessage(error, 'Không thể tải chuyến bay.') }); }
   }, [api, id]);
@@ -86,15 +86,22 @@ function RouteError({ error, fallback }) {
   return <Notice type="error">{errorMessage(error, fallback)}</Notice>;
 }
 
+function FlightStatusBadge({ status }) {
+  return <span className={`status-badge status-${status}`}>{statusLabels[status] || status || '—'}</span>;
+}
+
 function FlightFacts({ flight }) {
   return <dl className="detail-list flight-facts">
     <div><dt>Hãng hàng không</dt><dd>{carrierName(flight)}</dd></div>
     <div><dt>Chặng bay</dt><dd>{airportName(flight.departureAirport)} <span aria-hidden="true">→</span> {airportName(flight.arrivalAirport)}</dd></div>
     <div><dt>Khởi hành</dt><dd>{displayTime(flight.departure_time)}</dd></div>
     <div><dt>Đến nơi</dt><dd>{displayTime(flight.arrival_time)}</dd></div>
+    <div><dt>Khởi hành thực tế</dt><dd>{displayTime(flight.actual_departure_time)}</dd></div>
+    <div><dt>Đến thực tế</dt><dd>{displayTime(flight.actual_arrival_time)}</dd></div>
+    {flight.status_reason ? <div><dt>Lý do cập nhật</dt><dd>{flight.status_reason}</dd></div> : null}
     <div><dt>Tổng số ghế</dt><dd>{flight.total_seats ?? '—'}</dd></div>
     <div><dt>Ghế còn trống</dt><dd>{flight.available_seats ?? '—'}</dd></div>
-    <div><dt>Trạng thái</dt><dd><StatusBadge status={flight.status} /></dd></div>
+    <div><dt>Trạng thái</dt><dd><FlightStatusBadge status={flight.status} /></dd></div>
   </dl>;
 }
 
@@ -123,10 +130,10 @@ export function FlightListPage() {
   if (state.loading) return <ManagementShell><LoadingView label="Đang tải danh sách chuyến bay…" /></ManagementShell>;
   return <ManagementShell><PageFrame title="Quản lý chuyến bay" description="Theo dõi lịch khai thác và thông tin từng chuyến bay." actions={admin ? <Link className="button button-primary" to="/admin/flights/new">Tạo chuyến bay</Link> : null}>
     {state.error ? <ErrorState message={state.error} onRetry={() => void load()} /> : <section className="surface-card admin-card">
-      <div className="flight-filter-bar"><label htmlFor="flight-status-filter">Trạng thái chuyến bay<select id="flight-status-filter" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả trạng thái</option><option value="scheduled">Theo lịch</option><option value="cancelled">Đã hủy</option><option value="completed">Hoàn tất</option></select></label><label htmlFor="flight-limit-filter">Số dòng<select id="flight-limit-filter" value={limit} onChange={(event) => update({ limit: event.target.value, page: 1 })}><option value="10">10 / trang</option><option value="20">20 / trang</option><option value="50">50 / trang</option><option value="100">100 / trang</option></select></label><span>{state.pagination?.total ?? state.rows.length} chuyến bay</span></div>
+      <div className="flight-filter-bar"><label htmlFor="flight-status-filter">Trạng thái chuyến bay<select id="flight-status-filter" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả trạng thái</option>{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label htmlFor="flight-limit-filter">Số dòng<select id="flight-limit-filter" value={limit} onChange={(event) => update({ limit: event.target.value, page: 1 })}><option value="10">10 / trang</option><option value="20">20 / trang</option><option value="50">50 / trang</option><option value="100">100 / trang</option></select></label><span>{state.pagination?.total ?? state.rows.length} chuyến bay</span></div>
       {state.rows.length === 0 ? <div className="empty-state"><h2>Chưa có chuyến bay phù hợp</h2><p>Thay đổi bộ lọc trạng thái hoặc kiểm tra lại sau.</p></div> : <>
-        <div className="table-wrap flight-table-wrap"><table aria-label="Danh sách chuyến bay"><thead><tr><th>Chuyến bay</th><th>Chặng bay</th><th>Khởi hành</th><th>Ghế</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead><tbody>{state.rows.map((item) => <tr key={item.id}><td><strong>{carrierName(item)}</strong><small>Mã chuyến #{item.id}</small></td><td>{item.departureAirport?.iata_code || '—'} → {item.arrivalAirport?.iata_code || '—'}</td><td>{displayTime(item.departure_time)}</td><td>{item.available_seats ?? '—'} / {item.total_seats ?? '—'}</td><td><StatusBadge status={item.status} /></td><td><Link to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></td></tr>)}</tbody></table></div>
-        <div className="flight-card-list">{state.rows.map((item) => <article className="flight-card" key={item.id}><div className="flight-card-top"><div><span className="eyebrow">CHUYẾN #{item.id}</span><h2>{carrierName(item)}</h2></div><StatusBadge status={item.status} /></div><p className="flight-card-route"><strong>{item.departureAirport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong>{item.arrivalAirport?.iata_code || '—'}</strong></p><div className="flight-card-meta"><span>{displayTime(item.departure_time)}</span><span>{item.available_seats ?? '—'} / {item.total_seats ?? '—'} ghế</span></div><Link className="button button-outline" to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></article>)}</div>
+        <div className="table-wrap flight-table-wrap"><table aria-label="Danh sách chuyến bay"><thead><tr><th>Chuyến bay</th><th>Chặng bay</th><th>Khởi hành</th><th>Ghế</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead><tbody>{state.rows.map((item) => <tr key={item.id}><td><strong>{carrierName(item)}</strong><small>Mã chuyến #{item.id}</small></td><td>{item.departureAirport?.iata_code || '—'} → {item.arrivalAirport?.iata_code || '—'}</td><td>{displayTime(item.departure_time)}</td><td>{item.available_seats ?? '—'} / {item.total_seats ?? '—'}</td><td><FlightStatusBadge status={item.status} /></td><td><Link to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></td></tr>)}</tbody></table></div>
+        <div className="flight-card-list">{state.rows.map((item) => <article className="flight-card" key={item.id}><div className="flight-card-top"><div><span className="eyebrow">CHUYẾN #{item.id}</span><h2>{carrierName(item)}</h2></div><FlightStatusBadge status={item.status} /></div><p className="flight-card-route"><strong>{item.departureAirport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong>{item.arrivalAirport?.iata_code || '—'}</strong></p><div className="flight-card-meta"><span>{displayTime(item.departure_time)}</span><span>{item.available_seats ?? '—'} / {item.total_seats ?? '—'} ghế</span></div><Link className="button button-outline" to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></article>)}</div>
         <Pagination page={state.pagination?.page || page} totalPages={Math.max(1, state.pagination?.totalPages || 1)} onPageChange={(next) => update({ page: next })} />
       </>}
     </section>}
@@ -140,6 +147,7 @@ export function FlightDetailPage() {
   const api = useManagementApi();
   const { loading, data: flight, error, reload } = useFlight(id);
   const [dialog, setDialog] = useState('');
+  const [cancelReason, setCancelReason] = useState('');
   const [action, setAction] = useState({ pending: false, error: '' });
   const admin = user?.role === 'admin';
   const staffOrAdmin = admin || user?.role === 'staff';
@@ -147,10 +155,10 @@ export function FlightDetailPage() {
   const perform = async (kind) => {
     setAction({ pending: true, error: '' });
     try {
-      if (kind === 'cancel') { await api.cancelFlight(id); setDialog(''); await reload(); }
+      if (kind === 'cancel') { await api.cancelFlight(id, cancelReason); setDialog(''); setCancelReason(''); await reload(); }
       else { await api.deleteFlight(id); navigate('/admin/flights', { replace: true }); }
     } catch (err) {
-      const conflictCopy = err?.status === 409 ? 'Không thể xóa chuyến bay vì đã có lịch sử đặt vé. Bạn có thể hủy chuyến để giữ nguyên lịch sử.' : '';
+      const conflictCopy = err?.status === 409 ? 'Bạn có thể hủy chuyến để giữ nguyên lịch sử đặt vé.' : '';
       if (kind === 'delete') setDialog('');
       setAction({ pending: false, error: [errorMessage(err, 'Không thể hoàn tất thao tác.'), conflictCopy].filter(Boolean).join(' ') });
       return;
@@ -161,17 +169,68 @@ export function FlightDetailPage() {
   if (error || !flight) return <ManagementShell><PageFrame title="Chi tiết chuyến bay"><ErrorState message={error || 'Không tìm thấy chuyến bay.'} /></PageFrame></ManagementShell>;
   return <ManagementShell><PageFrame eyebrow="THÔNG TIN KHAI THÁC" title={`Chi tiết chuyến bay #${flight.id}`} description="Thông tin lịch bay, sức chứa và các hạng vé đã khai báo." actions={<><Link className="button button-outline" to="/admin/flights">Danh sách chuyến bay</Link>{staffOrAdmin ? <Link className="button button-secondary" to={`/admin/flights/${flight.id}/edit`}>Chỉnh sửa chuyến bay</Link> : null}</>}>
     <div className="flight-detail-layout">
-      <section className="surface-card admin-card"><div className="flight-section-heading"><div><span className="eyebrow">TỔNG QUAN</span><h2>{carrierName(flight)}</h2></div><StatusBadge status={flight.status} /></div><FlightFacts flight={flight} />
+      <section className="surface-card admin-card"><div className="flight-section-heading"><div><span className="eyebrow">TỔNG QUAN</span><h2>{carrierName(flight)}</h2></div><FlightStatusBadge status={flight.status} /></div><FlightFacts flight={flight} />
         {action.error ? <Notice type="error">{action.error}</Notice> : null}
         <div className="flight-detail-actions">{staffOrAdmin ? <button className="button button-secondary" type="button" disabled={flight.status === 'cancelled'} onClick={() => { setAction({ pending: false, error: '' }); setDialog('cancel'); }}>Hủy chuyến bay</button> : null}{admin ? <button className="button button-danger" type="button" onClick={() => { setAction({ pending: false, error: '' }); setDialog('delete'); }}>Xóa chuyến bay</button> : null}</div>
       </section>
+      {admin ? <FlightStatusPanel flight={flight} api={api} onUpdated={reload} /> : null}
       <section className="surface-card admin-card flight-fares-card"><div className="flight-section-heading"><div><span className="eyebrow">HẠNG VÉ</span><h2>Hạng vé chuyến bay</h2></div><Link className="button button-outline" to={`/admin/flights/${flight.id}/fare-classes`}>Xem danh sách</Link></div>
         {fareClasses.length ? <div className="fare-class-list">{fareClasses.map((fare) => <article className="fare-class-row" key={fare.id}><div><strong>{fare.class_name}</strong><small>{fare.seat_quota ?? '—'} ghế phân bổ</small></div><strong>{money(fare.price)}</strong></article>)}</div> : <div className="empty-state compact-empty"><h3>Chưa có hạng vé</h3><p>Danh sách hạng vé của chuyến bay này đang trống.</p></div>}
       </section>
     </div>
-    <ConfirmDialog open={dialog === 'cancel'} title="Xác nhận hủy chuyến bay" description="Chuyến bay sẽ được giữ lại trong hệ thống với trạng thái Đã hủy. Lịch sử đặt chỗ không bị xóa." confirmLabel="Xác nhận hủy chuyến" danger pending={action.pending} onConfirm={() => void perform('cancel')} onCancel={() => setDialog('')} />
+    {dialog === 'cancel' ? <div className="dialog-backdrop" role="presentation"><section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-flight-title"><h2 id="cancel-flight-title">Xác nhận hủy chuyến bay</h2><p>Chuyến bay được giữ lại trong hệ thống; booking hiện có không tự động bị hủy hoặc hoàn tiền.</p><Field id="cancel-flight-reason" label="Lý do hủy chuyến" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} required /><RouteError error={action.error} fallback="Không thể hủy chuyến bay." /><div className="dialog-actions"><button className="button button-outline" type="button" disabled={action.pending} onClick={() => setDialog('')}>Quay lại</button><button className="button button-danger" type="button" disabled={action.pending || !cancelReason.trim()} onClick={() => void perform('cancel')}>{action.pending ? 'Đang xử lý…' : 'Xác nhận hủy chuyến'}</button></div></section></div> : null}
     <ConfirmDialog open={dialog === 'delete'} title="Xác nhận xóa chuyến bay" description="Chỉ xóa khi chuyến bay chưa có lịch sử đặt vé. Xóa là thao tác riêng, không tự động chuyển thành hủy chuyến." confirmLabel="Xóa chuyến bay" danger pending={action.pending} onConfirm={() => void perform('delete')} onCancel={() => setDialog('')} />
   </PageFrame></ManagementShell>;
+}
+
+function FlightStatusPanel({ flight, api, onUpdated }) {
+  const [historyState, setHistoryState] = useState({ loading: true, rows: [], error: '' });
+  const [form, setForm] = useState({ status: flight.status, departure_time: localDateTime(flight.departure_time), arrival_time: localDateTime(flight.arrival_time), actual_departure_time: localDateTime(flight.actual_departure_time), actual_arrival_time: localDateTime(flight.actual_arrival_time), reason: flight.status_reason || '' });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+  const [saved, setSaved] = useState(false);
+  useEffect(() => {
+    let active = true;
+    api.getFlightStatus(flight.id).then((result) => {
+      if (active) setHistoryState({ loading: false, rows: result?.history || [], error: '' });
+    }).catch((requestError) => {
+      if (active) setHistoryState({ loading: false, rows: [], error: errorMessage(requestError, 'Không thể tải lịch sử trạng thái.') });
+    });
+    return () => { active = false; };
+  }, [api, flight.id, flight.updated_at]);
+  const setValue = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
+  const submit = async (event) => {
+    event.preventDefault(); setSaving(true); setError(''); setSaved(false);
+    const toIso = (value) => value ? new Date(value).toISOString() : null;
+    try {
+      const result = await api.updateFlightStatus(flight.id, {
+        status: form.status,
+        departure_time: toIso(form.departure_time), arrival_time: toIso(form.arrival_time),
+        actual_departure_time: toIso(form.actual_departure_time), actual_arrival_time: toIso(form.actual_arrival_time),
+        reason: form.reason.trim() || undefined,
+      });
+      setForm((current) => ({ ...current, status: result.status, departure_time: localDateTime(result.departure_time), arrival_time: localDateTime(result.arrival_time), actual_departure_time: localDateTime(result.actual_departure_time), actual_arrival_time: localDateTime(result.actual_arrival_time), reason: result.status_reason || '' }));
+      setSaved(true); await onUpdated();
+      const refreshed = await api.getFlightStatus(flight.id);
+      setHistoryState({ loading: false, rows: refreshed?.history || [], error: '' });
+    } catch (requestError) { setError(errorMessage(requestError, 'Không thể cập nhật trạng thái chuyến bay.')); }
+    finally { setSaving(false); }
+  };
+  return <section className="surface-card admin-card" aria-labelledby="flight-status-management-title">
+    <div className="flight-section-heading"><div><span className="eyebrow">ĐIỀU HÀNH</span><h2 id="flight-status-management-title">Trạng thái và lịch sử</h2></div><FlightStatusBadge status={flight.status} /></div>
+    <form className="flight-form" onSubmit={submit}>
+      <SelectField id="flight-status-update" label="Trạng thái chuyến bay" value={form.status} options={statusOptions} onChange={setValue('status')} />
+      <Field id="flight-status-departure" label="Khởi hành dự kiến" type="datetime-local" value={form.departure_time} onChange={setValue('departure_time')} required />
+      <Field id="flight-status-arrival" label="Đến nơi dự kiến" type="datetime-local" value={form.arrival_time} onChange={setValue('arrival_time')} required />
+      <Field id="flight-status-actual-departure" label="Khởi hành thực tế" type="datetime-local" value={form.actual_departure_time} onChange={setValue('actual_departure_time')} />
+      <Field id="flight-status-actual-arrival" label="Đến nơi thực tế" type="datetime-local" value={form.actual_arrival_time} onChange={setValue('actual_arrival_time')} />
+      <Field id="flight-status-reason" label="Lý do hoãn/hủy hoặc ghi chú" value={form.reason} onChange={setValue('reason')} maxLength={500} />
+      <RouteError error={error} fallback="Không thể cập nhật trạng thái." />
+      {saved ? <Notice type="success">Trạng thái chuyến bay đã được cập nhật.</Notice> : null}
+      <button className="button button-primary" type="submit" disabled={saving}>{saving ? 'Đang lưu…' : 'Cập nhật trạng thái'}</button>
+    </form>
+    <div className="flight-status-history"><h3>Lịch sử thay đổi</h3>{historyState.loading ? <p role="status">Đang tải lịch sử…</p> : historyState.error ? <Notice type="error">{historyState.error}</Notice> : historyState.rows.length ? <ol>{historyState.rows.map((row) => <li key={row.id}><strong>{statusLabels[row.from_status] || 'Khởi tạo'} → {statusLabels[row.to_status] || row.to_status}</strong><span>{displayTime(row.created_at)}{row.actor?.full_name ? ` · ${row.actor.full_name}` : ''}</span>{row.reason ? <p>{row.reason}</p> : null}</li>)}</ol> : <p>Chưa có lịch sử thay đổi.</p>}</div>
+  </section>;
 }
 
 function SelectField({ id, label, value, options, onChange, error, placeholder }) {
@@ -214,7 +273,6 @@ export function FlightFormPage({ mode }) {
     const payload = editing ? {
       departure_time: isoDateTime(form.departure_time),
       arrival_time: isoDateTime(form.arrival_time),
-      status: form.status,
     } : {
       airline_id: Number(form.airline_id),
       departure_airport_id: Number(form.departure_airport_id),
@@ -246,7 +304,7 @@ export function FlightFormPage({ mode }) {
         <Field id="flight-arrival-time" label="Thời gian đến" type="datetime-local" value={form.arrival_time} onChange={setValue('arrival_time')} required aria-invalid={Boolean(idError('arrival_time'))} />
         {idError('arrival_time') ? <small className="field-error">{idError('arrival_time')}</small> : null}
         {!editing ? <Field id="flight-total-seats" label="Tổng số ghế" type="number" min="1" step="1" value={form.total_seats} onChange={setValue('total_seats')} required error={idError('total_seats')} /> : null}
-        <SelectField id="flight-form-status" label={editing ? 'Trạng thái khai thác' : 'Trạng thái (không bắt buộc)'} value={form.status} options={Object.entries(statusLabels).map(([value, label]) => ({ value, label }))} onChange={setValue('status')} error={idError('status')} />
+        {!editing ? <SelectField id="flight-form-status" label="Trạng thái" value={form.status} options={[{ value: 'scheduled', label: statusLabels.scheduled }]} onChange={setValue('status')} error={idError('status')} /> : <p className="field-hint">Trạng thái được cập nhật riêng tại trang chi tiết để lưu lịch sử điều hành.</p>}
         <div className="flight-form-actions"><button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo chuyến bay'}</button></div>
       </form>
     </section>

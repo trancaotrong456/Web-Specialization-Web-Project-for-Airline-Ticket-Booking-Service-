@@ -51,12 +51,23 @@ const renderProfileRoute = (path, fetchImpl) => {
 };
 
 describe('profile and security pages', () => {
+  it('shares the public navigation shell and footer used by booking pages', async () => {
+    renderProfileRoute('/profile', createProfileFetch());
+
+    expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
+    expect(document.querySelector('.account-page')).toHaveClass('public-page');
+    expect(document.querySelector('.account-page > .site-footer')).toBeInTheDocument();
+  });
+
   it('shows read-only email and sends only editable profile fields', async () => {
     const user = userEvent.setup();
     const fetchImpl = createProfileFetch();
     renderProfileRoute('/profile', fetchImpl);
 
     expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
+    expect(document.querySelector('.account-page')).toBeInTheDocument();
+    expect(document.querySelector('.account-card')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Thông tin cá nhân' })).toHaveAttribute('aria-current', 'page');
     expect(screen.getByLabelText('Email')).toHaveValue('an@example.com');
     expect(screen.getByLabelText('Email')).toHaveAttribute('readonly');
     await user.clear(screen.getByLabelText('Họ và tên'));
@@ -83,13 +94,14 @@ describe('profile and security pages', () => {
     }, 422);
     renderProfileRoute('/profile', createProfileFetch({ updateResponse }));
     expect(await screen.findByRole('heading', { name: 'Hồ sơ cá nhân' })).toBeInTheDocument();
-    await user.clear(screen.getByLabelText('Số điện thoại'));
-    await user.type(screen.getByLabelText('Số điện thoại'), '0911111111');
+    const phoneField = await screen.findByDisplayValue(profile.phone);
+    await user.clear(phoneField);
+    await user.type(phoneField, '0911111111');
 
     await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
 
     expect(await screen.findByText('Must be a valid phone number')).toBeInTheDocument();
-    expect(screen.getByLabelText('Số điện thoại')).toHaveValue('0911111111');
+    expect(phoneField).toHaveValue('0911111111');
   });
 
   it('validates current, new, and confirmation passwords locally', async () => {
@@ -97,6 +109,8 @@ describe('profile and security pages', () => {
     const fetchImpl = createProfileFetch();
     renderProfileRoute('/profile/security', fetchImpl);
     expect(await screen.findByRole('heading', { name: 'Bảo mật tài khoản' })).toBeInTheDocument();
+    expect(document.querySelector('.account-card-narrow')).toBeInTheDocument();
+    expect(document.querySelector('.account-tabs a[aria-current="page"]')).toHaveTextContent('Bảo mật');
 
     await user.click(screen.getByRole('button', { name: 'Đổi mật khẩu' }));
 

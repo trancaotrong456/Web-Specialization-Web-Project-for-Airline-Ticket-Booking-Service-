@@ -47,6 +47,11 @@ const bookingLookupEmailValidator = query('guest_email').custom((_value, { req }
 });
 
 const createBookingValidator = [
+  body('trip_type')
+    .optional()
+    .isIn(['one_way', 'round_trip', 'multi_city'])
+    .withMessage('trip_type must be one_way, round_trip, or multi_city'),
+
   body('flight_id')
     .notEmpty()
     .withMessage('flight_id is required')
@@ -59,9 +64,35 @@ const createBookingValidator = [
     .isInt({ min: 1 })
     .withMessage('fare_class_id must be a positive integer'),
 
+  body('itinerary_legs')
+    .optional()
+    .isArray({ min: 2, max: 4 })
+    .withMessage('itinerary_legs must contain between 2 and 4 flight legs'),
+
+  body('itinerary_legs.*.flight_id')
+    .if((_value, { req }) => Array.isArray(req.body.itinerary_legs))
+    .isInt({ min: 1 })
+    .withMessage('itinerary leg flight_id must be a positive integer'),
+
+  body('itinerary_legs.*.fare_class_id')
+    .if((_value, { req }) => Array.isArray(req.body.itinerary_legs))
+    .isInt({ min: 1 })
+    .withMessage('itinerary leg fare_class_id must be a positive integer'),
+
   body('passengers')
     .isArray({ min: 1 })
     .withMessage('passengers must contain at least 1 passenger'),
+
+  body('seat_selections').optional().isArray({ max: 400 }).withMessage('seat_selections must be an array'),
+  body('seat_selections.*.leg_order').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isInt({ min: 1, max: 4 }),
+  body('seat_selections.*.passenger_index').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isInt({ min: 0, max: 99 }),
+  body('seat_selections.*.seat_no').if((_value, { req }) => Array.isArray(req.body.seat_selections)).isString().trim().isLength({ min: 2, max: 10 }),
+
+  body('ancillary_selections').optional().isArray({ max: 400 }).withMessage('ancillary_selections must be an array'),
+  body('ancillary_selections.*.offer_id').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 1 }),
+  body('ancillary_selections.*.leg_order').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 1, max: 4 }),
+  body('ancillary_selections.*.passenger_index').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 0, max: 99 }),
+  body('ancillary_selections.*.quantity').if((_value, { req }) => Array.isArray(req.body.ancillary_selections)).isInt({ min: 1, max: 100 }),
 
   body('passengers.*.passenger_name')
     .trim()
@@ -106,6 +137,23 @@ const listBookingValidator = [
     .trim()
     .isLength({ min: 1, max: 191 })
     .withMessage('search must be between 1 and 191 characters'),
+
+  query('booking_code')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 20 })
+    .withMessage('booking_code must be between 1 and 20 characters'),
+
+  query('customer')
+    .optional()
+    .trim()
+    .isLength({ min: 1, max: 191 })
+    .withMessage('customer must be between 1 and 191 characters'),
+
+  query('flight_id')
+    .optional()
+    .isInt({ min: 1 })
+    .withMessage('flight_id must be a positive integer'),
 ];
 
 const bookingAccessEmailValidator = [

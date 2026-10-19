@@ -24,6 +24,9 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      bootstrap:
+        condition: service_completed_successfully
+    command: ["node", "server.js"]
     environment:
       PORT: 5000
       NODE_ENV: development
@@ -34,6 +37,8 @@ services:
       DB_USER: ${MYSQL_USER:-airline_user}
       DB_PASS: ${MYSQL_PASSWORD:-airline_demo_password}
       DB_SSL: "false"
+      DEMO_BOOTSTRAP_REQUIRED: "true"
+      DEMO_BOOTSTRAP_STATE_FILE: /var/lib/serene-demo/bootstrap.json
       JWT_SECRET: docker_demo_jwt_secret
       JWT_REFRESH_SECRET: docker_demo_refresh_secret
       JWT_EXPIRES_IN: 15m
@@ -54,11 +59,34 @@ services:
       EMAIL_FROM: "Airline Booking <onboarding@resend.dev>"
     ports:
       - "${APP_PORT:-5000}:5000"
+    volumes:
+      - demo_bootstrap_state:/var/lib/serene-demo
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:5000/api/v1/health"]
       interval: 10s
       timeout: 5s
       retries: 10
 
+  bootstrap:
+    build:
+      context: .
+    restart: "no"
+    command: ["node", "scripts/demo-bootstrap-agent.js"]
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      DB_HOST: db
+      DB_PORT: 3306
+      DB_NAME: ${MYSQL_DATABASE:-airline_booking_docker}
+      DB_USER: ${MYSQL_USER:-airline_user}
+      DB_PASS: ${MYSQL_PASSWORD:-airline_demo_password}
+      DB_SSL: "false"
+      DEMO_BOOTSTRAP_STATE_FILE: /var/lib/serene-demo/bootstrap.json
+    volumes:
+      - demo_bootstrap_state:/var/lib/serene-demo
+
 volumes:
   mysql_data:
+  demo_bootstrap_state:

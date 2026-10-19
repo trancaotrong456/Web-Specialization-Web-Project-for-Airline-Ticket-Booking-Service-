@@ -2,13 +2,20 @@
 
 const fs = require('fs');
 const path = require('path');
-const { assertSafeDockerTarget, runDemoSeed } = require('./demo-seed-core');
+const { assertSafeDockerTarget } = require('./demo-seed-core');
+const { runDemoSeed } = require('../seeders/demo/DatabaseSeeder');
 
-function readConfigFromStdin(input = '') {
-  if (!input.trim()) return {};
-  const config = JSON.parse(input);
-  if (!config || typeof config !== 'object' || Array.isArray(config)) throw new Error('Seed configuration input must be a JSON object.');
-  return config;
+function parseSeedArgs(argv = []) {
+  let apply = false;
+  let startDate;
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--apply' && !apply) apply = true;
+    else if (argv[index] === '--start-date' && !startDate && /^\d{4}-\d{2}-\d{2}$/.test(argv[index + 1] || '')) {
+      startDate = argv[index + 1];
+      index += 1;
+    } else throw new Error('Only --apply and the internal YYYY-MM-DD --start-date option are supported.');
+  }
+  return { apply, startDate };
 }
 
 async function assertConnectedDatabase(sequelize, expectedDbContainerId) {
@@ -20,17 +27,8 @@ async function assertConnectedDatabase(sequelize, expectedDbContainerId) {
   return true;
 }
 
-async function main({ argv = process.argv.slice(2), stdin = process.stdin, env = process.env } = {}) {
-  const apply = argv.includes('--apply');
-  if (argv.some((arg) => arg !== '--apply')) throw new Error('Only the optional --apply flag is supported.');
-  const input = await new Promise((resolve, reject) => {
-    let content = '';
-    stdin.setEncoding('utf8');
-    stdin.on('data', (chunk) => { content += chunk; });
-    stdin.on('end', () => resolve(content));
-    stdin.on('error', reject);
-  });
-  const config = readConfigFromStdin(input);
+async function main({ argv = process.argv.slice(2), env = process.env } = {}) {
+  const { apply, startDate } = parseSeedArgs(argv);
   const runtime = {
     isDockerContainer: fs.existsSync('/.dockerenv'),
     composeProject: env.DEMO_SEED_COMPOSE_PROJECT,
@@ -46,16 +44,18 @@ async function main({ argv = process.argv.slice(2), stdin = process.stdin, env =
   const models = require(path.join(projectRoot, 'models'));
   await models.sequelize.authenticate();
   await assertConnectedDatabase(models.sequelize, runtime.dbContainerId);
-  const result = await runDemoSeed({ models, sequelize: models.sequelize, config, apply });
+  const result = await runDemoSeed({ models, sequelize: models.sequelize, startDate, apply });
   if (result.mode === 'dry-run') {
     console.log('DRY-RUN: Không ghi dữ liệu vào database.');
-    console.log(`Ngày bắt đầu lịch bay cố định: ${result.scheduleStartDate}`);
+    console.log(`Ngày bắt đầu lịch bay dự kiến (giờ Việt Nam): ${result.scheduleStartDate}`);
     console.log(`Lịch bay demo đã có: ${result.flightScheduleExists ? 'có' : 'không'}`);
     console.log(`Dự kiến tạo: ${JSON.stringify(result.wouldCreate)}`);
+    console.log(`DEMO_SEED_SUMMARY ${JSON.stringify({ mode: result.mode, scheduleStartDate: result.scheduleStartDate, flightScheduleExists: result.flightScheduleExists, existing: result.existing, wouldCreate: result.wouldCreate })}`);
   } else {
     console.log('APPLY hoàn tất trong transaction. Không có Booking/Payment nào được tạo hoặc sửa.');
-    console.log(`Ngày bắt đầu lịch bay cố định: ${result.scheduleStartDate}`);
+    console.log(`Ngày bắt đầu lịch bay (giờ Việt Nam): ${result.scheduleStartDate}`);
     console.log(`Đã tạo: ${JSON.stringify(result.created)}`);
+    console.log(`DEMO_SEED_SUMMARY ${JSON.stringify({ mode: result.mode, scheduleStartDate: result.scheduleStartDate, flightScheduleExists: result.flightScheduleExists, existing: result.existing, created: result.created })}`);
   }
   return result;
 }
@@ -67,4 +67,4 @@ if (require.main === module) {
   });
 }
 
-module.exports = { readConfigFromStdin, assertConnectedDatabase, main };
+module.exports = { parseSeedArgs, assertConnectedDatabase, main };
