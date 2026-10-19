@@ -28,6 +28,7 @@ test('Tran Cao Trong assignment exposes every Auth, User, and Role endpoint', ()
   assert.deepEqual(routesOf(userRouter), [
     { path: '/', methods: ['get'] },
     { path: '/:id', methods: ['get'] },
+    { path: '/:id', methods: ['patch'] },
     { path: '/:id/status', methods: ['put'] },
     { path: '/:id/role', methods: ['put'] },
     { path: '/:id', methods: ['delete'] },
