@@ -9,6 +9,7 @@ const queryString = (params) => {
 export const createUsersApi = (request) => ({
   list: (params) => request(`/users?${queryString(params)}`),
   get: (id) => request(`/users/${id}`),
+  updateProfile: (id, profile) => request(`/users/${id}`, { method: 'PATCH', body: profile }),
   setStatus: (id, status) => request(`/users/${id}/status`, { method: 'PUT', body: { status } }),
   setRole: (id, role_id) => request(`/users/${id}/role`, { method: 'PUT', body: { role_id } }),
   remove: (id) => request(`/users/${id}`, { method: 'DELETE' }),

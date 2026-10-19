@@ -117,7 +117,7 @@ async function main() {
 
     const cancelledSearch = new URLSearchParams({ departure_airport_id: String(fixture.cancelled.departureAirportId), arrival_airport_id: String(fixture.cancelled.arrivalAirportId), departure_date: fixture.cancelled.departureDate, min_seats: '1' });
     await customer.goto(`${frontendUrl}/flights/search?${cancelledSearch}`);
-    await customer.getByRole('heading', { name: 'Chuyến bay phù hợp' }).waitFor({ state: 'visible' });
+    await customer.getByRole('heading', { name: 'Chuyến bay phù hợp', exact: true }).waitFor({ state: 'visible' });
     await assert.rejects(customer.getByRole('button', { name: 'Chọn chuyến bay' }).first().waitFor({ state: 'visible', timeout: 1500 }), 'Cancelled fixture must not be offered as bookable.');
     assert.deepEqual(errors, [], 'Browser reported uncaught JavaScript errors.');
     await context.tracing.stop({ path: path.join(artifactDirectory, 'browser-e2e-trace.zip') });
