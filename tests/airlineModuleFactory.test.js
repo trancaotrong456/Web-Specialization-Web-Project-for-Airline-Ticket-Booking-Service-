@@ -5,7 +5,7 @@ const { createAirlineModule } = require('../modules/airline');
 
 test('Airline module factory uses injected controller, guards, validators, and validation middleware', () => {
   const calls = [];
-  const controller = Object.fromEntries(['getAll', 'getById', 'create', 'update', 'delete'].map((name) => [
+  const controller = Object.fromEntries(['getAll', 'getById', 'create', 'update', 'delete', 'getStatistics'].map((name) => [
     name,
     function handler() { calls.push(name); },
   ]));
@@ -33,13 +33,15 @@ test('Airline module factory uses injected controller, guards, validators, and v
   const routes = module.router.stack.filter((layer) => layer.route);
 
   assert.deepEqual(routes.map((layer) => [layer.route.path, Object.keys(layer.route.methods)[0]]), [
-    ['/', 'get'], ['/:id', 'get'], ['/', 'post'], ['/:id', 'put'], ['/:id', 'delete'],
+    ['/statistics', 'get'], ['/', 'get'], ['/:id', 'get'], ['/', 'post'], ['/:id', 'put'], ['/:id', 'delete'],
   ]);
-  assert.equal(routes[0].route.stack[0].handle, validators.listAirlineValidator[0]);
-  assert.equal(routes[0].route.stack[1].handle, validate);
-  assert.equal(routes[2].route.stack[0].handle, authenticate);
-  assert.equal(routes[2].route.stack[1].handle, adminGuard);
-  assert.equal(routes[2].route.stack[2].handle, validators.createAirlineValidator[0]);
+  assert.equal(routes[0].route.stack[0].handle, authenticate);
+  assert.equal(routes[0].route.stack[1].handle, adminGuard);
+  assert.equal(routes[1].route.stack[0].handle, validators.listAirlineValidator[0]);
+  assert.equal(routes[1].route.stack[1].handle, validate);
+  assert.equal(routes[3].route.stack[0].handle, authenticate);
+  assert.equal(routes[3].route.stack[1].handle, adminGuard);
+  assert.equal(routes[3].route.stack[2].handle, validators.createAirlineValidator[0]);
   assert.equal(module.controller, controller);
   assert.deepEqual(calls, []);
 });

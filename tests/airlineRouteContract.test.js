@@ -8,6 +8,7 @@ test('airline module exposes documented CRUD and search endpoints', () => {
     .map((layer) => ({ path: layer.route.path, methods: Object.keys(layer.route.methods) }));
 
   assert.deepEqual(routes, [
+    { path: '/statistics', methods: ['get'] },
     { path: '/', methods: ['get'] },
     { path: '/:id', methods: ['get'] },
     { path: '/', methods: ['post'] },

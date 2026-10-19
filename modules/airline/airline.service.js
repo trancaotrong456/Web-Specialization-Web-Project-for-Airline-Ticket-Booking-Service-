@@ -84,6 +84,10 @@ class AirlineService {
     return { id: Number(id), message: 'Airline deleted' };
   }
 
+  async getStatistics() {
+    return this.repository.getFlightStatistics();
+  }
+
   createDuplicateIataError() {
     const error = new Error('Airline with this IATA code already exists');
     error.statusCode = 409;

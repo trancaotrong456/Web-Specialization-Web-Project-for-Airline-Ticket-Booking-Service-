@@ -6,7 +6,7 @@ import './adminDashboard.css';
 const modules = [
   { number: '01', icon: 'users', title: 'Người dùng', description: 'Tài khoản, trạng thái và hồ sơ người dùng.', to: '/admin/users', accent: 'teal' },
   { number: '02', icon: 'roles', title: 'Vai trò', description: 'Danh sách và thông tin các vai trò hiện có.', to: '/admin/roles', accent: 'amber' },
-  { number: '03', icon: 'airlines', title: 'Hãng hàng không', description: 'Quản lý hãng bay và thông tin nhận diện.', to: '/admin/airlines', accent: 'navy' },
+  { number: '03', icon: 'airlines', title: 'Hãng hàng không', description: 'Quản lý hãng bay, logo và thống kê chuyến bay.', to: '/admin/airlines', accent: 'navy' },
   { number: '04', icon: 'airports', title: 'Sân bay', description: 'Danh mục sân bay và mã IATA.', to: '/admin/airports', accent: 'teal' },
   { number: '05', icon: 'flights', title: 'Chuyến bay & hạng vé', description: 'Vào danh sách chuyến bay để xem hạng vé theo từng chuyến.', to: '/admin/flights', accent: 'amber' },
   { number: '06', icon: 'bookings', title: 'Đặt chỗ', description: 'Tra cứu và theo dõi các đặt chỗ.', to: '/admin/bookings', accent: 'navy' },

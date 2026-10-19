@@ -29,6 +29,7 @@ import {
   AirlineDetailPage,
   AirlineFormPage,
   AirlineListPage,
+  AirlineStatisticsPage,
   AirportDetailPage,
   AirportFormPage,
   AirportListPage,
@@ -93,6 +94,7 @@ export function AppRoutes() {
         </Route>
         <Route element={<AdminRoute />}>
           <Route path="/admin/airlines" element={<AirlineListPage />} />
+          <Route path="/admin/airlines/statistics" element={<AirlineStatisticsPage />} />
           <Route path="/admin/airlines/new" element={<AirlineFormPage mode="create" />} />
           <Route path="/admin/airlines/:id" element={<AirlineDetailPage />} />
           <Route path="/admin/airlines/:id/edit" element={<AirlineFormPage mode="edit" />} />

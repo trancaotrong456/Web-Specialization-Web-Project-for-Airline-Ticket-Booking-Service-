@@ -50,6 +50,18 @@ class AirlineController {
       next(error);
     }
   }
+
+  async getStatistics(req, res, next) {
+    try {
+      return this.apiResponse.success(
+        res,
+        await this.service.getStatistics(),
+        'Airline flight statistics retrieved',
+      );
+    } catch (error) {
+      next(error);
+    }
+  }
 }
 
 module.exports = AirlineController;

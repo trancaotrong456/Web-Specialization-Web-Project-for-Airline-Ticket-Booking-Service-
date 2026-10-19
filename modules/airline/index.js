@@ -30,7 +30,7 @@ function createAirlineModule({
     throw new TypeError('controller, guards, validation, and validators are required');
   }
 
-  for (const method of ['getAll', 'getById', 'create', 'update', 'delete']) {
+  for (const method of ['getAll', 'getById', 'create', 'update', 'delete', 'getStatistics']) {
     if (typeof resolvedController[method] !== 'function') {
       throw new TypeError(`controller.${method} must be a function`);
     }
@@ -39,6 +39,7 @@ function createAirlineModule({
   const router = expressModule.Router();
   const bind = (method) => resolvedController[method].bind(resolvedController);
 
+  router.get('/statistics', guards.authenticate, guards.authorize('admin'), bind('getStatistics'));
   router.get('/', validators.listAirlineValidator, validation.validate, bind('getAll'));
   router.get('/:id', validators.airlineIdValidator, validation.validate, bind('getById'));
   router.post(

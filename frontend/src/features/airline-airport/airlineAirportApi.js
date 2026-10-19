@@ -8,10 +8,12 @@ const buildQuery = ({ page = 1, limit = 20, search = '' } = {}) => {
 
 export const createAirlineAirportApi = (request) => ({
   listAirlines: (filters) => request(`/airlines?${buildQuery(filters)}`),
+  getAirlineStatistics: () => request('/airlines/statistics'),
   getAirline: (id) => request(`/airlines/${id}`),
   createAirline: (payload) => request('/airlines', { method: 'POST', body: payload }),
   updateAirline: (id, payload) => request(`/airlines/${id}`, { method: 'PUT', body: payload }),
   deleteAirline: (id) => request(`/airlines/${id}`, { method: 'DELETE' }),
+  uploadAirlineLogo: (payload) => request('/airlines/upload-logo', { method: 'POST', body: payload }),
   listAirports: (filters) => request(`/airports?${buildQuery(filters)}`),
   getAirport: (id) => request(`/airports/${id}`),
   createAirport: (payload) => request('/airports', { method: 'POST', body: payload }),

@@ -243,4 +243,70 @@ describe('Airline and Airport administration', () => {
     expect(await screen.findByRole('heading', { name: 'Không có quyền truy cập' })).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Hãng hàng không' })).not.toBeInTheDocument();
   });
+
+  it('renders flight statistics dashboard with KPI cards, bar chart, and detailed table', async () => {
+    const mockStats = {
+      total_airlines: 2,
+      total_flights: 15,
+      airlines: [
+        {
+          id: 1,
+          name: 'Vietnam Airlines',
+          iata_code: 'VN',
+          logo_url: 'https://airline.test/vn.png',
+          total_flights: 10,
+          status_breakdown: { scheduled: 8, completed: 2 },
+        },
+        {
+          id: 2,
+          name: 'Bamboo Airways',
+          iata_code: 'QH',
+          logo_url: null,
+          total_flights: 5,
+          status_breakdown: { scheduled: 5 },
+        },
+      ],
+    };
+
+    const fetch = renderAs('admin', '/admin/airlines/statistics', (url) => {
+      if (url.endsWith('/airlines/statistics')) return mockStats;
+      throw new Error(`Unexpected request ${url}`);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Thống kê chuyến bay theo hãng' })).toBeInTheDocument();
+    expect(screen.getByText('Tổng số hãng hàng không')).toBeInTheDocument();
+    expect(screen.getByText('Tổng số chuyến bay')).toBeInTheDocument();
+    expect(screen.getByText('15')).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Biểu đồ so sánh số chuyến bay giữa các hãng' })).toBeInTheDocument();
+    expect(screen.getByRole('table', { name: 'Bảng thống kê số chuyến bay theo từng hãng' })).toBeInTheDocument();
+    expect(screen.getByText('scheduled: 8')).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([url]) => url.endsWith('/airlines/statistics'))).toBe(true);
+  });
+
+  it('renders empty state when there are no airlines in statistics', async () => {
+    renderAs('admin', '/admin/airlines/statistics', (url) => {
+      if (url.endsWith('/airlines/statistics')) return { total_airlines: 0, total_flights: 0, airlines: [] };
+      throw new Error(`Unexpected request ${url}`);
+    });
+
+    expect(await screen.findByRole('heading', { name: 'Chưa có dữ liệu hãng hàng không' })).toBeInTheDocument();
+  });
+
+  it('renders error state and supports retry on statistics failure', async () => {
+    let attempts = 0;
+    const fetch = renderAs('admin', '/admin/airlines/statistics', (url) => {
+      if (url.endsWith('/airlines/statistics')) {
+        attempts += 1;
+        if (attempts === 1) return new Response(JSON.stringify({ message: 'Không thể kết nối máy chủ' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+        return { total_airlines: 1, total_flights: 2, airlines: [{ id: 1, name: 'VN Air', iata_code: 'VN', total_flights: 2, status_breakdown: {} }] };
+      }
+      throw new Error(`Unexpected request ${url}`);
+    });
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Không thể kết nối máy chủ');
+    const retryBtn = screen.getByRole('button', { name: 'Thử lại' });
+    fireEvent.click(retryBtn);
+    await waitFor(() => expect(attempts).toBe(2));
+    expect((await screen.findAllByText('VN Air')).length).toBeGreaterThan(0);
+  });
 });
