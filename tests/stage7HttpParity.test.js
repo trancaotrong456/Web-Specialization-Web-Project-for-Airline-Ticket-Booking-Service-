@@ -22,6 +22,7 @@ test('User HTTP routes use injected controller context, keep Admin gate and vali
   const calls = [];
   const service = {
     async getAllUsers(query) { calls.push(['list', query.page]); return { total: 1, page: query.page || 1, limit: 20, data: [{ id: 7 }] }; },
+    async updateUserProfile(id, profile) { calls.push(['profile', id, profile.full_name]); return { id: 7, full_name: profile.full_name, phone: null }; },
     async updateUserStatus(id, status, actorId) { calls.push(['status', id, status, actorId]); return { id: 7, status }; },
     async getUserById() {}, async updateUserRole() {}, async deleteUser() {},
   };
@@ -31,6 +32,16 @@ test('User HTTP routes use injected controller context, keep Admin gate and vali
     const list = await fetch(`${base}/users?page=2`);
     assert.equal(list.status, 200);
     assert.equal((await list.json()).data[0].id, 7);
+    const profile = await fetch(`${base}/users/7`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name: 'Updated Name' }) });
+    assert.equal(profile.status, 200);
+    assert.equal((await profile.json()).data.full_name, 'Updated Name');
+    const forbiddenProfile = await fetch(`${base}/users/7`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'x-test-role': 'customer' },
+      body: JSON.stringify({ full_name: 'Forbidden Name' }) });
+    assert.equal(forbiddenProfile.status, 403);
+    const unsafeProfile = await fetch(`${base}/users/7`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ full_name: 'Unsafe Name', role_id: 3 }) });
+    assert.equal(unsafeProfile.status, 422);
     const update = await fetch(`${base}/users/7/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'locked' }) });
     assert.equal(update.status, 200);
@@ -39,7 +50,7 @@ test('User HTTP routes use injected controller context, keep Admin gate and vali
     const invalid = await fetch(`${base}/users/7/status`, { method: 'PUT', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: 'unsupported' }) });
     assert.equal(invalid.status, 422);
-    assert.deepEqual(calls, [['list', '2'], ['status', '7', 'locked', 1]]);
+    assert.deepEqual(calls, [['list', '2'], ['profile', '7', 'Updated Name'], ['status', '7', 'locked', 1]]);
   });
 });
 
