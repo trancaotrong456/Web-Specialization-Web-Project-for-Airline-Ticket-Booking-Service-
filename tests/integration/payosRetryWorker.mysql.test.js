@@ -166,3 +166,21 @@ test('IT-44 failed case persistence is recoverable on the next discovery run', {
     assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: f.payment.id } }), 1);
   } finally { repository.createOrFindCase = previous; }
 });
+
+test('IT-47 gateway credentials are redacted before last_error persistence', { timeout: 20000 }, async () => {
+  const f = await fixture('IT47');
+  const repository = paymentService.repository;
+  const claimed = await models.sequelize.transaction((transaction) => repository.claimDueCases({
+    owner: 'it47-worker', provider: 'payos', now: new Date(), limit: 1,
+  }, { transaction }));
+  assert.equal(claimed.length, 1);
+  await models.sequelize.transaction((transaction) => repository.completeAttempt(
+    f.reconciliationCase.id,
+    'it47-worker',
+    { lastGatewayStatus: 'UNKNOWN', lastError: 'Authorization: Bearer secret-token https://gw.test/cb?apiKey=secret-key' },
+    { transaction },
+  ));
+  const stored = await models.PaymentReconciliationCase.findByPk(f.reconciliationCase.id);
+  assert.doesNotMatch(stored.last_error, /secret-token|secret-key/);
+  assert.match(stored.last_error, /REDACTED/);
+});

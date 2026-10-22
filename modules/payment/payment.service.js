@@ -14,6 +14,7 @@ const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util
 const { getVnpayConfig } = require('../../config/vnpay');
 const crypto = require('crypto');
 const { VnpayGateway } = require('./vnpay.gateway');
+const { redactString } = require('../../shared/security/redactSensitive');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -354,7 +355,7 @@ class PaymentService {
       const emailService = this.emailProvider || require('../../services/email.service');
       await emailService.sendBookingConfirmation(bookingId);
     } catch (error) {
-      console.error(`[Email] Failed to send ticket confirmation email for booking #${bookingId}:`, error.message);
+      console.error(`[Email] Failed to send ticket confirmation email for booking #${bookingId}:`, redactString(error.message));
     }
   }
 
@@ -1100,7 +1101,7 @@ class PaymentService {
       return { operationId: operation.id, ...result };
     } catch (error) {
       const status = error.outcome || 'unknown';
-      await this._updateGatewayOperation(operation.id, { status, last_error: String(error.message).slice(0, 500), completed_at: status === 'unknown' ? null : new Date() });
+      await this._updateGatewayOperation(operation.id, { status, last_error: redactString(error.message), completed_at: status === 'unknown' ? null : new Date() });
       throw error;
     }
   }
@@ -1179,7 +1180,7 @@ class PaymentService {
         }
       });
     } catch (error) {
-      await this._updateGatewayOperation(operation.id, { status: error.outcome || 'unknown', last_error: String(error.message).slice(0, 500), completed_at: error.outcome === 'failed' ? new Date() : null });
+      await this._updateGatewayOperation(operation.id, { status: error.outcome || 'unknown', last_error: redactString(error.message), completed_at: error.outcome === 'failed' ? new Date() : null });
       throw error;
     }
 

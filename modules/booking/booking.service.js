@@ -3,6 +3,7 @@ const { getIO } = require('../../sockets');
 const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
+const { redactString } = require('../../shared/security/redactSensitive');
 
 class BookingService {
   constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup } = {}) {
@@ -442,7 +443,7 @@ class BookingService {
             try {
               payosStatus = await this._lookupPayosStatus(paymentSnapshot.transaction_ref);
             } catch (error) {
-              console.warn(`[Cron] payOS status lookup unavailable for booking #${candidate.id}:`, error.message);
+              console.warn(`[Cron] payOS status lookup unavailable for booking #${candidate.id}:`, redactString(error.message));
               continue;
             }
           }
@@ -524,7 +525,7 @@ class BookingService {
 
         await this._emitSeatUpdates(seatUpdates);
       } catch (error) {
-        console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, error.message);
+          console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, redactString(error.message));
       }
     }
 

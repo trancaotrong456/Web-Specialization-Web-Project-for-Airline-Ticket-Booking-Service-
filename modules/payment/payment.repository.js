@@ -1,9 +1,8 @@
 const { Op } = require('sequelize');
+const { redactString } = require('../../shared/security/redactSensitive');
 
 function sanitizeGatewayError(error) {
-  return String(error?.message || error || 'Unknown gateway error')
-    .replace(/[\r\n\t]+/g, ' ')
-    .slice(0, 500);
+  return redactString(error?.message || error || 'Unknown gateway error');
 }
 
 class SequelizePaymentRepository {

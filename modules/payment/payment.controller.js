@@ -1,5 +1,6 @@
 const ApiResponse = require('../../utils/apiResponse');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
+const { redactError } = require('../../shared/security/redactSensitive');
 
 class PaymentController {
   constructor({ service, apiResponse = ApiResponse } = {}) {
@@ -60,7 +61,7 @@ class PaymentController {
       // VNPay expects HTTP 200 with JSON { RspCode: '...', Message: '...' }
       return res.status(200).json(result);
     } catch (error) {
-      console.error('[VNPay IPN Error]', error);
+      console.error('[VNPay IPN Error]', redactError(error));
       return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
     }
   }
