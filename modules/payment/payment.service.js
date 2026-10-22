@@ -133,6 +133,11 @@ class PaymentService {
     });
   }
 
+  async getPayosPaymentStatus(transactionRef) {
+    const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(transactionRef));
+    return paymentLink;
+  }
+
   _getVnpayConfig() {
     return getVnpayConfig(process.env);
   }
