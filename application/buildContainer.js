@@ -24,6 +24,7 @@ const { createBookingModule } = require('../modules/booking');
 const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
 const { createPaymentModule } = require('../modules/payment');
 const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
+const { VnpayGateway } = require('../modules/payment/vnpay.gateway');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 const { getEmailProvider } = require('../infrastructure/email/emailProvider');
@@ -206,6 +207,7 @@ function getDefaultPaymentModule() {
   const models = require('../models');
   defaultPaymentModule = createPaymentModule({
     repository: new SequelizePaymentRepository(models),
+    vnpayGateway: new VnpayGateway(),
     transactionManager: models.sequelize,
     socket: getSocket,
     emailProvider: getEmailProvider(),

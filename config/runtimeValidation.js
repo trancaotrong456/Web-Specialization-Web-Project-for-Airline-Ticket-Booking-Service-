@@ -10,9 +10,18 @@ const validateRuntimeConfiguration = (env = process.env) => {
     throw new Error('PAYOS_MODE=demo is forbidden in production. Use disabled or live.');
   }
 
+  const vnpayMode = (env.VNPAY_MODE || 'disabled').toLowerCase();
+  if (!['disabled', 'sandbox', 'production'].includes(vnpayMode)) {
+    throw new Error(`Invalid VNPAY_MODE '${vnpayMode}'. Expected disabled, sandbox, or production.`);
+  }
+  if (env.NODE_ENV === 'production' && vnpayMode === 'sandbox') {
+    throw new Error('VNPAY_MODE=sandbox is forbidden in production. Use production or disabled.');
+  }
+
   if (env.NODE_ENV !== 'production') return;
 
-  const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET', 'VNP_HASH_SECRET'];
+  const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+  if (vnpayMode === 'production') requiredSecrets.push('VNP_TMN_CODE', 'VNP_HASH_SECRET', 'VNP_URL');
   if (payosMode === 'live') {
     requiredSecrets.push('PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY');
   }
@@ -26,6 +35,14 @@ const validateRuntimeConfiguration = (env = process.env) => {
 
   if (env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
     throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be different in production.');
+  }
+
+  if (vnpayMode === 'production') {
+    let endpoint;
+    try { endpoint = new URL(env.VNP_URL); } catch (_error) { throw new Error('VNP_URL must be a valid URL in production.'); }
+    if (endpoint.protocol !== 'https:' || endpoint.hostname === 'sandbox.vnpayment.vn') {
+      throw new Error('Production VNPay must use a non-sandbox HTTPS VNP_URL.');
+    }
   }
 };
 

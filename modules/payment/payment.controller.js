@@ -6,7 +6,7 @@ class PaymentController {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -110,6 +110,16 @@ class PaymentController {
       next(error);
     }
   }
+
+  async queryVnpay(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.queryVnpayPayment(req.params.id), 'VNPay QueryDR processed'); }
+    catch (error) { next(error); }
+  }
+  async refundVnpay(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.refundVnpayPayment(req.params.id, req.body.reason, req.user), 'VNPay refund processed'); }
+    catch (error) { next(error); }
+  }
+
   // Refund Endpoint (Admin / Staff)
   async refund(req, res, next) {
     try {

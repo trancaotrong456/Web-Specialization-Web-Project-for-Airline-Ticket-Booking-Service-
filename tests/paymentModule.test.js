@@ -23,7 +23,7 @@ test('legacy Payment imports resolve the canonical module graph', () => {
   assert.deepEqual(routes, [
     ['get', '/'], ['post', '/initiate'], ['get', '/vnpay/return'], ['get', '/vnpay/ipn'],
     ['get', '/payos/return'], ['post', '/payos/webhook'], ['post', '/payos/demo-webhook'],
-    ['get', '/revenue'], ['get', '/:id'], ['post', '/bookings/:id/refund'],
+    ['get', '/revenue'], ['post', '/:id/vnpay/query'], ['post', '/:id/vnpay/refund'], ['get', '/:id'], ['post', '/bookings/:id/refund'],
   ]);
   const ipn = module.router.stack.find((layer) => layer.route?.path === '/vnpay/ipn');
   assert.equal(ipn.route.stack.at(-1).handle, module.controller.vnpayIpn);
@@ -125,11 +125,12 @@ test(`two concurrent ${gateway} callbacks recheck locked state and trigger one c
   service._triggerBookingConfirmationEmail = () => { emails++; };
   const query = {
     vnp_TxnRef: 'TXN4',
+    vnp_TmnCode: process.env.VNP_TMN_CODE || 'TEST_TMN',
     vnp_Amount: '12000000',
     vnp_ResponseCode: '00',
     vnp_TransactionStatus: '00',
   };
-  query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
+  query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'test-only-vnpay-secret');
   const invoke = gateway === 'vnpay'
     ? () => service.handleVnpayIpn(query)
     : () => service._processVerifiedPayosWebhook({ orderCode: 'TXN4', amount: 120000, isSuccess: true });

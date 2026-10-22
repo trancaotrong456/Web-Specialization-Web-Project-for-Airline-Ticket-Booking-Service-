@@ -55,6 +55,9 @@ router.get(
     paymentController.getRevenue
 );
 
+router.post('/:id/vnpay/query', authenticate, authorize('admin'), paymentIdValidator, validate, paymentController.queryVnpay);
+router.post('/:id/vnpay/refund', authenticate, authorize('admin'), refundValidator, validate, paymentController.refundVnpay);
+
 // Keep this parameter route after named gateway routes so, for example,
 // `/vnpay/return` is never interpreted as a payment id.
 router.get('/:id', authenticate, authorize('admin'), paymentIdValidator, validate, paymentController.getPaymentById);
