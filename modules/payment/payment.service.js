@@ -149,20 +149,30 @@ class PaymentService {
 
   async ensurePayosReconciliationCases({ now = this.clock(), graceMinutes = 5, limit = 100 } = {}) {
     if (typeof this.repository.findPendingPayosPaymentsWithoutCase !== 'function') return 0;
-    const cutoff = new Date(new Date(now).getTime() - Math.max(0, Number(graceMinutes) || 5) * 60 * 1000);
+    const configuredGrace = Number(graceMinutes);
+    const effectiveGrace = Number.isFinite(configuredGrace) && configuredGrace >= 0 ? configuredGrace : 5;
+    const cutoff = new Date(new Date(now).getTime() - effectiveGrace * 60 * 1000);
     const payments = await this.repository.findPendingPayosPaymentsWithoutCase(cutoff, limit);
     let created = 0;
     for (const payment of payments) {
       if (payment.reconciliationCase) continue;
-      await this.transactionManager.transaction(async (transaction) => {
-        await this.repository.createOrFindCase({
+      try {
+        await this.transactionManager.transaction(async (transaction) => {
+          await this.repository.createOrFindCase({
+            paymentId: payment.id,
+            bookingId: payment.booking_id,
+            provider: 'payos',
+            nextAttemptAt: now,
+          }, { transaction });
+          created += 1;
+        });
+      } catch (error) {
+        console.warn('[payOS reconciliation] case discovery failed', {
           paymentId: payment.id,
           bookingId: payment.booking_id,
-          provider: 'payos',
-          nextAttemptAt: now,
-        }, { transaction });
-        created += 1;
-      });
+          error: String(error?.message || error).replace(/[\r\n\t]+/g, ' ').slice(0, 240),
+        });
+      }
     }
     return created;
   }
@@ -249,7 +259,7 @@ class PaymentService {
   async reconcilePayosCases({ now = this.clock(), graceMinutes = 5, limit = 10, jitterRatio = 0 } = {}) {
     await this.ensurePayosReconciliationCases({ now, graceMinutes });
     const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({
-      owner: this.workerId, now, limit,
+      owner: this.workerId, provider: 'payos', now, limit,
     }, { transaction }));
     for (const reconciliationCase of due) {
       await this._processPayosReconciliationCase(reconciliationCase, { now, jitterRatio });

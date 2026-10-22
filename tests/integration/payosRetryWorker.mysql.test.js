@@ -108,3 +108,61 @@ test('IT-37 late PAID after manual review records payment without reallocating i
   assert.equal((await models.Payment.findByPk(f.payment.id)).status, 'success');
   assert.equal((await models.Flight.findByPk(f.flight.flight.id)).available_seats, beforeFlight);
 });
+
+test('IT-42 payOS worker does not claim a VNPay reconciliation case', { timeout: 20000 }, async () => {
+  const f = await fixture('IT42');
+  const repository = paymentService.repository;
+  await models.PaymentReconciliationCase.destroy({ where: { payment_id: f.payment.id }, force: true });
+  const vnpayCase = await models.sequelize.transaction((transaction) => repository.createOrFindCase({
+    paymentId: f.payment.id, bookingId: f.booking.id, provider: 'vnpay', nextAttemptAt: new Date(0),
+  }, { transaction }));
+  const result = await models.sequelize.transaction((transaction) => repository.claimDueCases({
+    owner: 'it42-payos-worker', provider: 'payos', now: new Date(), limit: 10,
+  }, { transaction }));
+  const stored = await models.PaymentReconciliationCase.findByPk(vnpayCase.id);
+  assert.equal(result.length, 0);
+  assert.equal(stored.provider, 'vnpay');
+  assert.equal(stored.attempt_count, 0);
+  assert.equal(stored.lease_owner, null);
+});
+
+test('IT-43 discovery finds a missing case after the first 100 existing cases', { timeout: 60000 }, async () => {
+  const f = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
+  const bookings = Array.from({ length: 101 }, (_, index) => ({
+    booking_code: `B43${String(index).padStart(3, '0')}`,
+    flight_id: f.flight.id, fare_class_id: f.fareClass.id, status: 'pending_payment',
+    total_amount: 1000, hold_expires_at: new Date(Date.now() - 600000), guest_email: `it43-${index}@example.test`,
+  }));
+  const createdBookings = await models.Booking.bulkCreate(bookings);
+  createdBookings.forEach(trackBooking);
+  const payments = await models.Payment.bulkCreate(createdBookings.map((booking, index) => ({
+    booking_id: booking.id, amount: 1000, payment_method: 'payos', status: 'pending',
+    transaction_ref: `943${Date.now()}${String(index).padStart(3, '0')}`,
+  })));
+  payments.forEach(trackPayment);
+  await models.PaymentReconciliationCase.bulkCreate(payments.slice(0, 100).map((payment) => ({
+    payment_id: payment.id, booking_id: payment.booking_id, provider: 'payos', next_attempt_at: new Date(0),
+  })));
+  const created = await paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 60000), graceMinutes: 0, limit: 100 });
+  assert.equal(created, 1);
+  assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: payments[100].id } }), 1);
+});
+
+test('IT-44 failed case persistence is recoverable on the next discovery run', { timeout: 20000 }, async () => {
+  const f = await fixture('IT44');
+  await models.PaymentReconciliationCase.destroy({ where: { payment_id: f.payment.id }, force: true });
+  const repository = paymentService.repository;
+  const previous = repository.createOrFindCase;
+  let failed = true;
+  repository.createOrFindCase = async (...args) => {
+    if (failed) { failed = false; throw new Error('simulated case store outage'); }
+    return previous.apply(repository, args);
+  };
+  try {
+    assert.equal(await paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 60000), graceMinutes: 0 }), 0);
+    assert.equal((await models.Payment.findByPk(f.payment.id)).status, 'pending');
+    assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: f.payment.id } }), 0);
+    assert.equal(await paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 120000), graceMinutes: 0 }), 1);
+    assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: f.payment.id } }), 1);
+  } finally { repository.createOrFindCase = previous; }
+});

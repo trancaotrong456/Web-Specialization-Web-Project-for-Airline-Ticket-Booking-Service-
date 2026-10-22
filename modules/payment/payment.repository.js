@@ -40,18 +40,21 @@ class SequelizePaymentRepository {
     return reconciliationCase;
   }
 
-  async claimDueCases({ owner, now = new Date(), leaseMs = 60000, limit = 10 } = {}, { transaction } = {}) {
+  async claimDueCases({ owner, provider, now = new Date(), leaseMs = 60000, limit = 10 } = {}, { transaction } = {}) {
     this._assertReconciliationCaseModel();
     if (!transaction) throw new TypeError('A transaction is required to claim reconciliation cases');
     if (!owner || !String(owner).trim()) throw new TypeError('A reconciliation lease owner is required');
+    if (provider != null && !['payos', 'vnpay'].includes(provider)) throw new TypeError('provider must be payos or vnpay');
     const leaseExpiresAt = new Date(new Date(now).getTime() + Math.max(1000, Number(leaseMs) || 60000));
-    const rows = await this.PaymentReconciliationCase.findAll({
-      where: {
+    const where = {
         state: 'active',
         attempt_count: { [Op.lt]: this.PaymentReconciliationCase.sequelize.literal('max_attempts') },
         next_attempt_at: { [Op.lte]: now },
         [Op.or]: [{ lease_expires_at: null }, { lease_expires_at: { [Op.lte]: now } }],
-      },
+    };
+    if (provider) where.provider = provider;
+    const rows = await this.PaymentReconciliationCase.findAll({
+      where,
       order: [['next_attempt_at', 'ASC'], ['id', 'ASC']],
       limit: Math.max(1, Math.min(100, Number(limit) || 10)),
       lock: transaction.LOCK.UPDATE,
@@ -143,10 +146,12 @@ class SequelizePaymentRepository {
   findPayments(options) { return this.Payment.findAll(options); }
   findPendingPayosPaymentsWithoutCase(cutoff, limit = 100) {
     return this.Payment.findAll({
-      where: { payment_method: 'payos', status: 'pending', created_at: { [Op.lt]: cutoff } },
+      where: {
+        payment_method: 'payos', status: 'pending', created_at: { [Op.lt]: cutoff },
+        [Op.and]: [this.PaymentReconciliationCase.sequelize.literal('NOT EXISTS (SELECT 1 FROM payment_reconciliation_cases AS prc WHERE prc.payment_id = Payment.id)')],
+      },
       include: [
         { model: this.Booking, as: 'booking', where: { status: { [Op.in]: ['pending_payment', 'expired', 'cancelled'] } }, required: true },
-        { model: this.PaymentReconciliationCase, as: 'reconciliationCase', required: false },
       ],
       order: [['created_at', 'ASC']], limit,
     });
