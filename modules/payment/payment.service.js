@@ -1116,6 +1116,16 @@ class PaymentService {
         throw error;
       }
 
+      // payOS currently has no verified bank-refund adapter. The shared
+      // booking refund endpoint must fail before changing any payment,
+      // booking, seat or promotion state rather than treating a payment-link
+      // cancellation as a refund.
+      if (successfulPayments.some((payment) => payment.payment_method === 'payos')) {
+        const error = new Error('Automatic payOS refund is not supported; manual refund reconciliation is required.');
+        error.statusCode = 409;
+        throw error;
+      }
+
       const booking = await this.repository.findRefundBooking(bookingId, t);
 
       if (!booking) {

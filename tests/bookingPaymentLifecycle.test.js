@@ -354,6 +354,42 @@ test('#33 refund cancels confirmed booking, refunds payment and releases seats o
   assert.equal(f.flight.available_seats, 10);
 });
 
+test('#33 rejects automatic payOS refund before mutating payment, booking, seats or promotion', async (t) => {
+  const f = fixture(t, { status: 'confirmed' });
+  f.payment.status = 'success';
+  f.payment.payment_method = 'payos';
+  const before = {
+    paymentStatus: f.payment.status,
+    bookingStatus: f.booking.status,
+    availableSeats: f.flight.available_seats,
+    promotionUses: f.promo.used_count,
+  };
+
+  await assert.rejects(
+    paymentService.processRefund(1, 'payOS manual refund', { email: 'admin@example.com' }),
+    (error) => error.statusCode === 409 && /manual refund reconciliation/i.test(error.message),
+  );
+
+  assert.equal(f.payment.status, before.paymentStatus);
+  assert.equal(f.booking.status, before.bookingStatus);
+  assert.equal(f.flight.available_seats, before.availableSeats);
+  assert.equal(f.promo.used_count, before.promotionUses);
+  assert.equal(f.writes.length, 0);
+});
+
+test('#33 VNPay booking refund remains available through the shared legacy flow', async (t) => {
+  const f = fixture(t, { status: 'confirmed' });
+  f.payment.status = 'success';
+  f.payment.payment_method = 'vnpay';
+
+  const result = await paymentService.refundPayment(1, 'VNPay regression', { email: 'admin@example.com' });
+
+  assert.equal(result.paymentMethod, 'vnpay');
+  assert.equal(f.payment.status, 'refunded');
+  assert.equal(f.booking.status, 'cancelled');
+  assert.equal(f.flight.available_seats, 10);
+});
+
 for (const bookingStatus of ['pending_payment', 'expired']) {
   test(`#33 refund handles charged ${bookingStatus} booking without returning seats twice`, async (t) => {
     const f = fixture(t, { status: bookingStatus });
