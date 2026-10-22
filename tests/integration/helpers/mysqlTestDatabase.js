@@ -1,11 +1,19 @@
 'use strict';
 
-const EXPECTED_DATABASE = Object.freeze({
-  NODE_ENV: 'test',
-  DB_HOST: '127.0.0.1',
-  DB_PORT: '3309',
-  DB_NAME: 'airline_booking_integration_test',
-});
+const integrationTarget = process.env.MYSQL_INTEGRATION_TARGET || 'isolated';
+const EXPECTED_DATABASE = Object.freeze(integrationTarget === 'development'
+  ? {
+      NODE_ENV: 'test',
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '3307',
+      DB_NAME: 'airline_booking_docker',
+    }
+  : {
+      NODE_ENV: 'test',
+      DB_HOST: '127.0.0.1',
+      DB_PORT: '3309',
+      DB_NAME: 'airline_booking_integration_test',
+    });
 
 function assertSafeIntegrationEnvironment() {
   const mismatches = Object.entries(EXPECTED_DATABASE)

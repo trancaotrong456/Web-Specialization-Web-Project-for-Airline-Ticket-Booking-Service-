@@ -64,11 +64,12 @@ const denied = (code) => (error) => error.statusCode === code;
 function ipn(amount = 180000, response = '00', transactionStatus = response) {
   const query = {
     vnp_TxnRef: 'TXN_TEST',
+    vnp_TmnCode: process.env.VNP_TMN_CODE || 'TEST_TMN',
     vnp_Amount: String(amount * 100),
     vnp_ResponseCode: response,
     vnp_TransactionStatus: transactionStatus,
   };
-  query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
+  query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'test-only-vnpay-secret');
   return query;
 }
 

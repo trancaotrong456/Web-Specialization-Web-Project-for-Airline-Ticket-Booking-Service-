@@ -35,7 +35,14 @@ const initiatePaymentValidator = [
     .withMessage('payment_method must be either vnpay or payos'),
   body('return_url')
     .optional()
-    .isURL()
+    // Local Vite/React development uses hosts such as localhost and 127.0.0.1,
+    // which do not have a public DNS TLD. Origin allowlisting and production
+    // HTTPS enforcement remain in resolvePaymentReturnUrl() before mutation.
+    .isURL({
+      require_protocol: true,
+      require_tld: false,
+      protocols: ['http', 'https'],
+    })
     .withMessage('return_url must be a valid URL'),
   ...paymentGuestEmailValidator,
 ];

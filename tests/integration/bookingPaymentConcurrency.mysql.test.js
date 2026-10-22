@@ -21,6 +21,9 @@ const {
 } = require('./helpers/testFixtures');
 
 const adminUser = { email: 'integration-admin@example.test' };
+process.env.VNPAY_MODE ||= 'sandbox';
+process.env.VNP_TMN_CODE ||= 'TEST_TMN';
+process.env.CLIENT_URL ||= 'http://localhost:5173';
 process.env.VNP_HASH_SECRET ||= crypto.randomBytes(32).toString('hex');
 
 async function createHoldingBooking(fixture, suffix, promotionCode = undefined) {
@@ -48,6 +51,7 @@ async function initiateVnpay(booking) {
 function successfulVnpayIpn(payment) {
   const params = {
     vnp_TxnRef: payment.transaction_ref,
+    vnp_TmnCode: process.env.VNP_TMN_CODE || 'TEST_TMN',
     vnp_Amount: Math.round(Number(payment.amount) * 100),
     vnp_ResponseCode: '00',
     vnp_TransactionStatus: '00',

@@ -11,21 +11,28 @@ const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { resolvePaymentReturnUrl } = require('../../utils/paymentReturnUrl.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
+const { getVnpayConfig } = require('../../config/vnpay');
+const crypto = require('crypto');
+const { VnpayGateway } = require('./vnpay.gateway');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
   const pad = (n) => (n < 10 ? '0' + n : n);
-  const year = date.getFullYear();
-  const month = pad(date.getMonth() + 1);
-  const day = pad(date.getDate());
-  const hours = pad(date.getHours());
-  const minutes = pad(date.getMinutes());
-  const seconds = pad(date.getSeconds());
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23',
+  }).formatToParts(date).reduce((result, part) => { result[part.type] = part.value; return result; }, {});
+  const year = parts.year;
+  const month = parts.month;
+  const day = parts.day;
+  const hours = parts.hour;
+  const minutes = parts.minute;
+  const seconds = parts.second;
   return `${year}${month}${day}${hours}${minutes}${seconds}`;
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -34,6 +41,7 @@ class PaymentService {
     this.payOSFactory = payOSFactory;
     this.qrCode = qrCode;
     this.emailProvider = emailProvider;
+    this.vnpayGateway = vnpayGateway || new VnpayGateway();
   }
 
   _isPaymentConfirmationWindowExpired(booking, now = new Date()) {
@@ -123,6 +131,10 @@ class PaymentService {
       checksumKey: process.env.PAYOS_CHECKSUM_KEY,
       baseURL: process.env.PAYOS_BASE_URL || undefined,
     });
+  }
+
+  _getVnpayConfig() {
+    return getVnpayConfig(process.env);
   }
 
   async _restoreHoldingAfterGatewayFailure(bookingId, transactionRef) {
@@ -219,9 +231,15 @@ class PaymentService {
     guest_email = normalizeGuestEmail(guest_email);
     // payOS requires a numeric orderCode. Timestamp plus three random digits
     // stays below Number.MAX_SAFE_INTEGER and avoids same-millisecond collisions.
+    const vnpayConfig = payment_method === 'vnpay' ? this._getVnpayConfig() : null;
+    if (payment_method === 'vnpay' && !vnpayConfig.enabled) {
+      const error = new Error('VNPay is disabled. Set VNPAY_MODE=sandbox or production after configuring credentials.');
+      error.statusCode = 503;
+      throw error;
+    }
     const txnRef = payment_method === 'payos'
       ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
-      : `TXN_${booking_id}_${Date.now()}`;
+      : `TXN_${booking_id}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     let bookingData = null;
     const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
 
@@ -246,11 +264,19 @@ class PaymentService {
     let resolvedReturnUrl = null;
     let resolvedCancelUrl = null;
     if (payment_method === 'vnpay') {
+      const localFrontendReturnUrl = process.env.CLIENT_URL
+        ? new URL('/payment/vnpay-return', process.env.CLIENT_URL).toString()
+        : null;
       resolvedReturnUrl = resolvePaymentReturnUrl(
         return_url,
         process.env.VNP_RETURN_URL,
-        'http://localhost:3000/payment/vnpay-return'
+        localFrontendReturnUrl
       );
+      if (!resolvedReturnUrl) {
+        const error = new Error('VNPay return URL is not configured. Set VNP_RETURN_URL or CLIENT_URL.');
+        error.statusCode = 503;
+        throw error;
+      }
     } else if (payment_method === 'payos' && payosMode === 'live') {
       resolvedReturnUrl = resolvePaymentReturnUrl(return_url, process.env.PAYOS_RETURN_URL);
       resolvedCancelUrl = resolvePaymentReturnUrl(null, process.env.PAYOS_CANCEL_URL);
@@ -323,9 +349,9 @@ class PaymentService {
     let paymentUrl = '';
 
     if (payment_method === 'vnpay') {
-      const tmnCode = process.env.VNP_TMN_CODE || 'SANDBOX01';
-      const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
-      const vnpUrl = process.env.VNP_URL || 'https://sandbox.vnpayment.vn/paymentv2/vpcpay.html';
+      const tmnCode = vnpayConfig.tmnCode;
+      const secretKey = vnpayConfig.hashSecret;
+      const vnpUrl = vnpayConfig.endpoint;
       const finalReturnUrl = resolvedReturnUrl;
 
       const createDate = formatDateVnpay(new Date());
@@ -453,24 +479,33 @@ class PaymentService {
    * ONLY parses and verifies checksum to display UI, DOES NOT mutate database.
    */
   async handleVnpayReturn(queryParams) {
-    const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
+    const config = this._getVnpayConfig();
+    if (!config.enabled) {
+      return { isValidChecksum: false, isSuccess: false, message: 'VNPay is disabled' };
+    }
+    const secretKey = config.hashSecret;
     const isValidChecksum = verifyVnpayChecksum(queryParams, secretKey);
+    const isValidTmnCode = queryParams.vnp_TmnCode === config.tmnCode;
 
     const responseCode = queryParams.vnp_ResponseCode;
     const txnRef = queryParams.vnp_TxnRef;
     const amount = Number(queryParams.vnp_Amount || 0) / 100;
 
     let booking = null;
+    let isValidAmount = false;
     if (txnRef) {
       const payment = await this.repository.findPaymentWithBookingByRef(txnRef);
       if (payment) {
         booking = payment.booking;
+        isValidAmount = Math.round(Number(payment.amount)) === Math.round(amount);
       }
     }
 
     return {
       isValidChecksum,
-      isSuccess: isValidChecksum && responseCode === '00',
+      isValidTmnCode,
+      isValidAmount,
+      isSuccess: isValidChecksum && isValidTmnCode && isValidAmount && responseCode === '00',
       responseCode,
       transactionRef: txnRef,
       amount,
@@ -479,9 +514,13 @@ class PaymentService {
       message:
         !isValidChecksum
           ? 'Invalid signature checksum'
-          : responseCode === '00'
-          ? 'Payment transaction processed successfully'
-          : `Payment failed with code ${responseCode}`,
+          : !isValidTmnCode
+            ? 'Invalid merchant code'
+            : !isValidAmount
+              ? 'Invalid amount'
+              : responseCode === '00'
+                ? 'Payment transaction processed successfully'
+                : `Payment failed with code ${responseCode}`,
     };
   }
 
@@ -496,7 +535,9 @@ class PaymentService {
    * Bước 6: Update DB trong transaction có row-level lock -> RspCode '00'
    */
   async handleVnpayIpn(queryParams) {
-    const secretKey = process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO';
+    const config = this._getVnpayConfig();
+    if (!config.enabled) return { RspCode: '99', Message: 'VNPay is disabled' };
+    const secretKey = config.hashSecret;
 
     // BƯỚC 1: Verify Checksum
     const isChecksumValid = verifyVnpayChecksum(queryParams, secretKey);
@@ -506,6 +547,11 @@ class PaymentService {
         receivedAt: new Date().toISOString(),
       });
       return { RspCode: '97', Message: 'Checksum failed' };
+    }
+
+    if (queryParams.vnp_TmnCode !== config.tmnCode) {
+      console.warn('[VNPay IPN] Invalid merchant code received:', { txnRef: queryParams.vnp_TxnRef || null });
+      return { RspCode: '97', Message: 'Invalid merchant code' };
     }
 
     const txnRef = queryParams.vnp_TxnRef;
@@ -865,6 +911,136 @@ class PaymentService {
 
     await this._markPayosPaymentFailed(payment.id, payment.booking_id);
     return { orderCode, status: 'CANCELLED', processed: true };
+  }
+
+  async _createGatewayOperation(payment, operationType, operationKey, amount, transaction) {
+    const existing = await this.repository.findGatewayOperation({ where: { operation_key: operationKey }, transaction, lock: transaction.LOCK.UPDATE });
+    if (existing) return existing;
+    return this.repository.createGatewayOperation({
+      request_id: `${operationType.toUpperCase()}_${Date.now()}_${crypto.randomBytes(6).toString('hex')}`.slice(0, 64),
+      operation_key: operationKey, payment_id: payment.id, operation_type: operationType,
+      status: 'pending', amount: amount == null ? payment.amount : amount,
+    }, { transaction });
+  }
+
+  async _updateGatewayOperation(id, patch) {
+    return this.transactionManager.transaction(async (t) => {
+      const operation = await this.repository.findLockedGatewayOperation(id, t);
+      if (!operation) return null;
+      Object.assign(operation, patch);
+      await this.repository.save(operation, { transaction: t });
+      return operation;
+    });
+  }
+
+  async queryVnpayPayment(paymentId) {
+    let operation;
+    const payment = await this.repository.findPaymentByPk(paymentId);
+    if (!payment || payment.payment_method !== 'vnpay') { const e = new Error('VNPay payment not found'); e.statusCode = 404; throw e; }
+    await this.transactionManager.transaction(async (t) => {
+      const lockedPayment = await this.repository.findLockedPaymentById(paymentId, t);
+      operation = await this._createGatewayOperation(lockedPayment, 'querydr', `querydr:${paymentId}:${Date.now()}`, lockedPayment.amount, t);
+      operation.attempt_count += 1; operation.last_attempt_at = new Date();
+      await this.repository.save(operation, { transaction: t });
+    });
+    try {
+      const result = await this.vnpayGateway.query({ payment, requestId: operation.request_id });
+      await this._updateGatewayOperation(operation.id, { status: result.status, response_json: result.response, gateway_transaction_ref: result.transactionRef, completed_at: result.status === 'pending' ? null : new Date(), last_error: null });
+      return { operationId: operation.id, ...result };
+    } catch (error) {
+      const status = error.outcome || 'unknown';
+      await this._updateGatewayOperation(operation.id, { status, last_error: String(error.message).slice(0, 500), completed_at: status === 'unknown' ? null : new Date() });
+      throw error;
+    }
+  }
+
+  async refundVnpayPayment(paymentId, reason, adminUser) {
+    let operation;
+    const payment = await this.repository.findPaymentByPk(paymentId);
+    if (!payment || payment.payment_method !== 'vnpay') { const e = new Error('VNPay payment not found'); e.statusCode = 404; throw e; }
+    await this.transactionManager.transaction(async (t) => {
+      const lockedPayment = await this.repository.findLockedPaymentById(paymentId, t);
+
+      if (!lockedPayment) {
+        const e = new Error('VNPay payment not found');
+        e.statusCode = 404;
+        throw e;
+      }
+
+      // Check idempotency before checking payment status.
+      const existing = await this.repository.findRefundGatewayOperation(paymentId, t);
+
+      if (existing) {
+        const e = new Error(`Refund operation is already ${existing.status}`);
+        e.statusCode = 409;
+        e.operation = existing;
+        throw e;
+      }
+
+      if (lockedPayment.status !== 'success') {
+        const e = new Error('Only a successful VNPay payment can be refunded');
+        e.statusCode = 400;
+        throw e;
+      }
+
+      operation = await this._createGatewayOperation(
+        lockedPayment,
+        'refund',
+        `refund:${paymentId}`,
+        lockedPayment.amount,
+        t
+      );
+
+      operation.attempt_count += 1;
+      operation.last_attempt_at = new Date();
+
+      await this.repository.save(operation, { transaction: t });
+    });
+    let result;
+    let seatUpdates = [];
+    try {
+      // Gateway I/O and the state transition are covered by this error path.
+      // Post-commit notifications are deliberately outside it: an event
+      // delivery failure must never turn a committed refund into `unknown`.
+      result = await this.vnpayGateway.refund({ payment, requestId: operation.request_id, reason });
+      await this.transactionManager.transaction(async (t) => {
+        const op = await this.repository.findLockedGatewayOperation(operation.id, t);
+        const lockedPayment = await this.repository.findLockedPaymentById(paymentId, t);
+        Object.assign(op, { status: result.status, response_json: result.response, gateway_transaction_ref: result.transactionRef, completed_at: result.status === 'success' ? new Date() : null, last_error: null });
+        await this.repository.save(op, { transaction: t });
+        if (result.status !== 'success') return;
+        if (lockedPayment.status !== 'success') return;
+        const booking = await this.repository.findRefundBooking(lockedPayment.booking_id, t);
+        if (!booking) return;
+        const shouldReturnSeats = booking.status !== 'expired';
+        lockedPayment.status = 'refunded';
+        await this.repository.save(lockedPayment, { transaction: t });
+        if (['confirmed', 'pending_payment', 'expired'].includes(booking.status)) {
+          booking.status = 'cancelled';
+          await this.repository.save(booking, { transaction: t });
+          if (shouldReturnSeats) {
+            seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          }
+          if (booking.promotion_id) {
+            const promo = await this.repository.findLockedPromotion(booking.promotion_id, t);
+            if (promo && promo.used_count > 0) await this.repository.decrement(promo, 'used_count', { by: 1, transaction: t });
+          }
+        }
+      });
+    } catch (error) {
+      await this._updateGatewayOperation(operation.id, { status: error.outcome || 'unknown', last_error: String(error.message).slice(0, 500), completed_at: error.outcome === 'failed' ? new Date() : null });
+      throw error;
+    }
+
+    // This is post-commit best-effort delivery. The refund result is already
+    // durable, so notification failures are logged without changing it.
+    try {
+      await this._emitSeatUpdates(seatUpdates);
+    } catch (error) {
+      console.warn('[Refund] Seat update notification failed after commit:', error.message);
+    }
+
+    return { operationId: operation.id, paymentId, status: result.status, response: result.response, admin: adminUser && adminUser.id };
   }
 
   /**

@@ -1,11 +1,19 @@
 const { Op } = require('sequelize');
 
 class SequelizePaymentRepository {
-  constructor({ Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, PaymentGatewayOperation, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, PaymentGatewayOperation, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+  }
+
+
+  findGatewayOperation(options) { return this.PaymentGatewayOperation.findOne(options); }
+  createGatewayOperation(values, options) { return this.PaymentGatewayOperation.create(values, options); }
+  findLockedGatewayOperation(id, transaction) { return this.PaymentGatewayOperation.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction }); }
+  findRefundGatewayOperation(paymentId, transaction) {
+    return this.PaymentGatewayOperation.findOne({ where: { payment_id: paymentId, operation_type: 'refund', status: { [Op.in]: ['pending', 'unknown', 'success'] } }, order: [['id', 'DESC']], lock: transaction.LOCK.UPDATE, transaction });
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
