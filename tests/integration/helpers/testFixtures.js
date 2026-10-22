@@ -134,6 +134,9 @@ async function cleanupTrackedFixtures() {
       const operationPaymentIds = paymentIds.map(({ id }) => id);
       if (operationPaymentIds.length > 0) {
         await models.PaymentGatewayOperation.destroy({ where: { payment_id: operationPaymentIds }, force: true });
+        if (models.PaymentReconciliationCase) {
+          await models.PaymentReconciliationCase.destroy({ where: { payment_id: operationPaymentIds }, force: true });
+        }
       }
     }
     await models.Payment.destroy({ where: { booking_id: bookingIds }, force: true });
