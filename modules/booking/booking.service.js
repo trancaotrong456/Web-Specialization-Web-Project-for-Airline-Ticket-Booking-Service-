@@ -430,6 +430,8 @@ class BookingService {
         const paymentSnapshot = typeof this.repository.findPendingPaymentSnapshotForReconciliation === 'function'
           ? await this.repository.findPendingPaymentSnapshotForReconciliation(candidate.id)
           : null;
+        if (process.env.PAYOS_RECONCILIATION_WORKER === 'true'
+          && paymentSnapshot?.payment_method === 'payos') continue;
         let payosStatus = null;
         if (paymentSnapshot && paymentSnapshot.payment_method === 'payos') {
           if (paymentSnapshot.status === 'success') {

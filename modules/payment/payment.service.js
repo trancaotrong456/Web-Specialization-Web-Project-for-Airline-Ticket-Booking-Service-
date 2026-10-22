@@ -32,7 +32,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway, clock = () => new Date(), workerId } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -42,6 +42,8 @@ class PaymentService {
     this.qrCode = qrCode;
     this.emailProvider = emailProvider;
     this.vnpayGateway = vnpayGateway || new VnpayGateway();
+    this.clock = clock;
+    this.workerId = workerId || `payos-reconcile-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
   }
 
   _isPaymentConfirmationWindowExpired(booking, now = new Date()) {
@@ -136,6 +138,123 @@ class PaymentService {
   async getPayosPaymentStatus(transactionRef) {
     const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(transactionRef));
     return paymentLink;
+  }
+
+  _payosRetryDelayMs(attemptCount, jitterRatio = 0) {
+    const baseMinutes = Math.min(2 ** Math.max(0, Number(attemptCount) - 1), 16);
+    const ratio = Number.isFinite(Number(jitterRatio)) ? Math.max(0, Math.min(0.2, Number(jitterRatio))) : 0;
+    const jitter = ratio === 0 ? 1 : 1 + ((Math.random() * 2 - 1) * ratio);
+    return Math.round(baseMinutes * 60 * 1000 * jitter);
+  }
+
+  async ensurePayosReconciliationCases({ now = this.clock(), graceMinutes = 5, limit = 100 } = {}) {
+    if (typeof this.repository.findPendingPayosPaymentsWithoutCase !== 'function') return 0;
+    const cutoff = new Date(new Date(now).getTime() - Math.max(0, Number(graceMinutes) || 5) * 60 * 1000);
+    const payments = await this.repository.findPendingPayosPaymentsWithoutCase(cutoff, limit);
+    let created = 0;
+    for (const payment of payments) {
+      if (payment.reconciliationCase) continue;
+      await this.transactionManager.transaction(async (transaction) => {
+        await this.repository.createOrFindCase({
+          paymentId: payment.id,
+          bookingId: payment.booking_id,
+          provider: 'payos',
+          nextAttemptAt: now,
+        }, { transaction });
+        created += 1;
+      });
+    }
+    return created;
+  }
+
+  async _processPayosReconciliationCase(reconciliationCase, { now = this.clock(), jitterRatio = 0 } = {}) {
+    let gatewayStatus;
+    let gatewayError = null;
+    try {
+      const paymentSnapshot = await this.repository.findPaymentByPk(reconciliationCase.payment_id);
+      if (!paymentSnapshot || paymentSnapshot.payment_method !== 'payos') return;
+      gatewayStatus = await this.getPayosPaymentStatus(paymentSnapshot.transaction_ref);
+    } catch (error) {
+      gatewayError = error;
+    }
+
+    let seatUpdates = [];
+    await this.transactionManager.transaction(async (transaction) => {
+      const payment = await this.repository.findLockedPaymentById(reconciliationCase.payment_id, transaction);
+      const booking = payment ? await this.repository.findLockedBookingWithPassengers(payment.booking_id, transaction) : null;
+      if (!payment || !booking) return;
+      if (payment.status === 'success') {
+        await this.repository.resolveCase(reconciliationCase.id, this.workerId, {
+          resolvedAt: now, lastGatewayStatus: String(gatewayStatus?.status || 'PAID').toUpperCase(),
+        }, { transaction });
+        return;
+      }
+
+      const status = String(gatewayStatus?.status || '').toUpperCase();
+      const sameOrder = String(gatewayStatus?.orderCode ?? gatewayStatus?.order_code ?? '') === String(payment.transaction_ref);
+      const sameAmount = Number(gatewayStatus?.amount) === Number(payment.amount);
+      const valid = !gatewayError && sameOrder && sameAmount;
+
+      if (valid && status === 'PAID' && payment.status === 'pending') {
+        payment.status = 'success';
+        payment.paid_at = payment.paid_at || new Date(now);
+        await this.repository.save(payment, { transaction });
+        const holdValid = booking.status === 'pending_payment'
+          && booking.hold_expires_at && new Date(booking.hold_expires_at) >= new Date(now);
+        const flight = holdValid ? await this.repository.findLockedFlight(booking.flight_id, transaction) : null;
+        const eligible = holdValid && flight && flight.status === 'scheduled'
+          && new Date(flight.departure_time).getTime() > new Date(now).getTime();
+        if (eligible) {
+          booking.status = 'confirmed';
+          await this.repository.save(booking, { transaction });
+          await this.repository.resolveCase(reconciliationCase.id, this.workerId, { resolvedAt: now, lastGatewayStatus: status }, { transaction });
+        } else {
+          await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Late PAID payment requires financial reconciliation', { transaction });
+        }
+        return;
+      }
+
+      if (valid && status === 'CANCELLED' && payment.status === 'pending') {
+        payment.status = 'failed';
+        await this.repository.save(payment, { transaction });
+        if (booking.status === 'pending_payment') {
+          const holdValid = booking.hold_expires_at && new Date(booking.hold_expires_at) >= new Date(now);
+          if (holdValid) booking.status = 'holding';
+          else {
+            booking.status = 'expired';
+            seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          }
+          await this.repository.save(booking, { transaction });
+        }
+        await this.repository.resolveCase(reconciliationCase.id, this.workerId, { resolvedAt: now, lastGatewayStatus: status }, { transaction });
+        return;
+      }
+
+      const attemptCount = Number(reconciliationCase.attempt_count);
+      if (attemptCount >= Number(reconciliationCase.max_attempts)) {
+        await this.repository.markManualReview(reconciliationCase.id, this.workerId,
+          gatewayError ? `payOS lookup unavailable: ${gatewayError.message}` : `payOS status ${status || 'UNKNOWN'} remains unresolved`, { transaction });
+        return;
+      }
+      const nextAttemptAt = new Date(new Date(now).getTime() + this._payosRetryDelayMs(attemptCount, jitterRatio));
+      await this.repository.completeAttempt(reconciliationCase.id, this.workerId, {
+        lastGatewayStatus: status || 'UNKNOWN',
+        lastError: gatewayError,
+        nextAttemptAt,
+      }, { transaction });
+    });
+    if (seatUpdates.length > 0) await this._emitSeatUpdates(seatUpdates);
+  }
+
+  async reconcilePayosCases({ now = this.clock(), graceMinutes = 5, limit = 10, jitterRatio = 0 } = {}) {
+    await this.ensurePayosReconciliationCases({ now, graceMinutes });
+    const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({
+      owner: this.workerId, now, limit,
+    }, { transaction }));
+    for (const reconciliationCase of due) {
+      await this._processPayosReconciliationCase(reconciliationCase, { now, jitterRatio });
+    }
+    return { claimedCount: due.length };
   }
 
   _getVnpayConfig() {
@@ -246,6 +365,7 @@ class PaymentService {
       ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
       : `TXN_${booking_id}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     let bookingData = null;
+    let paymentRecordId = null;
     const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
 
     if (payment_method === 'payos' && payosMode === 'disabled') {
@@ -336,7 +456,7 @@ class PaymentService {
       await this.repository.save(booking, { transaction: t });
 
       // Create pending payment record
-      await this.repository.createPayment(
+      const paymentRecord = await this.repository.createPayment(
         {
           booking_id: booking.id,
           amount: booking.total_amount,
@@ -346,6 +466,7 @@ class PaymentService {
         },
         { transaction: t }
       );
+      paymentRecordId = paymentRecord?.id || null;
 
       bookingData = booking;
     });
@@ -466,6 +587,18 @@ class PaymentService {
         const error = new Error(`Unable to confirm payOS payment-link creation: ${gatewayError.message}`);
         error.statusCode = 502;
         error.transactionRef = txnRef;
+        if (paymentRecordId && typeof this.repository.createOrFindCase === 'function') {
+          try {
+            await this.transactionManager.transaction((transaction) => this.repository.createOrFindCase({
+              paymentId: paymentRecordId,
+              bookingId: bookingData.id,
+              provider: 'payos',
+              nextAttemptAt: new Date(),
+            }, { transaction }));
+          } catch (caseError) {
+            console.warn('[payOS] Could not persist reconciliation case after ambiguous link creation:', caseError.message);
+          }
+        }
         throw error;
       }
     }
@@ -785,7 +918,9 @@ class PaymentService {
       throw error;
     }
 
-    const isRecordableLateSuccess = isSuccess && payment.status === 'failed';
+    const isRecordableLateSuccess = isSuccess
+      && (payment.status === 'failed'
+        || (payment.status === 'pending' && payment.booking.status !== 'pending_payment'));
 
     if (payment.status === 'success' || (payment.booking.status === 'confirmed' && !isRecordableLateSuccess)) {
       return { message: 'Order already confirmed' };
@@ -808,7 +943,8 @@ class PaymentService {
       // requests from confirming and emailing the same booking concurrently.
       if (!lockedPayment || !lockedBooking) return;
       if (lockedPayment.status === 'success') return;
-      if (isSuccess && lockedPayment.status === 'failed') {
+      if (isSuccess && (lockedPayment.status === 'failed'
+        || (lockedPayment.status === 'pending' && lockedBooking.status !== 'pending_payment'))) {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });

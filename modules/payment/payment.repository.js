@@ -107,12 +107,13 @@ class SequelizePaymentRepository {
     return reconciliationCase;
   }
 
-  async resolveCase(id, owner, { resolvedAt = new Date() } = {}, { transaction } = {}) {
+  async resolveCase(id, owner, { resolvedAt = new Date(), lastGatewayStatus = null } = {}, { transaction } = {}) {
     const reconciliationCase = await this._lockOwnedCase(id, owner, transaction);
     if (!reconciliationCase) return null;
     reconciliationCase.state = 'resolved';
     reconciliationCase.resolved_at = resolvedAt;
     reconciliationCase.last_checked_at = new Date();
+    if (lastGatewayStatus != null) reconciliationCase.last_gateway_status = String(lastGatewayStatus).slice(0, 32);
     reconciliationCase.lease_owner = null;
     reconciliationCase.lease_expires_at = null;
     await reconciliationCase.save({ transaction });
@@ -140,6 +141,16 @@ class SequelizePaymentRepository {
   findPaymentByPk(id, options) { return this.Payment.findByPk(id, options); }
   findAndCountPayments(options) { return this.Payment.findAndCountAll(options); }
   findPayments(options) { return this.Payment.findAll(options); }
+  findPendingPayosPaymentsWithoutCase(cutoff, limit = 100) {
+    return this.Payment.findAll({
+      where: { payment_method: 'payos', status: 'pending', created_at: { [Op.lt]: cutoff } },
+      include: [
+        { model: this.Booking, as: 'booking', where: { status: { [Op.in]: ['pending_payment', 'expired', 'cancelled'] } }, required: true },
+        { model: this.PaymentReconciliationCase, as: 'reconciliationCase', required: false },
+      ],
+      order: [['created_at', 'ASC']], limit,
+    });
+  }
   sumPayments(field, options) { return this.Payment.sum(field, options); }
   createPayment(values, options) { return this.Payment.create(values, options); }
   findBooking(options) { return this.Booking.findOne(options); }

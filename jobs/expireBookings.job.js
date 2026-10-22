@@ -1,5 +1,6 @@
 const cron = require('node-cron');
 const bookingService = require('../services/booking.service');
+const paymentService = require('../services/payment.service');
 const { createBookingMaintenanceJob } = require('../infrastructure/jobs/bookingMaintenanceJob');
 
 /**
@@ -9,7 +10,7 @@ const { createBookingMaintenanceJob } = require('../infrastructure/jobs/bookingM
  *
  * IMPORTANT: Only targets { status: 'holding' } — NOT 'pending_payment'.
  */
-const defaultJob = createBookingMaintenanceJob({ cron, bookingService });
+const defaultJob = createBookingMaintenanceJob({ cron, bookingService, paymentService });
 const initExpireBookingsJob = () => defaultJob.start();
 
 module.exports = {
