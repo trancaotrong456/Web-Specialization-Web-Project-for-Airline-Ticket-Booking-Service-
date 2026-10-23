@@ -6,11 +6,59 @@ function sanitizeGatewayError(error) {
 }
 
 class SequelizePaymentRepository {
-  constructor({ Payment, PaymentGatewayOperation, PaymentReconciliationCase, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, PaymentGatewayOperation, PaymentReconciliationCase, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+  }
+
+  _assertWorkerLeaseModel() {
+    if (!this.ReconciliationWorkerLease) throw new TypeError('Reconciliation worker lease model is required');
+  }
+
+  async acquirePayosReconciliationOwnership({ owner, now = new Date(), leaseMs = 120000 } = {}, { transaction } = {}) {
+    this._assertWorkerLeaseModel();
+    if (!transaction) throw new TypeError('A transaction is required to acquire reconciliation ownership');
+    if (!owner || !String(owner).trim()) throw new TypeError('A reconciliation lease owner is required');
+    const lease = await this.ReconciliationWorkerLease.findOne({
+      where: { lease_name: 'payos-reconciliation' }, lock: transaction.LOCK.UPDATE, transaction,
+    });
+    if (!lease) throw new Error('payOS reconciliation ownership record is missing');
+    const currentOwner = lease.owner_id && String(lease.owner_id);
+    const expiresAt = lease.lease_expires_at ? new Date(lease.lease_expires_at).getTime() : 0;
+    if (currentOwner && currentOwner !== String(owner) && expiresAt > new Date(now).getTime()) return false;
+    lease.owner_id = String(owner).slice(0, 128);
+    lease.lease_expires_at = new Date(new Date(now).getTime() + Math.max(1000, Number(leaseMs) || 120000));
+    await lease.save({ transaction });
+    return true;
+  }
+
+  async renewPayosReconciliationOwnership({ owner, now = new Date(), leaseMs = 120000 } = {}, { transaction } = {}) {
+    this._assertWorkerLeaseModel();
+    if (!transaction) throw new TypeError('A transaction is required to renew reconciliation ownership');
+    const lease = await this.ReconciliationWorkerLease.findOne({
+      where: { lease_name: 'payos-reconciliation' }, lock: transaction.LOCK.UPDATE, transaction,
+    });
+    if (!lease || lease.owner_id !== String(owner)
+      || !lease.lease_expires_at || new Date(lease.lease_expires_at).getTime() <= new Date(now).getTime()) return false;
+    lease.lease_expires_at = new Date(new Date(now).getTime() + Math.max(1000, Number(leaseMs) || 120000));
+    await lease.save({ transaction });
+    return true;
+  }
+
+  async releasePayosReconciliationOwnership({ owner } = {}, { transaction } = {}) {
+    this._assertWorkerLeaseModel();
+    if (!transaction) throw new TypeError('A transaction is required to release reconciliation ownership');
+    const [updated] = await this.ReconciliationWorkerLease.update({ owner_id: null, lease_expires_at: null }, {
+      where: { lease_name: 'payos-reconciliation', owner_id: String(owner) }, transaction,
+    });
+    return updated === 1;
+  }
+
+  findPayosReconciliationOwnership(options) {
+    this._assertWorkerLeaseModel();
+    return this.ReconciliationWorkerLease.findOne({ where: { lease_name: 'payos-reconciliation' }, ...options });
   }
 
   _assertReconciliationCaseModel() {

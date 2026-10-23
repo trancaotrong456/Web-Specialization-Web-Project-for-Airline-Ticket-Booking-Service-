@@ -30,6 +30,26 @@ before(async () => { await verifyConnectedDatabase(); });
 afterEach(async () => { await cleanupTrackedFixtures(); });
 after(async () => { await cleanupTrackedFixtures(); await models.sequelize.close(); });
 
+test('IT-53 distributed ownership allows one durable worker and rejects stale owners', { timeout: 20000 }, async () => {
+  const repository = paymentService.repository;
+  await models.ReconciliationWorkerLease.update({ owner_id: null, lease_expires_at: null }, { where: { lease_name: 'payos-reconciliation' } });
+  const now = new Date();
+  const acquire = (owner) => models.sequelize.transaction((transaction) => repository.acquirePayosReconciliationOwnership({ owner, now, leaseMs: 60000 }, { transaction }));
+  const results = await Promise.all([acquire('it53-a'), acquire('it53-b')]);
+  assert.equal(results.filter(Boolean).length, 1);
+  const winner = results[0] ? 'it53-a' : 'it53-b';
+  const loser = winner === 'it53-a' ? 'it53-b' : 'it53-a';
+  const staleRenew = await models.sequelize.transaction((transaction) => repository.renewPayosReconciliationOwnership({ owner: loser, now, leaseMs: 60000 }, { transaction }));
+  assert.equal(staleRenew, false);
+  await models.ReconciliationWorkerLease.update({ lease_expires_at: new Date(0) }, { where: { lease_name: 'payos-reconciliation' } });
+  const recovered = await acquire(loser);
+  assert.equal(recovered, true);
+  const released = await models.sequelize.transaction((transaction) => repository.releasePayosReconciliationOwnership({ owner: loser }, { transaction }));
+  assert.equal(released, true);
+  const stored = await models.ReconciliationWorkerLease.findByPk('payos-reconciliation');
+  assert.equal(stored.owner_id, null);
+});
+
 test('IT-34 payOS worker resolves a verified PAID case exactly once', { timeout: 20000 }, async () => {
   const f = await fixture('IT34');
   const previous = paymentService.getPayosPaymentStatus;

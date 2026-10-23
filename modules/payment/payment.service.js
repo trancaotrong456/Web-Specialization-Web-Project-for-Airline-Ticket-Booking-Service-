@@ -316,21 +316,37 @@ class PaymentService {
   async reconcilePayosCases({ now = this.clock(), graceMinutes = 5, limit = 10, jitterRatio = 0 } = {}) {
     const startedAt = Date.now();
     emitReconciliationEvent(this.logger, 'worker_started', { worker_id: this.workerId });
-    await this.ensurePayosReconciliationCases({ now, graceMinutes });
-    if (typeof this.repository.releaseExpiredLease === 'function') {
-      const released = await this.transactionManager.transaction((transaction) => this.repository.releaseExpiredLease({ now }, { transaction }));
-      const releasedCount = Array.isArray(released) ? released[0] : Number(released?.count || released || 0);
-      if (releasedCount > 0) emitReconciliationEvent(this.logger, 'lease_recovered', { worker_id: this.workerId, recovered_count: releasedCount });
+    if (typeof this.repository.acquirePayosReconciliationOwnership !== 'function'
+      || typeof this.repository.releasePayosReconciliationOwnership !== 'function') {
+      this.logger.warn?.('[payOS reconciliation] distributed ownership is unavailable; polling skipped');
+      return { claimedCount: 0, ownership: 'unavailable' };
     }
-    const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({
-      owner: this.workerId, provider: 'payos', now, limit,
-    }, { transaction }));
-    for (const reconciliationCase of due) {
-      emitReconciliationEvent(this.logger, 'case_claimed', { worker_id: this.workerId, case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
-      await this._processPayosReconciliationCase(reconciliationCase, { now, jitterRatio });
+    const leaseMs = Math.max(1000, Number(process.env.PAYOS_RECONCILIATION_OWNERSHIP_LEASE_MS) || 120000);
+    const acquired = await this.transactionManager.transaction((transaction) => this.repository.acquirePayosReconciliationOwnership({ owner: this.workerId, now, leaseMs }, { transaction }));
+    if (!acquired) return { claimedCount: 0, ownership: 'busy' };
+    try {
+      await this.ensurePayosReconciliationCases({ now, graceMinutes });
+      if (typeof this.repository.releaseExpiredLease === 'function') {
+        const released = await this.transactionManager.transaction((transaction) => this.repository.releaseExpiredLease({ now }, { transaction }));
+        const releasedCount = Array.isArray(released) ? released[0] : Number(released?.count || released || 0);
+        if (releasedCount > 0) emitReconciliationEvent(this.logger, 'lease_recovered', { worker_id: this.workerId, recovered_count: releasedCount });
+      }
+      const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({
+        owner: this.workerId, provider: 'payos', now, limit,
+      }, { transaction }));
+      let processedCount = 0;
+      for (const reconciliationCase of due) {
+        const renewed = await this.transactionManager.transaction((transaction) => this.repository.renewPayosReconciliationOwnership({ owner: this.workerId, now, leaseMs }, { transaction }));
+        if (!renewed) break;
+        emitReconciliationEvent(this.logger, 'case_claimed', { worker_id: this.workerId, case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
+        await this._processPayosReconciliationCase(reconciliationCase, { now, jitterRatio });
+        processedCount += 1;
+      }
+      emitReconciliationEvent(this.logger, 'worker_completed', { worker_id: this.workerId, claimed_count: processedCount, duration_ms: Date.now() - startedAt });
+      return { claimedCount: processedCount, ownership: 'acquired' };
+    } finally {
+      await this.transactionManager.transaction((transaction) => this.repository.releasePayosReconciliationOwnership({ owner: this.workerId }, { transaction }));
     }
-    emitReconciliationEvent(this.logger, 'worker_completed', { worker_id: this.workerId, claimed_count: due.length, duration_ms: Date.now() - startedAt });
-    return { claimedCount: due.length };
   }
 
   async getReconciliationMetrics({ now = this.clock(), pendingSlaMinutes = Number(process.env.PAYMENT_PENDING_SLA_MINUTES || 30) } = {}) {
