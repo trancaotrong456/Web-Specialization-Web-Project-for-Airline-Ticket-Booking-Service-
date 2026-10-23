@@ -7,7 +7,7 @@ class PaymentController {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -27,6 +27,14 @@ class PaymentController {
     } catch (error) {
       next(error);
     }
+  }
+  async getReconciliationCases(req, res, next) {
+    try { return this.apiResponse.paginated(res, await this.service.getReconciliationCases(req.query), 'Reconciliation cases retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationCaseById(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getReconciliationCaseById(req.params.id), 'Reconciliation case retrieved successfully'); }
+    catch (error) { next(error); }
   }
 
   async initiatePayment(req, res, next) {

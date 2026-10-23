@@ -78,6 +78,23 @@ const paymentIdValidator = [
   param('id').isInt({ min: 1 }).withMessage('Payment ID must be a positive integer'),
 ];
 
+const reconciliationCaseListValidator = [
+  query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
+  query('provider').optional().isIn(['payos', 'vnpay']).withMessage('provider filter is invalid'),
+  query('state').optional().isIn(['active', 'manual_review', 'resolved', 'closed']).withMessage('state filter is invalid'),
+  query('payment_id').optional().isInt({ min: 1 }).withMessage('payment_id must be a valid ID'),
+  query('booking_id').optional().isInt({ min: 1 }).withMessage('booking_id must be a valid ID'),
+  query('booking_code').optional().isString().trim().isLength({ min: 1, max: 64 }).withMessage('booking_code is invalid'),
+  query('manual_review_reason').optional().isString().trim().isLength({ min: 1, max: 500 }).withMessage('manual_review_reason is invalid'),
+  query('sort').optional().isIn(['created_at', 'updated_at', 'next_attempt_at']).withMessage('sort field is invalid'),
+  query('order').optional().isIn(['asc', 'desc']).withMessage('order must be asc or desc'),
+];
+
+const reconciliationCaseIdValidator = [
+  param('id').isInt({ min: 1 }).withMessage('Reconciliation case ID must be a positive integer'),
+];
+
 const revenueValidator = [
   query('from_date')
     .notEmpty()
@@ -116,4 +133,6 @@ module.exports = {
   paymentListValidator,
   paymentIdValidator,
   revenueValidator,
+  reconciliationCaseListValidator,
+  reconciliationCaseIdValidator,
 };

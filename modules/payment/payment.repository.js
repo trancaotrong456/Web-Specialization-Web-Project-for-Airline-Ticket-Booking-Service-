@@ -216,6 +216,37 @@ class SequelizePaymentRepository {
       include: [{ model: this.User, as: 'user', attributes: ['id', 'full_name', 'email'], required: false }],
     }] });
   }
+  listReconciliationCases({ where = {}, limit, offset, order = [['created_at', 'DESC']] } = {}) {
+    return this.PaymentReconciliationCase.findAndCountAll({
+      where,
+      limit,
+      offset,
+      order,
+      attributes: [
+        'id', 'provider', 'state', 'payment_id', 'booking_id', 'attempt_count', 'max_attempts',
+        'last_gateway_status', 'last_checked_at', 'next_attempt_at', 'manual_review_reason',
+        'created_at', 'updated_at',
+      ],
+      include: [
+        { model: this.Payment, as: 'payment', attributes: ['id', 'status', 'amount', 'paid_at'], required: true },
+        { model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status'], required: true },
+      ],
+    });
+  }
+  findReconciliationCaseDetail(id) {
+    return this.PaymentReconciliationCase.findByPk(id, {
+      attributes: [
+        'id', 'provider', 'state', 'payment_id', 'booking_id', 'attempt_count', 'max_attempts',
+        'last_attempt_at', 'last_checked_at', 'last_gateway_status', 'last_error',
+        'manual_review_reason', 'next_attempt_at', 'lease_expires_at', 'resolved_at',
+        'created_at', 'updated_at',
+      ],
+      include: [
+        { model: this.Payment, as: 'payment', attributes: ['id', 'status', 'amount', 'paid_at'], required: true },
+        { model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status'], required: true },
+      ],
+    });
+  }
   async aggregateRevenue({ startDate, endDate, groupBy, sequelize }) {
     const where = { status: 'success', [Op.and]: [
       sequelize.literal(`paid_at >= '${startDate}'`),

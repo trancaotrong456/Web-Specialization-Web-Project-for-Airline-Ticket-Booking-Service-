@@ -85,6 +85,55 @@ class PaymentService {
     return payment;
   }
 
+  async getReconciliationCases({ page = 1, limit = 20, provider, state, payment_id, booking_id, booking_code, manual_review_reason, sort = 'created_at', order = 'desc' } = {}) {
+    const normalizedPage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const normalizedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
+    const where = {};
+    if (provider) where.provider = provider;
+    if (state) where.state = state;
+    if (payment_id) where.payment_id = payment_id;
+    if (booking_id) where.booking_id = booking_id;
+    if (manual_review_reason) where.manual_review_reason = manual_review_reason;
+    const result = await this.repository.listReconciliationCases({
+      where: { ...where, ...(booking_code ? { '$booking.booking_code$': booking_code } : {}) },
+      limit: normalizedLimit,
+      offset: (normalizedPage - 1) * normalizedLimit,
+      order: [[sort, order.toUpperCase()]],
+    });
+    return { data: result.rows.map((row) => this._safeReconciliationCase(row)), total: result.count, page: normalizedPage, limit: normalizedLimit };
+  }
+
+  async getReconciliationCaseById(id) {
+    const row = await this.repository.findReconciliationCaseDetail(id);
+    if (!row) { const error = new Error('Reconciliation case not found'); error.statusCode = 404; throw error; }
+    return this._safeReconciliationCase(row, true);
+  }
+
+  _safeReconciliationCase(row, detail = false) {
+    const value = row.toJSON ? row.toJSON() : row;
+    const payment = value.payment || {};
+    const booking = value.booking || {};
+    const latePaid = value.last_gateway_status === 'PAID'
+      && (value.manual_review_reason || '').toUpperCase().includes('LATE');
+    const result = {
+      id: value.id, provider: value.provider, state: value.state, payment_id: value.payment_id,
+      booking_id: value.booking_id, attempt_count: value.attempt_count, max_attempts: value.max_attempts,
+      last_gateway_status: value.last_gateway_status, last_checked_at: value.last_checked_at,
+      next_attempt_at: value.next_attempt_at, manual_review_reason: value.manual_review_reason,
+      created_at: value.created_at, updated_at: value.updated_at,
+      payment: { id: payment.id, status: payment.status, ...(detail ? { amount: payment.amount, paid_at: payment.paid_at } : {}) },
+      booking: { id: booking.id, booking_code: booking.booking_code, status: booking.status },
+      is_late_paid_exception: latePaid,
+    };
+    if (detail) {
+      result.last_attempt_at = value.last_attempt_at;
+      result.resolved_at = value.resolved_at;
+      result.last_error = redactString(value.last_error || '');
+      result.lease_expires_at = value.lease_expires_at;
+    }
+    return result;
+  }
+
   _getPayOSMode() {
     const mode = (process.env.PAYOS_MODE || 'disabled').toLowerCase();
     if (!['disabled', 'demo', 'live'].includes(mode)) {

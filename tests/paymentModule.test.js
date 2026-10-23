@@ -21,7 +21,7 @@ test('legacy Payment imports resolve the canonical module graph', () => {
   assert.equal(require('../routes/payment.route'), module.router);
   const routes = module.router.stack.filter((layer) => layer.route).map((layer) => [layer.route.stack[0].method, layer.route.path]);
   assert.deepEqual(routes, [
-    ['get', '/'], ['post', '/initiate'], ['get', '/vnpay/return'], ['get', '/vnpay/ipn'],
+    ['get', '/'], ['get', '/reconciliation-cases'], ['get', '/reconciliation-cases/:id'], ['post', '/initiate'], ['get', '/vnpay/return'], ['get', '/vnpay/ipn'],
     ['get', '/payos/return'], ['post', '/payos/webhook'], ['post', '/payos/demo-webhook'],
     ['get', '/revenue'], ['post', '/:id/vnpay/query'], ['post', '/:id/vnpay/refund'], ['get', '/:id'], ['post', '/bookings/:id/refund'],
   ]);

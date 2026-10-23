@@ -147,3 +147,28 @@ test('IT-33 persisted case survives worker restart and is reclaimable', { timeou
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0].lease_owner, 'worker-after-restart');
 });
+
+test('IT-49 manual-review listing is paginated and exposes only safe late-payment fields', { timeout: 20000 }, async () => {
+  const first = await createCaseFixture('IT49A');
+  const second = await createCaseFixture('IT49B');
+  await models.PaymentReconciliationCase.update({
+    state: 'manual_review',
+    manual_review_reason: 'LATE_PAID_AFTER_EXPIRY',
+    last_gateway_status: 'PAID',
+    last_error: 'Authorization: Bearer should-not-be-returned',
+  }, { where: { id: first.reconciliationCase.id } });
+  const before = await models.PaymentReconciliationCase.findByPk(first.reconciliationCase.id, { raw: true });
+  const page = await paymentService.getReconciliationCases({ state: 'manual_review', provider: 'payos', limit: 1, sort: 'updated_at', order: 'desc' });
+  assert.equal(page.total, 1);
+  assert.equal(page.data.length, 1);
+  assert.equal(page.data[0].is_late_paid_exception, true);
+  assert.equal('last_error' in page.data[0], false);
+  const detail = await paymentService.getReconciliationCaseById(first.reconciliationCase.id);
+  assert.match(detail.last_error, /REDACTED/);
+  assert.equal(detail.payment.status, 'pending');
+  assert.equal(detail.booking.status, 'pending_payment');
+  const after = await models.PaymentReconciliationCase.findByPk(first.reconciliationCase.id, { raw: true });
+  assert.equal(after.state, before.state);
+  assert.equal(after.manual_review_reason, before.manual_review_reason);
+  assert.equal(second.reconciliationCase.state, 'active');
+});
