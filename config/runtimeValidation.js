@@ -1,3 +1,43 @@
+const isPrivateOrLocalHost = (hostname) => {
+  const host = String(hostname || '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (!host || host === 'localhost' || host.endsWith('.localhost') || host.endsWith('.local') || host.endsWith('.internal')) return true;
+  if (host === '::1' || host === '0.0.0.0' || host === '::') return true;
+  const octets = host.split('.').map(Number);
+  if (octets.length === 4 && octets.every((part) => Number.isInteger(part) && part >= 0 && part <= 255)) {
+    return octets[0] === 10
+      || octets[0] === 127
+      || (octets[0] === 172 && octets[1] >= 16 && octets[1] <= 31)
+      || (octets[0] === 192 && octets[1] === 168)
+      || (octets[0] === 169 && octets[1] === 254);
+  }
+  return host.startsWith('fc') || host.startsWith('fd') || host.startsWith('fe80:');
+};
+
+const parseHttpsUrl = (value, name) => {
+  let parsed;
+  try { parsed = new URL(value); } catch (_error) { throw new Error(`${name} must be a valid URL.`); }
+  if (parsed.protocol !== 'https:' || parsed.username || parsed.password) {
+    throw new Error(`${name} must use HTTPS and must not contain credentials.`);
+  }
+  if (isPrivateOrLocalHost(parsed.hostname)) throw new Error(`${name} must not target localhost or a private network.`);
+  return parsed;
+};
+
+const trustedHosts = (value) => String(value || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+
+const assertTrustedHost = (url, name, hosts) => {
+  if (!hosts.some((allowed) => allowed === url.hostname.toLowerCase()
+    || (allowed.startsWith('*.') && url.hostname.toLowerCase().endsWith(allowed.slice(1))))) {
+    throw new Error(`${name} hostname is not in PAYOS_TRUSTED_HOSTS.`);
+  }
+};
+
+const assertValidEmailFrom = (value) => {
+  if (!value || /[\r\n]/.test(value)) throw new Error('EMAIL_FROM is required and must be a valid sender address.');
+  const address = String(value).match(/<([^<>\s]+)>\s*$/)?.[1] || String(value).trim();
+  if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new Error('EMAIL_FROM must contain a valid sender address.');
+};
+
 const validateRuntimeConfiguration = (env = process.env) => {
   const payosMode = (env.PAYOS_MODE || 'disabled').toLowerCase();
   const allowedPayosModes = ['disabled', 'demo', 'live'];
@@ -20,7 +60,7 @@ const validateRuntimeConfiguration = (env = process.env) => {
 
   if (env.NODE_ENV !== 'production') return;
 
-  const requiredSecrets = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
+  const requiredSecrets = ['DB_HOST', 'DB_PORT', 'DB_NAME', 'DB_USER', 'DB_PASS', 'JWT_SECRET', 'JWT_REFRESH_SECRET', 'CLIENT_URL'];
   if (vnpayMode === 'production') requiredSecrets.push('VNP_TMN_CODE', 'VNP_HASH_SECRET', 'VNP_URL');
   if (payosMode === 'live') {
     requiredSecrets.push('PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY');
@@ -33,9 +73,15 @@ const validateRuntimeConfiguration = (env = process.env) => {
     throw new Error(`Missing required production secrets: ${missingSecrets.join(', ')}`);
   }
 
+  for (const name of ['JWT_SECRET', 'JWT_REFRESH_SECRET']) {
+    if (String(env[name]).length < 32) throw new Error(`${name} must be at least 32 characters in production.`);
+  }
+
   if (env.JWT_SECRET === env.JWT_REFRESH_SECRET) {
     throw new Error('JWT_SECRET and JWT_REFRESH_SECRET must be different in production.');
   }
+
+  parseHttpsUrl(env.CLIENT_URL, 'CLIENT_URL');
 
   if (vnpayMode === 'production') {
     let endpoint;
@@ -44,6 +90,24 @@ const validateRuntimeConfiguration = (env = process.env) => {
       throw new Error('Production VNPay must use a non-sandbox HTTPS VNP_URL.');
     }
   }
+
+  if (payosMode === 'live') {
+    const baseUrl = parseHttpsUrl(env.PAYOS_BASE_URL, 'PAYOS_BASE_URL');
+    if (isPrivateOrLocalHost(baseUrl.hostname)) throw new Error('PAYOS_BASE_URL must target a public HTTPS host.');
+    const hosts = trustedHosts(env.PAYOS_TRUSTED_HOSTS);
+    if (hosts.length === 0) throw new Error('PAYOS_TRUSTED_HOSTS is required when PAYOS_MODE=live.');
+    for (const [name, value] of [['PAYOS_RETURN_URL', env.PAYOS_RETURN_URL], ['PAYOS_CANCEL_URL', env.PAYOS_CANCEL_URL], ['PAYOS_WEBHOOK_URL', env.PAYOS_WEBHOOK_URL]]) {
+      const url = parseHttpsUrl(value, name);
+      assertTrustedHost(url, name, hosts);
+    }
+  }
+
+  const emailMode = (env.EMAIL_DELIVERY_MODE || (env.RESEND_API_KEY ? 'live' : 'disabled')).toLowerCase();
+  if (!['disabled', 'live'].includes(emailMode)) throw new Error(`Invalid EMAIL_DELIVERY_MODE '${emailMode}'. Expected disabled or live.`);
+  if (emailMode === 'live') {
+    if (!env.RESEND_API_KEY || !String(env.RESEND_API_KEY).trim()) throw new Error('RESEND_API_KEY is required when EMAIL_DELIVERY_MODE=live.');
+    assertValidEmailFrom(env.EMAIL_FROM);
+  }
 };
 
-module.exports = { validateRuntimeConfiguration };
+module.exports = { validateRuntimeConfiguration, isPrivateOrLocalHost };

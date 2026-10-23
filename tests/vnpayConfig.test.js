@@ -5,8 +5,14 @@ const { validateRuntimeConfiguration } = require('../config/runtimeValidation');
 
 const baseProduction = {
   NODE_ENV: 'production',
-  JWT_SECRET: 'access-secret',
-  JWT_REFRESH_SECRET: 'refresh-secret',
+  CLIENT_URL: 'https://app.example.com',
+  DB_HOST: 'db.internal.example',
+  DB_PORT: '3306',
+  DB_NAME: 'airline_booking',
+  DB_USER: 'airline_app',
+  DB_PASS: 'database-password-from-secret-manager',
+  JWT_SECRET: 'access-secret-for-production-with-at-least-32-chars',
+  JWT_REFRESH_SECRET: 'refresh-secret-for-production-with-at-least-32-chars',
   VNPAY_MODE: 'production',
   VNP_TMN_CODE: 'merchant-code',
   VNP_HASH_SECRET: 'merchant-secret',
