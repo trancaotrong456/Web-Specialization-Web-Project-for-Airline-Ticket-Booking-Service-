@@ -163,9 +163,14 @@ class SequelizeFlightRepository {
   deleteFareClasses(flightId, transaction) { return this.FareClass.destroy({ where: { flight_id: flightId }, transaction }); }
   deleteFlight(flight, transaction) { return flight.destroy({ transaction }); }
 
-  findAdminPage({ page, limit, status }) {
+  findAdminPage({ page, limit, status, date_from, date_to }) {
     const where = {};
     if (status) where.status = status;
+    if (date_from || date_to) {
+      where.departure_time = {};
+      if (date_from) where.departure_time[this.Op.gte] = new Date(date_from);
+      if (date_to) where.departure_time[this.Op.lte] = new Date(date_to);
+    }
     return this.Flight.findAndCountAll({
       where, distinct: true, limit: Number(limit), offset: Number((page - 1) * limit),
       order: [['departure_time', 'ASC']],

@@ -7,7 +7,7 @@ const query = (values) => {
 };
 
 export const createFlightManagementApi = (request) => ({
-  listFlights: ({ page = 1, limit = 20, status = '' } = {}) => request(`/flights?${query({ page, limit, status })}`),
+  listFlights: ({ page = 1, limit = 20, status = '', date_from = '', date_to = '' } = {}) => request(`/flights?${query({ page, limit, status, date_from, date_to })}`),
   getFlight: (id) => request(`/flights/${id}`),
   getFlightStatus: (id) => request(`/flights/status/${id}`),
   updateFlightStatus: (id, payload) => request(`/flights/status/${id}`, { method: 'PATCH', body: payload }),

@@ -262,8 +262,8 @@ class FlightService {
     });
   }
 
-  async getAllFlights({ page = 1, limit = 20, status }) {
-    const { count, rows } = await this.repository.findAdminPage({ page, limit, status });
+  async getAllFlights({ page = 1, limit = 20, status, date_from, date_to } = {}) {
+    const { count, rows } = await this.repository.findAdminPage({ page, limit, status, date_from, date_to });
     return { total: count, page, limit, data: rows };
   }
 }
