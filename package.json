@@ -36,6 +36,7 @@
     "qrcode": "^1.5.4",
     "resend": "^6.28.1",
     "sequelize": "^6.37.8",
+    "sequelize-cli": "^6.6.5",
     "socket.io": "^4.8.1",
     "uuid": "^11.0.5"
   },
@@ -43,7 +44,6 @@
     "@faker-js/faker": "^10.6.0",
     "mammoth": "^1.12.3",
     "nodemon": "^3.1.9",
-    "sequelize-cli": "^6.6.5",
     "socket.io-client": "^4.8.3"
   }
 }
