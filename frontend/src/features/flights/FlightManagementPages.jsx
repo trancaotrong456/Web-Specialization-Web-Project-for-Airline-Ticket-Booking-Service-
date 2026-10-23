@@ -8,6 +8,7 @@ import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
 import { createFlightManagementApi } from './flightManagementApi';
+import { FlightCalendarView } from './FlightCalendarView';
 
 const statusLabels = { scheduled: 'Theo lịch', delayed: 'Hoãn chuyến', boarding: 'Đang lên máy bay', departed: 'Đã khởi hành', arrived: 'Đã đến nơi', cancelled: 'Đã hủy', completed: 'Hoàn tất' };
 const statusOptions = Object.entries(statusLabels).map(([value, label]) => ({ value, label }));
@@ -112,32 +113,190 @@ export function FlightListPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const limit = Math.min(100, Math.max(1, Number(params.get('limit')) || LIMIT));
   const status = params.get('status') || '';
+  const viewMode = params.get('view') || 'table';
   const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
+
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const result = await api.listFlights({ page, limit, status });
-      setState({ loading: false, rows: responseRows(result), pagination: responsePagination(result, page, limit, responseRows(result).length), error: '' });
-    } catch (error) { setState((current) => ({ ...current, loading: false, error: errorMessage(error, 'Không thể tải danh sách chuyến bay.') })); }
-  }, [api, page, limit, status]);
+      const queryLimit = viewMode === 'calendar' ? 100 : limit;
+      const queryPage = viewMode === 'calendar' ? 1 : page;
+      const result = await api.listFlights({ page: queryPage, limit: queryLimit, status });
+      setState({
+        loading: false,
+        rows: responseRows(result),
+        pagination: responsePagination(result, queryPage, queryLimit, responseRows(result).length),
+        error: '',
+      });
+    } catch (error) {
+      setState((current) => ({ ...current, loading: false, error: errorMessage(error, 'Không thể tải danh sách chuyến bay.') }));
+    }
+  }, [api, page, limit, status, viewMode]);
+
   useEffect(() => { void load(); }, [load]);
+
   const update = (values) => setParams((current) => {
     const next = new URLSearchParams(current);
     Object.entries(values).forEach(([key, value]) => value ? next.set(key, String(value)) : next.delete(key));
     return next;
   });
+
   const admin = user?.role === 'admin';
   if (state.loading) return <ManagementShell><LoadingView label="Đang tải danh sách chuyến bay…" /></ManagementShell>;
-  return <ManagementShell><PageFrame title="Quản lý chuyến bay" description="Theo dõi lịch khai thác và thông tin từng chuyến bay." actions={admin ? <Link className="button button-primary" to="/admin/flights/new">Tạo chuyến bay</Link> : null}>
-    {state.error ? <ErrorState message={state.error} onRetry={() => void load()} /> : <section className="surface-card admin-card">
-      <div className="flight-filter-bar"><label htmlFor="flight-status-filter">Trạng thái chuyến bay<select id="flight-status-filter" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả trạng thái</option>{statusOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><label htmlFor="flight-limit-filter">Số dòng<select id="flight-limit-filter" value={limit} onChange={(event) => update({ limit: event.target.value, page: 1 })}><option value="10">10 / trang</option><option value="20">20 / trang</option><option value="50">50 / trang</option><option value="100">100 / trang</option></select></label><span>{state.pagination?.total ?? state.rows.length} chuyến bay</span></div>
-      {state.rows.length === 0 ? <div className="empty-state"><h2>Chưa có chuyến bay phù hợp</h2><p>Thay đổi bộ lọc trạng thái hoặc kiểm tra lại sau.</p></div> : <>
-        <div className="table-wrap flight-table-wrap"><table aria-label="Danh sách chuyến bay"><thead><tr><th>Chuyến bay</th><th>Chặng bay</th><th>Khởi hành</th><th>Ghế</th><th>Trạng thái</th><th>Chi tiết</th></tr></thead><tbody>{state.rows.map((item) => <tr key={item.id}><td><strong>{carrierName(item)}</strong><small>Mã chuyến #{item.id}</small></td><td>{item.departureAirport?.iata_code || '—'} → {item.arrivalAirport?.iata_code || '—'}</td><td>{displayTime(item.departure_time)}</td><td>{item.available_seats ?? '—'} / {item.total_seats ?? '—'}</td><td><FlightStatusBadge status={item.status} /></td><td><Link to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></td></tr>)}</tbody></table></div>
-        <div className="flight-card-list">{state.rows.map((item) => <article className="flight-card" key={item.id}><div className="flight-card-top"><div><span className="eyebrow">CHUYẾN #{item.id}</span><h2>{carrierName(item)}</h2></div><FlightStatusBadge status={item.status} /></div><p className="flight-card-route"><strong>{item.departureAirport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong>{item.arrivalAirport?.iata_code || '—'}</strong></p><div className="flight-card-meta"><span>{displayTime(item.departure_time)}</span><span>{item.available_seats ?? '—'} / {item.total_seats ?? '—'} ghế</span></div><Link className="button button-outline" to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></article>)}</div>
-        <Pagination page={state.pagination?.page || page} totalPages={Math.max(1, state.pagination?.totalPages || 1)} onPageChange={(next) => update({ page: next })} />
-      </>}
-    </section>}
-  </PageFrame></ManagementShell>;
+
+  return (
+    <ManagementShell>
+      <PageFrame
+        title="Quản lý chuyến bay"
+        description="Theo dõi lịch khai thác và thông tin từng chuyến bay."
+        actions={admin ? <Link className="button button-primary" to="/admin/flights/new">Tạo chuyến bay</Link> : null}
+      >
+        {state.error ? (
+          <ErrorState message={state.error} onRetry={() => void load()} />
+        ) : (
+          <section className="surface-card admin-card">
+            <div className="flight-filter-bar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
+              <div className="flight-view-switcher" role="tablist" aria-label="Chế độ hiển thị chuyến bay">
+                <button
+                  className={`flight-view-tab ${viewMode !== 'calendar' ? 'is-active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode !== 'calendar'}
+                  onClick={() => update({ view: 'table' })}
+                >
+                  <span aria-hidden="true">☰</span> Danh sách
+                </button>
+                <button
+                  className={`flight-view-tab ${viewMode === 'calendar' ? 'is-active' : ''}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={viewMode === 'calendar'}
+                  onClick={() => update({ view: 'calendar' })}
+                >
+                  <span aria-hidden="true">📅</span> Lịch Calendar (Tuần/Tháng)
+                </button>
+              </div>
+
+              {viewMode !== 'calendar' ? (
+                <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.75rem' }}>
+                  <label htmlFor="flight-status-filter">
+                    Trạng thái chuyến bay
+                    <select
+                      id="flight-status-filter"
+                      value={status}
+                      onChange={(event) => update({ status: event.target.value, page: 1 })}
+                    >
+                      <option value="">Tất cả trạng thái</option>
+                      {statusOptions.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  <label htmlFor="flight-limit-filter">
+                    Số dòng
+                    <select
+                      id="flight-limit-filter"
+                      value={limit}
+                      onChange={(event) => update({ limit: event.target.value, page: 1 })}
+                    >
+                      <option value="10">10 / trang</option>
+                      <option value="20">20 / trang</option>
+                      <option value="50">50 / trang</option>
+                      <option value="100">100 / trang</option>
+                    </select>
+                  </label>
+                  <span>{state.pagination?.total ?? state.rows.length} chuyến bay</span>
+                </div>
+              ) : (
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#00514d' }}>
+                  Hiển thị lịch trực quan {state.rows.length} chuyến bay
+                </span>
+              )}
+            </div>
+
+            {viewMode === 'calendar' ? (
+              <div style={{ marginTop: '1.25rem' }}>
+                <FlightCalendarView
+                  flights={state.rows}
+                  loading={state.loading}
+                  statusFilter={status}
+                  onStatusFilterChange={(val) => update({ status: val, page: 1 })}
+                  statusOptions={statusOptions}
+                />
+              </div>
+            ) : (
+              state.rows.length === 0 ? (
+                <div className="empty-state">
+                  <h2>Chưa có chuyến bay phù hợp</h2>
+                  <p>Thay đổi bộ lọc trạng thái hoặc kiểm tra lại sau.</p>
+                </div>
+              ) : (
+                <>
+                  <div className="table-wrap flight-table-wrap">
+                    <table aria-label="Danh sách chuyến bay">
+                      <thead>
+                        <tr>
+                          <th>Chuyến bay</th>
+                          <th>Chặng bay</th>
+                          <th>Khởi hành</th>
+                          <th>Ghế</th>
+                          <th>Trạng thái</th>
+                          <th>Chi tiết</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {state.rows.map((item) => (
+                          <tr key={item.id}>
+                            <td>
+                              <strong>{carrierName(item)}</strong>
+                              <small>Mã chuyến #{item.id}</small>
+                            </td>
+                            <td>{item.departureAirport?.iata_code || '—'} → {item.arrivalAirport?.iata_code || '—'}</td>
+                            <td>{displayTime(item.departure_time)}</td>
+                            <td>{item.available_seats ?? '—'} / {item.total_seats ?? '—'}</td>
+                            <td><FlightStatusBadge status={item.status} /></td>
+                            <td><Link to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="flight-card-list">
+                    {state.rows.map((item) => (
+                      <article className="flight-card" key={item.id}>
+                        <div className="flight-card-top">
+                          <div>
+                            <span className="eyebrow">CHUYẾN #{item.id}</span>
+                            <h2>{carrierName(item)}</h2>
+                          </div>
+                          <FlightStatusBadge status={item.status} />
+                        </div>
+                        <p className="flight-card-route">
+                          <strong>{item.departureAirport?.iata_code || '—'}</strong>
+                          <span aria-hidden="true">→</span>
+                          <strong>{item.arrivalAirport?.iata_code || '—'}</strong>
+                        </p>
+                        <div className="flight-card-meta">
+                          <span>{displayTime(item.departure_time)}</span>
+                          <span>{item.available_seats ?? '—'} / {item.total_seats ?? '—'} ghế</span>
+                        </div>
+                        <Link className="button button-outline" to={`/admin/flights/${item.id}`}>Xem chi tiết</Link>
+                      </article>
+                    ))}
+                  </div>
+                  <Pagination
+                    page={state.pagination?.page || page}
+                    totalPages={Math.max(1, state.pagination?.totalPages || 1)}
+                    onPageChange={(next) => update({ page: next })}
+                  />
+                </>
+              )
+            )}
+          </section>
+        )}
+      </PageFrame>
+    </ManagementShell>
+  );
 }
 
 export function FlightDetailPage() {
