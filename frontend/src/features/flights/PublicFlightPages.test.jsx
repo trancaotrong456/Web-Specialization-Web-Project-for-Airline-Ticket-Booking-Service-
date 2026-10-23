@@ -114,7 +114,7 @@ describe('public flight discovery pages', () => {
     const fetchImpl = createFetch();
     renderRoutes('/', fetchImpl);
 
-    expect(await screen.findByRole('heading', { name: /Bay đến nơi/i })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Đặt vé máy bay nội địa và quốc tế/i })).toBeInTheDocument();
     expect(document.querySelector('.home-hero')).toHaveClass('home-hero--full-bleed');
     await userEvent.setup().click(screen.getByRole('combobox', { name: 'Điểm đi' }));
     expect(await screen.findByRole('option', { name: /HAN.*Hanoi/i })).toBeInTheDocument();
@@ -476,7 +476,7 @@ describe('public flight discovery pages', () => {
 
     const origin = screen.getByRole('combobox', { name: 'Điểm đi' });
     await user.click(origin);
-    await user.click(screen.getByRole('heading', { name: /Bay đến nơi/i }));
+    await user.click(screen.getByRole('heading', { name: /Đặt vé máy bay nội địa và quốc tế/i }));
 
     expect(origin).toHaveAttribute('aria-expanded', 'false');
     expect(screen.queryByRole('listbox')).not.toBeInTheDocument();
@@ -611,17 +611,20 @@ describe('public flight discovery pages', () => {
     const destinationCards = screen.getAllByRole('button', { name: /^Tìm chuyến bay đến/ });
     expect(destinationCards).toHaveLength(6);
     for (const card of destinationCards) {
-      expect(card).toHaveTextContent(/Tìm chuyến đến/);
+      expect(card).toHaveTextContent(/Xem chuyến bay/);
       expect(card).not.toHaveTextContent(/Bay thẳng từ|Chỉ từ|VND|\b\d+\s*h\s*\d*\s*m\b/i);
     }
 
     expect(screen.getByRole('tablist', { name: /Loại hành trình/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Khứ hồi' })).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByRole('tab', { name: 'Nhiều chặng' })).toHaveAttribute('aria-selected', 'false');
+    const multiCityTab = screen.getByRole('tab', { name: 'Nhiều chặng' });
+    expect(multiCityTab).toHaveAttribute('aria-selected', 'false');
+    expect(multiCityTab).toHaveAttribute('aria-disabled', 'true');
+    expect(multiCityTab).toHaveTextContent('Sắp ra mắt');
     expect(screen.queryByLabelText('Return date')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Một chiều' })).toBeInTheDocument();
-    expect(screen.getByText(/Hãng bay hiển thị theo chuyến có trong kết quả/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bộ lọc không bắt buộc/i)).toBeInTheDocument();
     expect(screen.getByText(/Kết quả phụ thuộc vào lịch bay hiện có/i)).toBeInTheDocument();
     expect(screen.queryByText(/46 chuyến bay|giá bán chống tăng|biểu đồ giá 30 ngày/i)).not.toBeInTheDocument();
     const footer = screen.getByRole('contentinfo');
@@ -630,7 +633,17 @@ describe('public flight discovery pages', () => {
     expect(within(footer).getByRole('link', { name: /Tìm chuyến bay/i })).toHaveAttribute('href', '#flight-search-form');
   });
 
-  it('shows a return date and enforces that it cannot precede departure', async () => {
+  it('does not present unavailable policy pages as working footer links', async () => {
+    renderRoutes('/', createFetch());
+    const footer = await screen.findByRole('contentinfo');
+
+    expect(within(footer).getByRole('link', { name: 'Tra cứu đặt chỗ' })).toHaveAttribute('href', '/bookings/lookup');
+    for (const name of ['Chính sách hành lý', 'Điều kiện vận chuyển', 'Bảo vệ thông tin cá nhân', 'Hợp tác doanh nghiệp']) {
+      expect(within(footer).queryByRole('link', { name })).not.toBeInTheDocument();
+    }
+  });
+
+  it('shows a return date, sets min attribute, and validates that return date cannot precede departure', async () => {
     const user = userEvent.setup();
     renderRoutes('/', createFetch());
 
@@ -641,9 +654,17 @@ describe('public flight discovery pages', () => {
     expect(returnDate).toBeInTheDocument();
     expect(returnDate).toHaveAttribute('min', departure.value);
     expect(screen.getByRole('tab', { name: 'Khứ hồi' })).toHaveAttribute('aria-selected', 'true');
+
+    // Nhập ngày về nhỏ hơn ngày khởi hành: báo lỗi dưới ô
+    await user.clear(departure);
+    await user.type(departure, '2026-10-25');
+    await user.clear(returnDate);
+    await user.type(returnDate, '2026-10-20');
+
+    expect(screen.getByText('Ngày về phải từ ngày khởi hành trở đi')).toBeInTheDocument();
   });
 
-  it('supports arrow-key navigation between the trip-mode tabs', async () => {
+  it('supports arrow-key navigation between the enabled trip-mode tabs', async () => {
     const user = userEvent.setup();
     renderRoutes('/', createFetch());
 
@@ -651,94 +672,27 @@ describe('public flight discovery pages', () => {
     oneWayTab.focus();
     await user.keyboard('{ArrowRight}');
 
-    expect(screen.getByRole('tab', { name: 'Nhiều chặng' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.getByRole('tab', { name: 'Nhiều chặng' })).toHaveFocus();
+    expect(screen.getByRole('tab', { name: 'Khứ hồi' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Khứ hồi' })).toHaveFocus();
+
+    await user.keyboard('{ArrowRight}');
+    expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveFocus();
   });
 
-  it('lets customers add and remove numbered multi-city legs within the 2–4 leg limit', async () => {
+  it('locks the multi-city tab with aria-disabled and does not allow selecting it', async () => {
     const user = userEvent.setup();
     renderRoutes('/', createFetch());
 
-    await user.click(screen.getByRole('tab', { name: 'Nhiều chặng' }));
-    expect(screen.getAllByRole('group', { name: /Chặng [1-4]/ })).toHaveLength(2);
+    const multiCityTab = screen.getByRole('tab', { name: 'Nhiều chặng' });
+    expect(multiCityTab).toHaveAttribute('aria-disabled', 'true');
+    expect(multiCityTab).toHaveTextContent('Sắp ra mắt');
+    expect(multiCityTab).toHaveAttribute('aria-selected', 'false');
 
-    const addLeg = screen.getByRole('button', { name: /Thêm chặng/i });
-    await user.click(addLeg);
-    await user.click(addLeg);
-    expect(screen.getAllByRole('group', { name: /Chặng [1-4]/ })).toHaveLength(4);
-    expect(addLeg).toBeDisabled();
-
-    await user.click(screen.getByRole('button', { name: 'Xóa chặng 4' }));
-    await user.click(screen.getByRole('button', { name: 'Xóa chặng 3' }));
-    expect(screen.getAllByRole('group', { name: /Chặng [1-4]/ })).toHaveLength(2);
-    expect(screen.getByRole('button', { name: /Thêm chặng/i })).toBeEnabled();
-    expect(screen.getByRole('button', { name: 'Xóa chặng 2' })).toBeDisabled();
-  });
-
-  it('serializes a return itinerary only after both API-backed airports and dates are selected', async () => {
-    const user = userEvent.setup();
-    const fetchImpl = createFetch();
-    renderHomeWithLocation(fetchImpl);
-
-    await user.click(screen.getByRole('tab', { name: 'Khứ hồi' }));
-    await user.click(screen.getByRole('combobox', { name: 'Điểm đi' }));
-    await user.click(await screen.findByRole('option', { name: /HAN.*Hanoi/i }));
-    await user.click(screen.getByRole('combobox', { name: 'Điểm đến' }));
-    await user.click(await screen.findByRole('option', { name: /SGN.*Ho Chi Minh City/i }));
-    await user.clear(screen.getByLabelText('Departure date'));
-    await user.type(screen.getByLabelText('Departure date'), tomorrowLocal());
-    await user.clear(screen.getByLabelText('Return date'));
-    const returnValue = new Date(`${tomorrowLocal()}T00:00:00`);
-    returnValue.setDate(returnValue.getDate() + 2);
-    const returnDate = `${returnValue.getFullYear()}-${String(returnValue.getMonth() + 1).padStart(2, '0')}-${String(returnValue.getDate()).padStart(2, '0')}`;
-    await user.type(screen.getByLabelText('Return date'), returnDate);
-    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
-
-    const currentRoute = screen.getByLabelText('Current route').textContent;
-    expect(currentRoute).toContain('/flights/search?');
-    const params = new URL(currentRoute, 'http://localhost').searchParams;
-    expect(params.get('trip_type')).toBe('round_trip');
-    expect(JSON.parse(params.get('legs'))).toEqual([
-      { departure_airport_id: '1', arrival_airport_id: '2', departure_date: tomorrowLocal() },
-      { departure_airport_id: '2', arrival_airport_id: '1', departure_date: returnDate },
-    ]);
-    expect(params.get('passengers')).toBe('1');
-    expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
-  });
-
-  it('serializes each multi-city leg using selected airport API ids and its own date', async () => {
-    const user = userEvent.setup();
-    const fetchImpl = createFetch();
-    renderHomeWithLocation(fetchImpl);
-
-    await user.click(screen.getByRole('tab', { name: 'Nhiều chặng' }));
-    const chooseAirport = async (inputId, optionName) => {
-      await user.click(document.getElementById(inputId));
-      await user.click(await screen.findByRole('option', { name: optionName }));
-    };
-    await chooseAirport('multi-leg-1-origin', /HAN.*Hanoi/i);
-    await chooseAirport('multi-leg-1-destination', /SGN.*Ho Chi Minh City/i);
-    await user.clear(screen.getByLabelText('Ngày khởi hành chặng 1'));
-    await user.type(screen.getByLabelText('Ngày khởi hành chặng 1'), tomorrowLocal());
-    await chooseAirport('multi-leg-2-origin', /SGN.*Ho Chi Minh City/i);
-    await chooseAirport('multi-leg-2-destination', /DAD.*Da Nang/i);
-    await user.clear(screen.getByLabelText('Ngày khởi hành chặng 2'));
-    const secondDate = new Date(`${tomorrowLocal()}T00:00:00`);
-    secondDate.setDate(secondDate.getDate() + 3);
-    const secondDateValue = `${secondDate.getFullYear()}-${String(secondDate.getMonth() + 1).padStart(2, '0')}-${String(secondDate.getDate()).padStart(2, '0')}`;
-    await user.type(screen.getByLabelText('Ngày khởi hành chặng 2'), secondDateValue);
-    await user.click(screen.getByRole('button', { name: 'Tìm chuyến bay' }));
-
-    const currentRoute = screen.getByLabelText('Current route').textContent;
-    expect(currentRoute).toContain('/flights/search?');
-    const params = new URL(currentRoute, 'http://localhost').searchParams;
-    expect(params.get('trip_type')).toBe('multi_city');
-    expect(JSON.parse(params.get('legs'))).toEqual([
-      { departure_airport_id: '1', arrival_airport_id: '2', departure_date: tomorrowLocal() },
-      { departure_airport_id: '2', arrival_airport_id: '3', departure_date: secondDateValue },
-    ]);
-    expect(params.get('passengers')).toBe('1');
-    expect(fetchImpl.mock.calls.some(([url]) => url.includes('/flights/search?'))).toBe(false);
+    await user.click(multiCityTab);
+    expect(multiCityTab).toHaveAttribute('aria-selected', 'false');
+    expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveAttribute('aria-selected', 'true');
+    expect(screen.queryByRole('group', { name: /Chặng 1/i })).not.toBeInTheDocument();
   });
 
   it('validates and serializes search values into the results URL', async () => {
