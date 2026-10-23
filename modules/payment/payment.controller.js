@@ -7,7 +7,7 @@ class PaymentController {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -38,6 +38,14 @@ class PaymentController {
   }
   async getReconciliationMetrics(req, res, next) {
     try { return this.apiResponse.success(res, await this.service.getReconciliationMetrics(), 'Reconciliation metrics retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationMetricsPrometheus(req, res, next) {
+    try { return res.type('text/plain').send(await this.service.getReconciliationMetricsPrometheus()); }
+    catch (error) { next(error); }
+  }
+  async recordManualReviewAction(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.recordManualReviewAction(req.params.id, req.body, req.user), 'Manual-review action recorded successfully'); }
     catch (error) { next(error); }
   }
 

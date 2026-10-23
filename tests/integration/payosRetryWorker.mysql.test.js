@@ -5,7 +5,8 @@ const assert = require('node:assert/strict');
 const paymentService = require('../../services/payment.service');
 const bookingService = require('../../services/booking.service');
 const { models, verifyConnectedDatabase } = require('./helpers/mysqlTestDatabase');
-const { cleanupTrackedFixtures, createFlightFixture, trackBooking, trackPayment } = require('./helpers/testFixtures');
+const { cleanupTrackedFixtures, createFlightFixture, trackBooking, trackPayment, createOperatorFixture } = require('./helpers/testFixtures');
+const { createReconciliationMetricsExporter } = require('../../infrastructure/observability/reconciliationMetricsExporter');
 
 process.env.PAYOS_MODE = 'demo';
 
@@ -48,6 +49,39 @@ test('IT-53 distributed ownership allows one durable worker and rejects stale ow
   assert.equal(released, true);
   const stored = await models.ReconciliationWorkerLease.findByPk('payos-reconciliation');
   assert.equal(stored.owner_id, null);
+});
+
+test('IT-54 metrics exporter is safe, refreshes independently and isolates alert failures', async () => {
+  let alerts = 0;
+  const exporter = createReconciliationMetricsExporter({
+    service: { getReconciliationMetrics: async () => ({ metrics: { active_reconciliation_cases: 2, manual_review_cases: 1, oldest_unresolved_age_minutes: 3, pending_payments_beyond_sla: 0, retry_exhaustion_cases: 0, late_paid_cases: 1, gateway_timeout_cases: 2 }, alerts: [{ code: 'GATEWAY_TIMEOUT_RATE', value: 2 }] }) },
+    alertSink: async () => { alerts += 1; throw new Error('sink unavailable'); },
+    logger: { warn() {} },
+  });
+  await exporter.refresh();
+  const output = await exporter.renderPrometheus();
+  assert.match(output, /reconciliation_active_reconciliation_cases 2/);
+  assert.match(output, /reconciliation_late_paid_cases 1/);
+  assert.equal(alerts, 1);
+});
+
+test('IT-55 concurrent manual-review resolution is auditable and never mutates Payment or Booking', { timeout: 20000 }, async () => {
+  const f = await fixture('IT55');
+  const operator = await createOperatorFixture();
+  await models.PaymentReconciliationCase.update({ state: 'manual_review', manual_review_reason: 'RETRY_EXHAUSTED' }, { where: { id: f.reconciliationCase.id } });
+  const beforePayment = (await models.Payment.findByPk(f.payment.id)).status;
+  const beforeBooking = (await models.Booking.findByPk(f.booking.id)).status;
+  const operatorIdentity = { id: operator.id };
+  const results = await Promise.all([
+    paymentService.recordManualReviewAction(f.reconciliationCase.id, { action: 'acknowledge', reason: 'Reviewed by operations' }, operatorIdentity),
+    paymentService.recordManualReviewAction(f.reconciliationCase.id, { action: 'acknowledge', reason: 'Reviewed by operations' }, operatorIdentity),
+  ]);
+  assert.equal(results[0].id, results[1].id);
+  await assert.rejects(() => paymentService.recordManualReviewAction(f.reconciliationCase.id, { action: 'escalate', reason: 'Conflicting resolution' }, operatorIdentity), (error) => error.statusCode === 409);
+  assert.equal((await models.Payment.findByPk(f.payment.id)).status, beforePayment);
+  assert.equal((await models.Booking.findByPk(f.booking.id)).status, beforeBooking);
+  assert.equal((await models.PaymentReconciliationCase.findByPk(f.reconciliationCase.id)).state, 'manual_review');
+  assert.equal(await models.ReconciliationReviewAction.count({ where: { case_id: f.reconciliationCase.id } }), 1);
 });
 
 test('IT-34 payOS worker resolves a verified PAID case exactly once', { timeout: 20000 }, async () => {

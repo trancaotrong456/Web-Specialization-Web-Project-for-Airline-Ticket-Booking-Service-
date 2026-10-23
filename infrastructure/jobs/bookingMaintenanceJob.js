@@ -1,4 +1,4 @@
-function createBookingMaintenanceJob({ cron, bookingService, paymentService, environment = process.env, logger = console } = {}) {
+function createBookingMaintenanceJob({ cron, bookingService, paymentService, metricsCollector, environment = process.env, logger = console } = {}) {
   if (!cron || !bookingService) throw new TypeError('Cron and BookingService are required');
   let scheduled;
   let started = false;
@@ -20,6 +20,7 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, env
           const count = reconciliation.reconciledCount ?? reconciliation.claimedCount ?? 0;
           if (count > 0) logger.log(`[Cron] Reconciled ${count} stale pending payment(s) at ${new Date().toISOString()}`);
         }
+        await metricsCollector?.refresh?.();
       } catch (error) {
         logger.error('[Cron] Error in booking maintenance job:', error.message);
       } finally {
@@ -27,6 +28,7 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, env
       }
     });
     started = true;
+    metricsCollector?.start?.();
     const reconciliationState = environment.ENABLE_PENDING_RECONCILIATION === 'true' ? 'enabled' : 'disabled';
     logger.log(`[Cron] Booking expiry initialized; pending-payment reconciliation ${reconciliationState} (runs every minute)`);
     return scheduled;
@@ -39,6 +41,7 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, env
   async function stop(timeoutMs = 30000) {
     stopping = true;
     if (scheduled && typeof scheduled.stop === 'function') scheduled.stop();
+    metricsCollector?.stop?.();
     return waitForIdle(timeoutMs);
   }
   return { start, stop, waitForIdle, isRunning: () => running };

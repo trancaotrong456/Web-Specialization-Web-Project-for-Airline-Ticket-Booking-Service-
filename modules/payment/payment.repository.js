@@ -6,11 +6,11 @@ function sanitizeGatewayError(error) {
 }
 
 class SequelizePaymentRepository {
-  constructor({ Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, ReconciliationReviewAction, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, ReconciliationReviewAction, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
   }
 
   _assertWorkerLeaseModel() {
@@ -292,8 +292,23 @@ class SequelizePaymentRepository {
       include: [
         { model: this.Payment, as: 'payment', attributes: ['id', 'status', 'amount', 'paid_at'], required: true },
         { model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status'], required: true },
+        { model: this.ReconciliationReviewAction, as: 'reviewAction', required: false, attributes: ['id', 'action', 'reason', 'outcome_reference', 'operator_user_id', 'created_at'], include: [{ model: this.User, as: 'operator', attributes: ['id', 'full_name'], required: false }] },
       ],
     });
+  }
+
+  async createManualReviewAction(caseId, operatorUserId, { action, reason, outcomeReference = null } = {}, { transaction } = {}) {
+    if (!this.ReconciliationReviewAction) throw new TypeError('Reconciliation review action model is required');
+    if (!transaction) throw new TypeError('A transaction is required to record manual review actions');
+    const reviewCase = await this.PaymentReconciliationCase.findOne({ where: { id: caseId }, lock: transaction.LOCK.UPDATE, transaction });
+    if (!reviewCase) { const error = new Error('Reconciliation case not found'); error.statusCode = 404; throw error; }
+    if (reviewCase.state !== 'manual_review') { const error = new Error('Only manual-review cases can receive an operational resolution'); error.statusCode = 409; throw error; }
+    const existing = await this.ReconciliationReviewAction.findOne({ where: { case_id: caseId }, transaction, lock: transaction.LOCK.UPDATE });
+    if (existing) {
+      if (existing.action === action && String(existing.operator_user_id) === String(operatorUserId)) return existing;
+      const error = new Error('This reconciliation case already has a conflicting manual-review resolution'); error.statusCode = 409; throw error;
+    }
+    return this.ReconciliationReviewAction.create({ case_id: caseId, operator_user_id: operatorUserId, action, reason: String(reason).slice(0, 500), outcome_reference: outcomeReference ? String(outcomeReference).slice(0, 191) : null }, { transaction });
   }
   async getReconciliationMetrics({ pendingSince } = {}) {
     const unresolvedWhere = { state: { [Op.in]: ['active', 'manual_review'] } };

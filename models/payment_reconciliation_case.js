@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       PaymentReconciliationCase.belongsTo(models.Payment, { foreignKey: 'payment_id', as: 'payment' });
       PaymentReconciliationCase.belongsTo(models.Booking, { foreignKey: 'booking_id', as: 'booking' });
+      PaymentReconciliationCase.hasOne(models.ReconciliationReviewAction, { foreignKey: 'case_id', as: 'reviewAction' });
     }
   }
 

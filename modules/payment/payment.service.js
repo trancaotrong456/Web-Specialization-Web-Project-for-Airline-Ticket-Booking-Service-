@@ -111,6 +111,16 @@ class PaymentService {
     return this._safeReconciliationCase(row, true);
   }
 
+  async recordManualReviewAction(caseId, { action, reason, outcome_reference: outcomeReference = null } = {}, operator) {
+    if (!operator?.id) { const error = new Error('An authenticated operator is required'); error.statusCode = 401; throw error; }
+    if (!['acknowledge', 'financial_reconciled', 'escalate'].includes(action)) { const error = new Error('Unsupported manual-review action'); error.statusCode = 422; throw error; }
+    if (!reason || String(reason).trim().length < 3) { const error = new Error('A manual-review reason is required'); error.statusCode = 422; throw error; }
+    return this.transactionManager.transaction(async (transaction) => {
+      const actionRow = await this.repository.createManualReviewAction(caseId, operator.id, { action, reason: redactString(reason), outcomeReference }, { transaction });
+      return actionRow.toJSON ? actionRow.toJSON() : actionRow;
+    });
+  }
+
   _safeReconciliationCase(row, detail = false) {
     const value = row.toJSON ? row.toJSON() : row;
     const payment = value.payment || {};
@@ -132,6 +142,17 @@ class PaymentService {
       result.resolved_at = value.resolved_at;
       result.last_error = redactString(value.last_error || '');
       result.lease_expires_at = value.lease_expires_at;
+      if (value.reviewAction) {
+        result.manual_review_action = {
+          id: value.reviewAction.id,
+          action: value.reviewAction.action,
+          reason: redactString(value.reviewAction.reason || ''),
+          outcome_reference: value.reviewAction.outcome_reference || null,
+          operator_user_id: value.reviewAction.operator_user_id,
+          operator_name: value.reviewAction.operator?.full_name || null,
+          created_at: value.reviewAction.created_at,
+        };
+      }
     }
     return result;
   }
@@ -362,6 +383,12 @@ class PaymentService {
       measured_at: new Date(now).toISOString(),
     };
     return { metrics, alerts: evaluateReconciliationAlerts(metrics, process.env) };
+  }
+
+  async getReconciliationMetricsPrometheus() {
+    if (this.metricsCollector?.renderPrometheus) return this.metricsCollector.renderPrometheus();
+    const { createReconciliationMetricsExporter } = require('../../infrastructure/observability/reconciliationMetricsExporter');
+    return createReconciliationMetricsExporter({ service: this, logger: this.logger }).renderPrometheus();
   }
 
   _getVnpayConfig() {

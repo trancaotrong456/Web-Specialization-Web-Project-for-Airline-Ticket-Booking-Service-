@@ -95,6 +95,13 @@ const reconciliationCaseIdValidator = [
   param('id').isInt({ min: 1 }).withMessage('Reconciliation case ID must be a positive integer'),
 ];
 
+const reconciliationReviewActionValidator = [
+  param('id').isInt({ min: 1 }).withMessage('Reconciliation case ID must be a positive integer'),
+  body('action').isIn(['acknowledge', 'financial_reconciled', 'escalate']).withMessage('Unsupported manual-review action'),
+  body('reason').isString().trim().isLength({ min: 3, max: 500 }).withMessage('A manual-review reason between 3 and 500 characters is required'),
+  body('outcome_reference').optional({ nullable: true }).isString().trim().isLength({ max: 191 }).withMessage('outcome_reference is invalid'),
+];
+
 const revenueValidator = [
   query('from_date')
     .notEmpty()
@@ -135,4 +142,5 @@ module.exports = {
   revenueValidator,
   reconciliationCaseListValidator,
   reconciliationCaseIdValidator,
+  reconciliationReviewActionValidator,
 };

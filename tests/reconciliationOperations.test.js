@@ -13,8 +13,10 @@ function appForRole(role) {
   const controller = {
     getReconciliationCases(req, res) { return res.json({ ok: true, role: req.user.role.name }); },
     getReconciliationCaseById(req, res) { return res.json({ ok: true, id: req.params.id }); },
+    recordManualReviewAction(req, res) { return res.json({ ok: true, id: req.params.id, action: req.body?.action }); },
     getPaymentById() {},
     getReconciliationMetrics(req, res) { return res.json({ ok: true, metrics: {} }); },
+    getReconciliationMetricsPrometheus(req, res) { return res.type('text/plain').send('# metrics\n'); },
     getAllPayments() {}, initiatePayment() {}, vnpayReturn() {}, vnpayIpn() {}, payosWebhook() {},
     payosDemoWebhook() {}, payosReturn() {}, getRevenue() {}, refund() {}, queryVnpay() {}, refundVnpay() {},
   };
@@ -29,6 +31,7 @@ function appForRole(role) {
   };
   const validators = {
     reconciliationCaseListValidator: [], reconciliationCaseIdValidator: [], initiatePaymentValidator: [],
+    reconciliationReviewActionValidator: [],
     refundValidator: [], paymentListValidator: [], paymentIdValidator: [], revenueValidator: [],
   };
   const validation = { validate: (_req, _res, next) => next() };
@@ -45,9 +48,10 @@ test('IT-48 reconciliation list/detail allow Admin and Staff and deny unauthenti
         const list = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-cases`);
         const detail = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-cases/1`);
         const metrics = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-metrics`);
-        server.close(() => resolve([list.status, detail.status, metrics.status]));
+        const review = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-cases/1/manual-review`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'acknowledge', reason: 'Reviewed' }) });
+        server.close(() => resolve([list.status, detail.status, metrics.status, review.status]));
       });
     });
-    assert.deepEqual(response, [expected, expected, expected]);
+    assert.deepEqual(response, [expected, expected, expected, expected]);
   }
 });
