@@ -22,10 +22,14 @@ function randomLetters(length) {
 
 async function createFlightFixture({ availableSeats = 1, totalSeats = availableSeats } = {}) {
   const suffix = crypto.randomUUID().slice(0, 8);
-  const airline = await models.Airline.create({
-    name: `IT Airline ${suffix}`,
-    iata_code: randomLetters(3),
-  });
+  let airline;
+  while (!airline) {
+    try {
+      airline = await models.Airline.create({ name: `IT Airline ${suffix}`, iata_code: randomLetters(3) });
+    } catch (error) {
+      if (error.name !== 'SequelizeUniqueConstraintError') throw error;
+    }
+  }
   created.airlineIds.add(airline.id);
 
   let departure;
