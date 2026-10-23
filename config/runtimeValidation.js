@@ -38,6 +38,37 @@ const assertValidEmailFrom = (value) => {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(address)) throw new Error('EMAIL_FROM must contain a valid sender address.');
 };
 
+const parseTrustedHosts = (value) => String(value || '').split(',').map((item) => item.trim().toLowerCase()).filter(Boolean);
+
+const assertHostAllowed = (url, name, hosts) => {
+  if (!hosts.some((allowed) => allowed === url.hostname.toLowerCase()
+    || (allowed.startsWith('*.') && url.hostname.toLowerCase().endsWith(allowed.slice(1))))) {
+    throw new Error(`${name} hostname is not in the configured trusted hosts.`);
+  }
+};
+
+function validateAlertWebhookConfiguration(env = process.env) {
+  const endpoint = String(env.RECONCILIATION_ALERT_WEBHOOK_URL || '').trim();
+  const secret = String(env.RECONCILIATION_ALERT_WEBHOOK_SECRET || '').trim();
+  const trustedHosts = parseTrustedHosts(env.RECONCILIATION_ALERT_TRUSTED_HOSTS);
+  const hasPartialConfiguration = Boolean(endpoint || secret || trustedHosts.length);
+  if (!hasPartialConfiguration) return { enabled: false };
+
+  const timeoutMs = Number(env.RECONCILIATION_ALERT_TIMEOUT_MS || 3000);
+  if (!Number.isInteger(timeoutMs) || timeoutMs < 100 || timeoutMs > 30000) {
+    throw new Error('RECONCILIATION_ALERT_TIMEOUT_MS must be an integer between 100 and 30000.');
+  }
+  if (env.NODE_ENV === 'test') return { enabled: false };
+  if (!endpoint) throw new Error('RECONCILIATION_ALERT_WEBHOOK_URL is required when alert delivery is configured.');
+  if (env.NODE_ENV === 'production') {
+    const url = parseHttpsUrl(endpoint, 'RECONCILIATION_ALERT_WEBHOOK_URL');
+    if (trustedHosts.length === 0) throw new Error('RECONCILIATION_ALERT_TRUSTED_HOSTS is required in production when alert delivery is enabled.');
+    assertHostAllowed(url, 'RECONCILIATION_ALERT_WEBHOOK_URL', trustedHosts);
+    if (secret.length < 32) throw new Error('RECONCILIATION_ALERT_WEBHOOK_SECRET must be at least 32 characters in production.');
+  }
+  return { enabled: true, endpoint, secret, timeoutMs, trustedHosts };
+}
+
 const validateRuntimeConfiguration = (env = process.env) => {
   const payosMode = (env.PAYOS_MODE || 'disabled').toLowerCase();
   const allowedPayosModes = ['disabled', 'demo', 'live'];
@@ -108,6 +139,8 @@ const validateRuntimeConfiguration = (env = process.env) => {
     if (!env.RESEND_API_KEY || !String(env.RESEND_API_KEY).trim()) throw new Error('RESEND_API_KEY is required when EMAIL_DELIVERY_MODE=live.');
     assertValidEmailFrom(env.EMAIL_FROM);
   }
+
+  validateAlertWebhookConfiguration(env);
 };
 
-module.exports = { validateRuntimeConfiguration, isPrivateOrLocalHost };
+module.exports = { validateRuntimeConfiguration, validateAlertWebhookConfiguration, isPrivateOrLocalHost };

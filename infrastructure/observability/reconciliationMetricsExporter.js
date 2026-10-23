@@ -1,6 +1,8 @@
 'use strict';
 
+const crypto = require('crypto');
 const { evaluateReconciliationAlerts } = require('./reconciliationObservability');
+const { validateAlertWebhookConfiguration } = require('../../config/runtimeValidation');
 
 class ReconciliationMetricsExporter {
   constructor({ service, logger = console, alertSink = null, intervalMs = 60000, environment = process.env, clock = () => Date.now() } = {}) {
@@ -65,13 +67,26 @@ class ReconciliationMetricsExporter {
 function createReconciliationMetricsExporter(options) { return new ReconciliationMetricsExporter(options); }
 
 function createConfiguredAlertSink({ environment = process.env, fetchImpl = globalThis.fetch } = {}) {
-  const endpoint = String(environment.RECONCILIATION_ALERT_WEBHOOK_URL || '').trim();
-  if (!endpoint || typeof fetchImpl !== 'function') return null;
+  const configuration = validateAlertWebhookConfiguration(environment);
+  if (!configuration.enabled || environment.NODE_ENV === 'test' || typeof fetchImpl !== 'function') return null;
+  const { endpoint, secret, timeoutMs } = configuration;
   return async (alert) => {
+    const body = JSON.stringify({
+      source: 'airline-booking-reconciliation',
+      severity: alert.code === 'PENDING_PAYMENT_SLA' ? 'warning' : 'critical',
+      grouping_key: `reconciliation:${alert.code}`,
+      alert: { code: alert.code, value: alert.value, cooldown_ms: alert.cooldown_ms },
+    });
+    const signature = crypto.createHmac('sha256', secret).update(body).digest('hex');
     const response = await fetchImpl(endpoint, {
-      method: 'POST', headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ source: 'airline-booking-reconciliation', severity: alert.code === 'PENDING_PAYMENT_SLA' ? 'warning' : 'critical', alert: { code: alert.code, value: alert.value, cooldown_ms: alert.cooldown_ms } }),
-      signal: AbortSignal.timeout(Number(environment.RECONCILIATION_ALERT_TIMEOUT_MS || 3000)),
+      method: 'POST',
+      redirect: 'error',
+      headers: {
+        'content-type': 'application/json',
+        'x-alert-signature': `sha256=${signature}`,
+      },
+      body,
+      signal: AbortSignal.timeout(timeoutMs),
     });
     if (!response.ok) throw new Error(`alert backend returned HTTP ${response.status}`);
   };

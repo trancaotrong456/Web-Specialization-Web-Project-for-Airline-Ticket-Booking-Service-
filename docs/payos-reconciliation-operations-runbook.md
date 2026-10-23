@@ -8,7 +8,9 @@ The maintenance worker starts a database-backed metrics collector independently 
 
 The exporter publishes low-cardinality gauges for active cases, manual-review cases, oldest unresolved age, pending payments beyond SLA, retry exhaustion, late PAID exceptions, gateway timeouts and collection time. Payment IDs, Booking IDs, customer data and credentials are never labels or metric values.
 
-The JSON metrics endpoint remains available to Admin/Staff for diagnosis. A configured `RECONCILIATION_ALERT_WEBHOOK_URL` receives safe alert codes and values. Delivery failures are logged and isolated from reconciliation. The in-process cooldown reduces duplicate delivery; the receiving monitoring backend must perform cross-instance grouping and deduplication.
+The JSON metrics endpoint remains available to Admin/Staff for diagnosis. Production alert delivery requires `RECONCILIATION_ALERT_WEBHOOK_URL`, `RECONCILIATION_ALERT_TRUSTED_HOSTS`, `RECONCILIATION_ALERT_WEBHOOK_SECRET` (minimum 32 characters) and a timeout between 100ms and 30s. The URL must be HTTPS and resolve to an explicitly trusted public host. Requests use `POST`, reject redirects, and carry an HMAC-SHA256 `x-alert-signature: sha256=<hex>` header over the exact JSON body. Delivery failures are logged and isolated from reconciliation. Test mode always disables external delivery.
+
+Every alert includes the stable receiver grouping key `reconciliation:<ALERT_CODE>` and contains only the alert code, severity, value and cooldown. It has no Payment ID, Booking ID, customer data or credential. The application cooldown is process-local only; cross-instance deduplication must be configured and verified in the receiving alert backend using `grouping_key`. Do not claim distributed deduplication from the local cooldown.
 
 ## Alert response
 
@@ -38,3 +40,9 @@ For late PAID after expiry, preserve the successful Payment and record the finan
 ## Incident recovery
 
 If metrics collection or alert delivery fails, reconciliation continues and the JSON/Admin endpoint can be used for diagnosis. If the metrics exporter is unavailable after restart, verify the maintenance job and database connectivity; the next refresh rebuilds the snapshot from durable tables. Keep reconciliation disabled when ownership or migration health cannot be verified.
+
+## Alert delivery smoke test and rotation
+
+In staging, inject the four alert variables from the secret manager, run the runtime configuration validation, and trigger a synthetic threshold alert. Verify the receiver accepts the HMAC signature, rejects a modified body, groups repeated alerts from two application instances by `grouping_key`, and rejects redirected or untrusted destinations. Never print the webhook URL or secret. To rotate credentials, provision the replacement secret at the receiver, update the deployment secret, restart the worker, and revoke the old receiver credential only after delivery succeeds with the new signature.
+
+DNS rebinding cannot be fully eliminated by application-level hostname validation; use a trusted receiver network policy and an alert backend that does not redirect requests. Redirects are explicitly rejected by the HTTP client.
