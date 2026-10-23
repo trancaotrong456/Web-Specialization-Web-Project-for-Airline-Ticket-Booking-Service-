@@ -2,6 +2,8 @@
 
 Production must use `docker-compose.yml` together with `docker-compose.prod.yml` and an external secret store. Do not copy the local `.env` file into a production image or commit it.
 
+Run forward migrations through `node scripts/migrate.js --env production`. The preflight rejects missing credentials, root/default users and known local/test database names before invoking Sequelize CLI. Never invoke `sequelize-cli` directly against a production target.
+
 Required values are injected as environment variables by the deployment platform:
 
 - Database: `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASS` and the MySQL root/application values used by the database service.

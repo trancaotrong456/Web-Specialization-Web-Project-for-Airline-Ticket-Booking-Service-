@@ -20,7 +20,7 @@ Mỗi Pull Request vào `develop` hoặc `main` phải đạt các job `backend-
 ## Staging sequence
 
 1. Chờ CI required checks PASS và reviewer xác nhận migration diff.
-2. Snapshot/backup staging database và chạy `npx sequelize-cli db:migrate --env production` với connection staging.
+2. Snapshot/backup staging database và chạy `node scripts/migrate.js --env production` với connection staging. Preflight phải pass trước khi Sequelize CLI được gọi.
 3. Kiểm tra lease row `payos-reconciliation`, metrics endpoint, alert webhook và health check.
 4. Deploy toàn bộ instance mới với reconciliation disabled; chờ instance cũ drain hoàn toàn.
 5. Smoke test list/detail manual-review bằng Admin/Staff, xác nhận Customer nhận 403 và unauthenticated nhận 401.

@@ -21,4 +21,4 @@ USER app
 
 EXPOSE 5000
 
-CMD ["sh", "-c", "npx sequelize-cli db:migrate && node server.js"]
+CMD ["sh", "-c", "node scripts/migrate.js --env production && node server.js"]

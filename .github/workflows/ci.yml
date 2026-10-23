@@ -74,9 +74,9 @@ jobs:
           DB_SSL=false
           EOF
       - name: Apply fresh migrations
-        run: npx sequelize-cli db:migrate --env test --config config/config.js
+        run: node scripts/migrate.js --env test
       - name: Verify forward migration is idempotent
-        run: npx sequelize-cli db:migrate --env test --config config/config.js
+        run: node scripts/migrate.js --env test
       - name: Run MySQL integration suite
         run: npm run test:integration
 
