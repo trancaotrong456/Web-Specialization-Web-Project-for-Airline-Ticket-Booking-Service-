@@ -172,3 +172,20 @@ test('IT-49 manual-review listing is paginated and exposes only safe late-paymen
   assert.equal(after.manual_review_reason, before.manual_review_reason);
   assert.equal(second.reconciliationCase.state, 'active');
 });
+
+test('IT-52 metrics count unresolved, exhausted and late-payment cases without mutation', { timeout: 20000 }, async () => {
+  const f = await createCaseFixture('IT52');
+  await models.PaymentReconciliationCase.update({
+    state: 'manual_review', attempt_count: 6, max_attempts: 6,
+    manual_review_reason: 'LATE_PAID_AFTER_EXPIRY', last_error: 'gateway timeout',
+  }, { where: { id: f.reconciliationCase.id } });
+  const before = await models.PaymentReconciliationCase.findByPk(f.reconciliationCase.id, { raw: true });
+  const result = await paymentService.getReconciliationMetrics({ now: new Date(Date.now() + 3600000), pendingSlaMinutes: 0 });
+  assert.ok(result.metrics.manual_review_cases >= 1);
+  assert.ok(result.metrics.retry_exhaustion_cases >= 1);
+  assert.ok(result.metrics.late_paid_cases >= 1);
+  assert.ok(result.metrics.gateway_timeout_cases >= 1);
+  const after = await models.PaymentReconciliationCase.findByPk(f.reconciliationCase.id, { raw: true });
+  assert.equal(after.state, before.state);
+  assert.equal(after.attempt_count, before.attempt_count);
+});

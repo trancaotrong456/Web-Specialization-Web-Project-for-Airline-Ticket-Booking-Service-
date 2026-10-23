@@ -247,6 +247,19 @@ class SequelizePaymentRepository {
       ],
     });
   }
+  async getReconciliationMetrics({ pendingSince } = {}) {
+    const unresolvedWhere = { state: { [Op.in]: ['active', 'manual_review'] } };
+    const [activeCases, manualReviewCases, oldest, pendingPaymentsBeyondSla, retryExhaustionCases, latePaidCases, gatewayTimeoutCases] = await Promise.all([
+      this.PaymentReconciliationCase.count({ where: { state: 'active' } }),
+      this.PaymentReconciliationCase.count({ where: { state: 'manual_review' } }),
+      this.PaymentReconciliationCase.findOne({ where: unresolvedWhere, attributes: ['created_at'], order: [['created_at', 'ASC']], raw: true }),
+      this.Payment.count({ where: { payment_method: 'payos', status: 'pending', ...(pendingSince ? { created_at: { [Op.lt]: pendingSince } } : {}) } }),
+      this.PaymentReconciliationCase.count({ where: { state: 'manual_review', attempt_count: { [Op.gte]: this.PaymentReconciliationCase.sequelize.col('max_attempts') } } }),
+      this.PaymentReconciliationCase.count({ where: { manual_review_reason: { [Op.like]: '%LATE%' } } }),
+      this.PaymentReconciliationCase.count({ where: { last_error: { [Op.like]: '%timeout%' } } }),
+    ]);
+    return { activeCases, manualReviewCases, oldestUnresolvedAt: oldest?.created_at || null, pendingPaymentsBeyondSla, retryExhaustionCases, latePaidCases, gatewayTimeoutCases };
+  }
   async aggregateRevenue({ startDate, endDate, groupBy, sequelize }) {
     const where = { status: 'success', [Op.and]: [
       sequelize.literal(`paid_at >= '${startDate}'`),

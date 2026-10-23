@@ -11,7 +11,7 @@ const { createBookingMaintenanceJob } = require('../infrastructure/jobs/bookingM
  * IMPORTANT: Only targets { status: 'holding' } — NOT 'pending_payment'.
  */
 const defaultJob = createBookingMaintenanceJob({ cron, bookingService, paymentService });
-const initExpireBookingsJob = () => defaultJob.start();
+const initExpireBookingsJob = () => { defaultJob.start(); return defaultJob; };
 
 module.exports = {
   initExpireBookingsJob,

@@ -35,6 +35,7 @@ router.get(
 
 router.get('/reconciliation-cases', authenticate, authorize('admin', 'staff'), reconciliationCaseListValidator, validate, paymentController.getReconciliationCases);
 router.get('/reconciliation-cases/:id', authenticate, authorize('admin', 'staff'), reconciliationCaseIdValidator, validate, paymentController.getReconciliationCaseById);
+router.get('/reconciliation-metrics', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetrics);
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);

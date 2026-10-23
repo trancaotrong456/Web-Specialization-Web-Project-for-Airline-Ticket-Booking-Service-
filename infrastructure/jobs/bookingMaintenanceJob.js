@@ -3,10 +3,12 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, env
   let scheduled;
   let started = false;
   let running = false;
+  let stopping = false;
   function start() {
     if (started) return scheduled;
+    stopping = false;
     scheduled = cron.schedule('* * * * *', async () => {
-      if (running) return;
+      if (running || stopping) return;
       running = true;
       try {
         const result = await bookingService.expireHoldingBookings();
@@ -29,7 +31,17 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, env
     logger.log(`[Cron] Booking expiry initialized; pending-payment reconciliation ${reconciliationState} (runs every minute)`);
     return scheduled;
   }
-  return { start };
+  async function waitForIdle(timeoutMs = 30000) {
+    const deadline = Date.now() + Math.max(0, timeoutMs);
+    while (running && Date.now() < deadline) await new Promise((resolve) => setTimeout(resolve, 25));
+    return !running;
+  }
+  async function stop(timeoutMs = 30000) {
+    stopping = true;
+    if (scheduled && typeof scheduled.stop === 'function') scheduled.stop();
+    return waitForIdle(timeoutMs);
+  }
+  return { start, stop, waitForIdle, isRunning: () => running };
 }
 
 module.exports = { createBookingMaintenanceJob };

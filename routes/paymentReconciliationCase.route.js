@@ -9,6 +9,7 @@ const router = express.Router();
 const controller = getDefaultPaymentModule().controller;
 
 router.get('/', authenticate, authorize('admin', 'staff'), reconciliationCaseListValidator, validate, controller.getReconciliationCases);
+router.get('/metrics', authenticate, authorize('admin', 'staff'), controller.getReconciliationMetrics);
 router.get('/:id', authenticate, authorize('admin', 'staff'), reconciliationCaseIdValidator, validate, controller.getReconciliationCaseById);
 
 module.exports = router;

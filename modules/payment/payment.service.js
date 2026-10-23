@@ -15,6 +15,7 @@ const { getVnpayConfig } = require('../../config/vnpay');
 const crypto = require('crypto');
 const { VnpayGateway } = require('./vnpay.gateway');
 const { redactString } = require('../../shared/security/redactSensitive');
+const { emitReconciliationEvent, evaluateReconciliationAlerts } = require('../../infrastructure/observability/reconciliationObservability');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -33,7 +34,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway, clock = () => new Date(), workerId } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway, clock = () => new Date(), workerId, logger = console } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -45,6 +46,7 @@ class PaymentService {
     this.vnpayGateway = vnpayGateway || new VnpayGateway();
     this.clock = clock;
     this.workerId = workerId || `payos-reconcile-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+    this.logger = logger;
   }
 
   _isPaymentConfirmationWindowExpired(booking, now = new Date()) {
@@ -217,6 +219,7 @@ class PaymentService {
           created += 1;
         });
       } catch (error) {
+        emitReconciliationEvent(this.logger, 'case_creation_failed', { payment_id: payment.id, booking_id: payment.booking_id, error_code: error.code || error.name || 'CASE_STORE_ERROR' });
         console.warn('[payOS reconciliation] case discovery failed', {
           paymentId: payment.id,
           bookingId: payment.booking_id,
@@ -236,6 +239,7 @@ class PaymentService {
       gatewayStatus = await this.getPayosPaymentStatus(paymentSnapshot.transaction_ref);
     } catch (error) {
       gatewayError = error;
+      emitReconciliationEvent(this.logger, 'gateway_timeout', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id, error_code: error.code || error.name || 'GATEWAY_ERROR' });
     }
 
     let seatUpdates = [];
@@ -269,6 +273,7 @@ class PaymentService {
           await this.repository.save(booking, { transaction });
           await this.repository.resolveCase(reconciliationCase.id, this.workerId, { resolvedAt: now, lastGatewayStatus: status }, { transaction });
         } else {
+          emitReconciliationEvent(this.logger, 'late_paid_detected', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
           await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Late PAID payment requires financial reconciliation', { transaction });
         }
         return;
@@ -292,11 +297,13 @@ class PaymentService {
 
       const attemptCount = Number(reconciliationCase.attempt_count);
       if (attemptCount >= Number(reconciliationCase.max_attempts)) {
+        emitReconciliationEvent(this.logger, 'manual_review_required', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id, reason: 'RETRY_EXHAUSTED' });
         await this.repository.markManualReview(reconciliationCase.id, this.workerId,
           gatewayError ? `payOS lookup unavailable: ${gatewayError.message}` : `payOS status ${status || 'UNKNOWN'} remains unresolved`, { transaction });
         return;
       }
       const nextAttemptAt = new Date(new Date(now).getTime() + this._payosRetryDelayMs(attemptCount, jitterRatio));
+      emitReconciliationEvent(this.logger, 'retry_scheduled', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id, attempt_count: attemptCount, next_attempt_at: nextAttemptAt.toISOString() });
       await this.repository.completeAttempt(reconciliationCase.id, this.workerId, {
         lastGatewayStatus: status || 'UNKNOWN',
         lastError: gatewayError,
@@ -307,14 +314,38 @@ class PaymentService {
   }
 
   async reconcilePayosCases({ now = this.clock(), graceMinutes = 5, limit = 10, jitterRatio = 0 } = {}) {
+    const startedAt = Date.now();
+    emitReconciliationEvent(this.logger, 'worker_started', { worker_id: this.workerId });
     await this.ensurePayosReconciliationCases({ now, graceMinutes });
+    if (typeof this.repository.releaseExpiredLease === 'function') {
+      const released = await this.transactionManager.transaction((transaction) => this.repository.releaseExpiredLease({ now }, { transaction }));
+      const releasedCount = Array.isArray(released) ? released[0] : Number(released?.count || released || 0);
+      if (releasedCount > 0) emitReconciliationEvent(this.logger, 'lease_recovered', { worker_id: this.workerId, recovered_count: releasedCount });
+    }
     const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({
       owner: this.workerId, provider: 'payos', now, limit,
     }, { transaction }));
     for (const reconciliationCase of due) {
+      emitReconciliationEvent(this.logger, 'case_claimed', { worker_id: this.workerId, case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
       await this._processPayosReconciliationCase(reconciliationCase, { now, jitterRatio });
     }
+    emitReconciliationEvent(this.logger, 'worker_completed', { worker_id: this.workerId, claimed_count: due.length, duration_ms: Date.now() - startedAt });
     return { claimedCount: due.length };
+  }
+
+  async getReconciliationMetrics({ now = this.clock(), pendingSlaMinutes = Number(process.env.PAYMENT_PENDING_SLA_MINUTES || 30) } = {}) {
+    const raw = await this.repository.getReconciliationMetrics({ pendingSince: new Date(new Date(now).getTime() - Math.max(0, pendingSlaMinutes) * 60000) });
+    const metrics = {
+      active_reconciliation_cases: raw.activeCases,
+      manual_review_cases: raw.manualReviewCases,
+      oldest_unresolved_age_minutes: raw.oldestUnresolvedAt ? Math.max(0, Math.floor((new Date(now).getTime() - new Date(raw.oldestUnresolvedAt).getTime()) / 60000)) : 0,
+      pending_payments_beyond_sla: raw.pendingPaymentsBeyondSla,
+      retry_exhaustion_cases: raw.retryExhaustionCases,
+      late_paid_cases: raw.latePaidCases,
+      gateway_timeout_cases: raw.gatewayTimeoutCases,
+      measured_at: new Date(now).toISOString(),
+    };
+    return { metrics, alerts: evaluateReconciliationAlerts(metrics, process.env) };
   }
 
   _getVnpayConfig() {

@@ -14,6 +14,7 @@ function appForRole(role) {
     getReconciliationCases(req, res) { return res.json({ ok: true, role: req.user.role.name }); },
     getReconciliationCaseById(req, res) { return res.json({ ok: true, id: req.params.id }); },
     getPaymentById() {},
+    getReconciliationMetrics(req, res) { return res.json({ ok: true, metrics: {} }); },
     getAllPayments() {}, initiatePayment() {}, vnpayReturn() {}, vnpayIpn() {}, payosWebhook() {},
     payosDemoWebhook() {}, payosReturn() {}, getRevenue() {}, refund() {}, queryVnpay() {}, refundVnpay() {},
   };
@@ -43,9 +44,10 @@ test('IT-48 reconciliation list/detail allow Admin and Staff and deny unauthenti
         const port = server.address().port;
         const list = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-cases`);
         const detail = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-cases/1`);
-        server.close(() => resolve([list.status, detail.status]));
+        const metrics = await fetch(`http://127.0.0.1:${port}/api/v1/payments/reconciliation-metrics`);
+        server.close(() => resolve([list.status, detail.status, metrics.status]));
       });
     });
-    assert.deepEqual(response, [expected, expected]);
+    assert.deepEqual(response, [expected, expected, expected]);
   }
 });

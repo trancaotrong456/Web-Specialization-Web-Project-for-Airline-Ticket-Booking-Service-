@@ -7,7 +7,7 @@ class PaymentController {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -34,6 +34,10 @@ class PaymentController {
   }
   async getReconciliationCaseById(req, res, next) {
     try { return this.apiResponse.success(res, await this.service.getReconciliationCaseById(req.params.id), 'Reconciliation case retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationMetrics(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getReconciliationMetrics(), 'Reconciliation metrics retrieved successfully'); }
     catch (error) { next(error); }
   }
 
