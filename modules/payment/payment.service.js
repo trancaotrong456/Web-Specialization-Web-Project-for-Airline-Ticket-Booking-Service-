@@ -10,7 +10,7 @@ const { getIO } = require('../../sockets');
 const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { resolvePaymentReturnUrl } = require('../../utils/paymentReturnUrl.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
-const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
+const { getBookingFlightIds, releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 const { getVnpayConfig } = require('../../config/vnpay');
 const crypto = require('crypto');
 const { VnpayGateway } = require('./vnpay.gateway');
@@ -55,6 +55,31 @@ class PaymentService {
     const graceMinutes = Number.isFinite(configuredGrace) && configuredGrace >= 0 ? configuredGrace : 5;
     const deadline = new Date(booking.hold_expires_at).getTime() + graceMinutes * 60 * 1000;
     return !Number.isFinite(deadline) || now.getTime() > deadline;
+  }
+
+  async _isLatestPaymentAttempt(payment, transaction) {
+    const latest = await this.repository.findLatestPaymentAttempt(payment.booking_id, transaction);
+    return Boolean(latest && String(latest.id) === String(payment.id));
+  }
+
+  async _getItineraryPaymentError(booking, transaction, now = new Date()) {
+    const flightIds = await getBookingFlightIds(booking, this.repository, transaction);
+    const flights = [];
+    // Cùng thứ tự khóa với tạo booking và trả ghế, kể cả chặng chính có ID lớn hơn.
+    for (const id of flightIds.sort((a, b) => a - b)) {
+      flights.push(await this.repository.findLockedFlight(id, transaction));
+    }
+    const checkedAt = Math.max(now.getTime(), Date.now());
+    if (!flights.length || flights.some((flight) => !flight || flight.status !== 'scheduled')) {
+      return 'Booking cannot be paid because a flight is no longer scheduled';
+    }
+    if (flights.some((flight) => {
+      const departure = new Date(flight.departure_time).getTime();
+      return !Number.isFinite(departure) || departure <= checkedAt;
+    })) {
+      return 'Booking cannot be paid because a flight has already departed';
+    }
+    return null;
   }
   /**
    * Administrative payment history. Payment gateways can disclose only the
@@ -281,14 +306,15 @@ class PaymentService {
       const valid = !gatewayError && sameOrder && sameAmount;
 
       if (valid && status === 'PAID' && payment.status === 'pending') {
+        const activeAttempt = await this._isLatestPaymentAttempt(payment, transaction);
         payment.status = 'success';
         payment.paid_at = payment.paid_at || new Date(now);
         await this.repository.save(payment, { transaction });
-        const holdValid = booking.status === 'pending_payment'
+        const holdValid = activeAttempt && booking.status === 'pending_payment'
           && booking.hold_expires_at && new Date(booking.hold_expires_at) >= new Date(now);
-        const flight = holdValid ? await this.repository.findLockedFlight(booking.flight_id, transaction) : null;
-        const eligible = holdValid && flight && flight.status === 'scheduled'
-          && new Date(flight.departure_time).getTime() > new Date(now).getTime();
+        const eligible = holdValid
+          && !await this._getItineraryPaymentError(booking, transaction, new Date(now))
+          && new Date(booking.hold_expires_at).getTime() >= Math.max(new Date(now).getTime(), Date.now());
         if (eligible) {
           booking.status = 'confirmed';
           await this.repository.save(booking, { transaction });
@@ -301,9 +327,10 @@ class PaymentService {
       }
 
       if (valid && status === 'CANCELLED' && payment.status === 'pending') {
+        const activeAttempt = await this._isLatestPaymentAttempt(payment, transaction);
         payment.status = 'failed';
         await this.repository.save(payment, { transaction });
-        if (booking.status === 'pending_payment') {
+        if (activeAttempt && booking.status === 'pending_payment') {
           const holdValid = booking.hold_expires_at && new Date(booking.hold_expires_at) >= new Date(now);
           if (holdValid) booking.status = 'holding';
           else {
@@ -416,7 +443,8 @@ class PaymentService {
       const payment = await this.repository.findLockedPaymentById(paymentId, t);
       const booking = await this.repository.findLockedBookingWithPassengers(bookingId, t);
 
-      if (!payment || !booking || payment.status === 'success' || booking.status === 'confirmed') return;
+      if (!payment || !booking || payment.status !== 'pending' || booking.status === 'confirmed') return;
+      if (!await this._isLatestPaymentAttempt(payment, t)) return;
       if (booking.status !== 'pending_payment') return;
 
       payment.status = 'failed';
@@ -572,15 +600,15 @@ class PaymentService {
         throw error;
       }
 
-      const flight = await this.repository.findLockedFlight(booking.flight_id, t);
-      if (!flight || flight.status !== 'scheduled') {
-        const error = new Error('Booking cannot be paid because the flight is no longer scheduled');
+      const itineraryError = await this._getItineraryPaymentError(booking, t);
+      if (itineraryError) {
+        const error = new Error(itineraryError);
         error.statusCode = 400;
         throw error;
       }
-      const departureTime = new Date(flight.departure_time);
-      if (Number.isNaN(departureTime.getTime()) || departureTime.getTime() <= Date.now()) {
-        const error = new Error('Booking cannot be paid because the flight has already departed');
+      // Chờ khóa flight có thể vượt quá thời hạn giữ chỗ.
+      if (booking.hold_expires_at && new Date() > new Date(booking.hold_expires_at)) {
+        const error = new Error('Booking hold duration has expired. Please create a new booking.');
         error.statusCode = 400;
         throw error;
       }
@@ -884,11 +912,26 @@ class PaymentService {
         transactionOutcome = 'already_confirmed';
         return;
       }
+      if (!isGatewaySuccess && lockedPayment.status !== 'pending') {
+        transactionOutcome = 'invalid_state';
+        return;
+      }
       if (isGatewaySuccess && lockedPayment.status === 'failed') {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });
         transactionOutcome = 'requires_review';
+        return;
+      }
+      if (lockedPayment.status !== 'pending') {
+        transactionOutcome = 'invalid_state';
+        return;
+      }
+      if (!await this._isLatestPaymentAttempt(lockedPayment, t)) {
+        lockedPayment.status = isGatewaySuccess ? 'success' : 'failed';
+        if (isGatewaySuccess) lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+        await this.repository.save(lockedPayment, { transaction: t });
+        transactionOutcome = isGatewaySuccess ? 'requires_review' : 'invalid_state';
         return;
       }
       if (lockedBooking.status === 'confirmed') {
@@ -901,17 +944,9 @@ class PaymentService {
       }
 
       if (isGatewaySuccess) {
-        const flight = await this.repository.findLockedFlight(lockedBooking.flight_id, t);
-        const departureTime = flight ? new Date(flight.departure_time) : null;
-        const flightIsValid = Boolean(
-          flight
-          && flight.status === 'scheduled'
-          && departureTime
-          && !Number.isNaN(departureTime.getTime())
-          && departureTime.getTime() > Date.now()
-        );
+        const itineraryError = await this._getItineraryPaymentError(lockedBooking, t);
 
-        if (this._isPaymentConfirmationWindowExpired(lockedBooking) || !flightIsValid) {
+        if (this._isPaymentConfirmationWindowExpired(lockedBooking) || itineraryError) {
           lockedPayment.status = 'success';
           lockedPayment.paid_at = lockedPayment.paid_at || new Date();
           await this.repository.save(lockedPayment, { transaction: t });
@@ -1077,6 +1112,7 @@ class PaymentService {
       // requests from confirming and emailing the same booking concurrently.
       if (!lockedPayment || !lockedBooking) return;
       if (lockedPayment.status === 'success') return;
+      if (!isSuccess && lockedPayment.status !== 'pending') return;
       if (isSuccess && (lockedPayment.status === 'failed'
         || (lockedPayment.status === 'pending' && lockedBooking.status !== 'pending_payment'))) {
         lockedPayment.status = 'success';
@@ -1085,21 +1121,21 @@ class PaymentService {
         requiresManualReview = true;
         return;
       }
+      if (lockedPayment.status !== 'pending') return;
+      if (!await this._isLatestPaymentAttempt(lockedPayment, t)) {
+        lockedPayment.status = isSuccess ? 'success' : 'failed';
+        if (isSuccess) lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+        await this.repository.save(lockedPayment, { transaction: t });
+        requiresManualReview = isSuccess;
+        return;
+      }
       if (lockedBooking.status === 'confirmed') return;
       if (lockedBooking.status !== 'pending_payment') return;
 
       if (isSuccess) {
-        const flight = await this.repository.findLockedFlight(lockedBooking.flight_id, t);
-        const departureTime = flight ? new Date(flight.departure_time) : null;
-        const flightIsValid = Boolean(
-          flight
-          && flight.status === 'scheduled'
-          && departureTime
-          && !Number.isNaN(departureTime.getTime())
-          && departureTime.getTime() > Date.now()
-        );
+        const itineraryError = await this._getItineraryPaymentError(lockedBooking, t);
 
-        if (this._isPaymentConfirmationWindowExpired(lockedBooking) || !flightIsValid) {
+        if (this._isPaymentConfirmationWindowExpired(lockedBooking) || itineraryError) {
           lockedPayment.status = 'success';
           lockedPayment.paid_at = lockedPayment.paid_at || new Date();
           await this.repository.save(lockedPayment, { transaction: t });

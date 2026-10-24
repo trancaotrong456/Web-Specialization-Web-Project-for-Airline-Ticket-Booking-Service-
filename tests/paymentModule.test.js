@@ -96,6 +96,7 @@ test(`two concurrent ${gateway} callbacks recheck locked state and trigger one c
   let releaseReads;
   const bothRead = new Promise((resolve) => { releaseReads = resolve; });
   const repository = {
+    async findLatestPaymentAttempt() { return payment; },
     async findPaymentWithBookingByRef() {
       reads++;
       if (reads === 2) releaseReads();

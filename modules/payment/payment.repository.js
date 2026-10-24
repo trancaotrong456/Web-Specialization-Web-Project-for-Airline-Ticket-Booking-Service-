@@ -221,6 +221,15 @@ class SequelizePaymentRepository {
   findLockedBooking(id, transaction) {
     return this.Booking.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
   }
+  findLatestPaymentAttempt(bookingId, transaction) {
+    // Caller holds the Booking lock before the first consistent read in this
+    // transaction. Initiation also holds that lock until the attempt commits.
+    // Do not lock another Payment here: competing callbacks lock their own
+    // Payment before Booking, so locking a sibling would create a lock cycle.
+    return this.Payment.findOne({
+      where: { booking_id: bookingId }, order: [['id', 'DESC']], transaction,
+    });
+  }
   findPendingPaymentForGatewayFailure(bookingId, transactionRef, transaction) {
     return this.Payment.findOne({ where: { booking_id: bookingId, transaction_ref: transactionRef, status: 'pending' }, lock: transaction.LOCK.UPDATE, transaction });
   }
