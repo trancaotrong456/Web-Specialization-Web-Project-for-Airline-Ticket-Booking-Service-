@@ -27,6 +27,7 @@ describe('booking and payment API adapter', () => {
     await api.payments({ status: 'success', payment_method: 'vnpay' });
     await api.paymentDetail(9);
     await api.refundBooking(3, 'Requested');
+    await api.refundVnpay(9, 'Gateway refund');
     await api.revenue({ from_date: '2026-10-01', to_date: '2026-10-31', group_by: 'day' });
     expect(request.mock.calls.map(([path]) => path)).toEqual([
       '/bookings/my-bookings?page=2&limit=10&status=holding',
@@ -35,6 +36,7 @@ describe('booking and payment API adapter', () => {
       '/payments?page=1&limit=20&status=success&payment_method=vnpay',
       '/payments/9',
       '/payments/bookings/3/refund',
+      '/payments/9/vnpay/refund',
       '/payments/revenue?from_date=2026-10-01&to_date=2026-10-31&group_by=day',
     ]);
   });

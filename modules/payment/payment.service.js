@@ -1313,7 +1313,13 @@ class PaymentService {
       // Gateway I/O and the state transition are covered by this error path.
       // Post-commit notifications are deliberately outside it: an event
       // delivery failure must never turn a committed refund into `unknown`.
-      result = await this.vnpayGateway.refund({ payment, requestId: operation.request_id, reason });
+      result = await this.vnpayGateway.refund({
+        payment,
+        requestId: operation.request_id,
+        reason,
+        createBy: adminUser?.email || adminUser?.id,
+        ipAddr: adminUser?.ip_addr,
+      });
       await this.transactionManager.transaction(async (t) => {
         const op = await this.repository.findLockedGatewayOperation(operation.id, t);
         const lockedPayment = await this.repository.findLockedPaymentById(paymentId, t);
@@ -1424,6 +1430,17 @@ class PaymentService {
       if (successfulPayments.length === 0) {
         const error = new Error('No successful payment found for this booking to refund.');
         error.statusCode = 400;
+        throw error;
+      }
+
+      if (successfulPayments.some((payment) => payment.payment_method === 'vnpay')) {
+        const error = new Error('VNPay refunds must use the dedicated payment refund endpoint; no refund was requested or recorded.');
+        error.statusCode = 409;
+        error.code = 'VNPAY_REFUND_REQUIRES_DEDICATED_ENDPOINT';
+        error.errors = [{
+          field: 'payment_method',
+          message: 'Use POST /api/v1/payments/:id/vnpay/refund for a verified VNPay refund.',
+        }];
         throw error;
       }
 

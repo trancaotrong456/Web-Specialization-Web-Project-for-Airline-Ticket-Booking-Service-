@@ -23,6 +23,7 @@ export const createBookingsApi = (request) => ({
   payments: ({ page = 1, limit = 20, status, payment_method, booking_id } = {}) => request(`/payments?${toQuery({ page, limit, status, payment_method, booking_id })}`),
   paymentDetail: (id) => request(`/payments/${encodeURIComponent(id)}`),
   refundBooking: (id, reason) => request(`/payments/bookings/${encodeURIComponent(id)}/refund`, { method: 'POST', body: reason ? { reason } : {} }),
+  refundVnpay: (id, reason) => request(`/payments/${encodeURIComponent(id)}/vnpay/refund`, { method: 'POST', body: reason ? { reason } : {} }),
   revenue: ({ from_date, to_date, group_by }) => request(`/payments/revenue?${toQuery({ from_date, to_date, group_by })}`),
   vnpayReturn: (params) => request(`/payments/vnpay/return?${new URLSearchParams(params).toString()}`),
   payosReturn: (params) => request(`/payments/payos/return?${new URLSearchParams(params).toString()}`),

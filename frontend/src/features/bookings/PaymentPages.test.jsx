@@ -99,22 +99,35 @@ describe('payment pages', () => {
     expect(within(statusFilter).queryByRole('option', { name: 'success' })).not.toBeInTheDocument();
   });
 
-  it('requires confirmation and labels booking refund as internal-only', async () => {
+  it('keeps payOS refund manual and does not offer a false internal refund action', async () => {
     mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
     let refunded = false;
     mocks.request.mockImplementation(async (path) => {
       if (path === '/payments/9') return { id: 9, booking_id: 7, payment_method: 'payos', amount: 2500000, status: refunded ? 'refunded' : 'success', paid_at: '2026-10-08T08:00:00Z', booking: { booking_code: 'BK123', status: refunded ? 'cancelled' : 'confirmed', guest_email: 'guest@example.com' } };
-      if (path === '/payments/bookings/7/refund') { refunded = true; return { refundedAmount: 2500000 }; }
       throw new Error(`Unexpected request ${path}`);
     });
     const user = userEvent.setup();
     routes(<AdminPaymentDetailPage />, '/admin/payments/:id', '/admin/payments/9');
     expect(await screen.findByText('Thông tin thanh toán')).toBeInTheDocument();
-    expect(screen.getByText(/không khẳng định đã hoàn tiền qua ngân hàng/i)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Xử lý refund nội bộ' }));
-    expect(screen.getByRole('dialog')).toHaveTextContent('không gọi hoàn tiền thật qua gateway');
-    await user.click(screen.getByRole('button', { name: 'Xác nhận refund' }));
+    expect(screen.getByText(/payOS chưa có adapter hoàn tiền ngân hàng/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /hoàn tiền/i })).not.toBeInTheDocument();
+    expect(refunded).toBe(false);
+  });
+
+  it('uses the dedicated VNPay refund endpoint after confirmation', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    let refunded = false;
+    mocks.request.mockImplementation(async (path, options) => {
+      if (path === '/payments/9') return { id: 9, booking_id: 7, payment_method: 'vnpay', amount: 2500000, status: refunded ? 'refunded' : 'success', booking: { booking_code: 'BK123', status: refunded ? 'cancelled' : 'confirmed' } };
+      if (path === '/payments/9/vnpay/refund') { refunded = true; return { status: 'success' }; }
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    routes(<AdminPaymentDetailPage />, '/admin/payments/:id', '/admin/payments/9');
+    await screen.findByText('Thông tin thanh toán');
+    await user.click(screen.getByRole('button', { name: 'Gửi yêu cầu hoàn VNPay' }));
+    await user.click(screen.getByRole('button', { name: 'Gửi yêu cầu hoàn' }));
     await screen.findByText('Đã hoàn tiền');
-    expect(mocks.request).toHaveBeenCalledWith('/payments/bookings/7/refund', { method: 'POST', body: {} });
+    expect(mocks.request).toHaveBeenCalledWith('/payments/9/vnpay/refund', { method: 'POST', body: {} });
   });
 });

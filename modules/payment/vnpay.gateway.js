@@ -1,13 +1,14 @@
 'use strict';
 
 const crypto = require('crypto');
-const { signVnpayParams, verifyVnpayChecksum } = require('../../utils/checksum.util');
 const { getVnpayConfig } = require('../../config/vnpay');
 
 const RESPONSE_KEYS = [
   'vnp_RequestId', 'vnp_ResponseId', 'vnp_Command', 'vnp_TmnCode', 'vnp_TxnRef',
   'vnp_Amount', 'vnp_TransactionNo', 'vnp_TransactionDate', 'vnp_TransactionStatus',
-  'vnp_ResponseCode', 'vnp_Message', 'vnp_SecureHash',
+  'vnp_TransactionType', 'vnp_ResponseCode', 'vnp_Message', 'vnp_BankCode',
+  'vnp_PayDate', 'vnp_OrderInfo', 'vnp_PromotionCode', 'vnp_PromotionAmount',
+  'vnp_SecureHash',
 ];
 
 function sanitizeResponse(body = {}) {
@@ -17,10 +18,37 @@ function sanitizeResponse(body = {}) {
   }, {});
 }
 
-function classifyResponse(body) {
-  const code = String(body.vnp_ResponseCode || body.vnp_TransactionStatus || '99');
-  if (code === '00') return 'success';
-  if (/^(02|03|04|05|06|07|09|11|12|13|24|51|65|75|79|99)$/.test(code)) return 'failed';
+function hmacPipe(values, secretKey) {
+  return crypto.createHmac('sha512', secretKey)
+    .update(values.map((value) => String(value ?? '')).join('|'), 'utf8')
+    .digest('hex');
+}
+
+function merchantRequestHash(payload, secretKey) {
+  const fields = payload.vnp_Command === 'refund'
+    ? ['vnp_RequestId', 'vnp_Version', 'vnp_Command', 'vnp_TmnCode', 'vnp_TransactionType', 'vnp_TxnRef', 'vnp_Amount', 'vnp_TransactionNo', 'vnp_TransactionDate', 'vnp_CreateBy', 'vnp_CreateDate', 'vnp_IpAddr', 'vnp_OrderInfo']
+    : ['vnp_RequestId', 'vnp_Version', 'vnp_Command', 'vnp_TmnCode', 'vnp_TxnRef', 'vnp_TransactionDate', 'vnp_CreateDate', 'vnp_IpAddr', 'vnp_OrderInfo'];
+  return hmacPipe(fields.map((field) => payload[field]), secretKey);
+}
+
+function merchantResponseHash(body, command, secretKey) {
+  const fields = ['vnp_ResponseId', 'vnp_Command', 'vnp_ResponseCode', 'vnp_Message', 'vnp_TmnCode', 'vnp_TxnRef', 'vnp_Amount', 'vnp_BankCode', 'vnp_PayDate', 'vnp_TransactionNo', 'vnp_TransactionType', 'vnp_TransactionStatus', 'vnp_OrderInfo'];
+  if (command === 'querydr') fields.push('vnp_PromotionCode', 'vnp_PromotionAmount');
+  return hmacPipe(fields.map((field) => body[field]), secretKey);
+}
+
+function classifyResponse(body, command = body.vnp_Command) {
+  const apiCode = String(body?.vnp_ResponseCode ?? '');
+  const transactionStatus = String(body?.vnp_TransactionStatus ?? '');
+  if (apiCode !== '00') {
+    // A duplicate refund (94) means VNPAY may still be processing the first
+    // request. It is not proof of settlement and must not be retried blindly.
+    return command === 'refund' && apiCode === '94' ? 'unknown' : (apiCode === '98' || apiCode === '99' ? 'unknown' : 'failed');
+  }
+  if (!transactionStatus) return 'unknown';
+  if (transactionStatus === '00') return 'success';
+  if (/^(01|05|06)$/.test(transactionStatus)) return 'pending';
+  if (/^(02|04|07|09)$/.test(transactionStatus)) return 'failed';
   return 'unknown';
 }
 
@@ -45,12 +73,14 @@ class VnpayGateway {
   }
 
   _requestId(prefix = 'REQ') {
-    return `${prefix}_${this.clock().getTime()}_${crypto.randomBytes(6).toString('hex')}`.slice(0, 64);
+    return `${prefix}${this.clock().getTime()}${crypto.randomBytes(6).toString('hex')}`.slice(0, 32);
   }
 
-  _buildPayload({ command, payment, requestId, reason, transactionDate, transactionNo }) {
+  _buildPayload({ command, payment, requestId, reason, transactionDate, transactionNo, createBy, ipAddr = '127.0.0.1' }) {
     const amount = Math.round(Number(payment.amount) * 100);
     if (!Number.isSafeInteger(amount) || amount <= 0) throw new Error('VNPay amount must be a positive VND integer');
+    const originalDate = transactionDate || payment.created_at || payment.createdAt;
+    if (!originalDate || Number.isNaN(new Date(originalDate).getTime())) throw new Error('VNPay merchant API requires the original transaction date');
     const payload = {
       vnp_RequestId: requestId,
       vnp_Version: '2.1.0',
@@ -58,16 +88,18 @@ class VnpayGateway {
       vnp_TmnCode: this._config().tmnCode,
       vnp_TxnRef: String(payment.transaction_ref),
       vnp_OrderInfo: String(reason || `${command} ${payment.transaction_ref}`),
-      vnp_TransactionDate: this._formatDate(transactionDate || payment.paid_at || this.clock()),
+      vnp_TransactionDate: this._formatDate(originalDate),
       vnp_CreateDate: this._formatDate(this.clock()),
-      vnp_IpAddr: '127.0.0.1',
+      vnp_IpAddr: String(ipAddr),
     };
     if (command === 'refund') {
       payload.vnp_TransactionType = '02';
       payload.vnp_Amount = String(amount);
       if (transactionNo) payload.vnp_TransactionNo = String(transactionNo);
+      if (!createBy || !String(createBy).trim()) throw new Error('VNPay refund requires the initiating operator');
+      payload.vnp_CreateBy = String(createBy).slice(0, 245);
     }
-    payload.vnp_SecureHash = signVnpayParams(payload, this._config().hashSecret);
+    payload.vnp_SecureHash = merchantRequestHash(payload, this._config().hashSecret);
     return payload;
   }
 
@@ -82,8 +114,8 @@ class VnpayGateway {
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const response = await this.httpClient(config.apiUrl, {
-        method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams(payload).toString(), signal: controller.signal,
+        method: 'POST', headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify(payload), signal: controller.signal,
       });
       const text = await response.text();
       let body;
@@ -96,37 +128,37 @@ class VnpayGateway {
     } finally { clearTimeout(timeout); }
   }
 
-  _validateResponse(body, payment, requestId) {
+  _validateResponse(body, payment, command) {
     const safe = sanitizeResponse(body);
     if (!body || body.vnp_TmnCode !== this._config().tmnCode || body.vnp_TxnRef !== String(payment.transaction_ref)) {
       const error = new Error('VNPay response merchant or transaction reference mismatch'); error.outcome = 'failed'; throw error;
     }
     const expectedAmount = Math.round(Number(payment.amount) * 100);
-    if (body.vnp_Amount !== undefined && String(body.vnp_Amount) !== String(expectedAmount)) {
+    if (body.vnp_Amount === undefined || String(body.vnp_Amount) !== String(expectedAmount)) {
       const error = new Error('VNPay response amount mismatch'); error.outcome = 'failed'; throw error;
     }
-    if (body.vnp_RequestId && String(body.vnp_RequestId) !== String(requestId)) {
-      const error = new Error('VNPay response request id mismatch'); error.outcome = 'failed'; throw error;
+    if (body.vnp_Command && String(body.vnp_Command) !== command) {
+      const error = new Error('VNPay response command mismatch'); error.outcome = 'failed'; throw error;
     }
-    if (!body.vnp_SecureHash || !verifyVnpayChecksum(body, this._config().hashSecret)) {
+    if (!body.vnp_ResponseId || !body.vnp_SecureHash || merchantResponseHash(body, command, this._config().hashSecret).toLowerCase() !== String(body.vnp_SecureHash).toLowerCase()) {
       const error = new Error('VNPay response signature is invalid'); error.outcome = 'failed'; throw error;
     }
-    return { status: classifyResponse(body), response: safe, transactionRef: String(body.vnp_TxnRef), transactionNo: body.vnp_TransactionNo ? String(body.vnp_TransactionNo) : null };
+    return { status: classifyResponse(body, command), response: safe, transactionRef: String(body.vnp_TxnRef), transactionNo: body.vnp_TransactionNo ? String(body.vnp_TransactionNo) : null };
   }
 
   async query({ payment, requestId = this._requestId('QDR') } = {}) {
     if (!payment || !payment.transaction_ref) throw new Error('VNPay QueryDR requires a payment transaction reference');
-    const payload = this._buildPayload({ command: 'querydr', payment, requestId, transactionDate: payment.paid_at });
+    const payload = this._buildPayload({ command: 'querydr', payment, requestId, transactionDate: payment.created_at });
     const body = await this._post(payload);
-    return this._validateResponse(body, payment, requestId);
+    return this._validateResponse(body, payment, 'querydr');
   }
 
-  async refund({ payment, requestId = this._requestId('RFD'), reason, transactionNo } = {}) {
+  async refund({ payment, requestId = this._requestId('RFD'), reason, transactionNo, createBy, ipAddr } = {}) {
     if (!payment || !payment.transaction_ref) throw new Error('VNPay refund requires a payment transaction reference');
-    const payload = this._buildPayload({ command: 'refund', payment, requestId, reason, transactionDate: payment.paid_at, transactionNo });
+    const payload = this._buildPayload({ command: 'refund', payment, requestId, reason, transactionDate: payment.created_at, transactionNo, createBy, ipAddr });
     const body = await this._post(payload);
-    return this._validateResponse(body, payment, requestId);
+    return this._validateResponse(body, payment, 'refund');
   }
 }
 
-module.exports = { VnpayGateway, sanitizeResponse, classifyResponse };
+module.exports = { VnpayGateway, sanitizeResponse, classifyResponse, merchantRequestHash, merchantResponseHash };

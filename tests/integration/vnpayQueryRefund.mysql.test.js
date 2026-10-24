@@ -6,6 +6,7 @@ const { VnpayGateway } = require('../../modules/payment/vnpay.gateway');
 const paymentService = require('../../services/payment.service');
 const bookingService = require('../../services/booking.service');
 const { signVnpayParams } = require('../../utils/checksum.util');
+const { merchantResponseHash } = require('../../modules/payment/vnpay.gateway');
 const { models, verifyConnectedDatabase } = require('./helpers/mysqlTestDatabase');
 const {
   cleanupTrackedFixtures, createFlightFixture, createPromotionFixture,
@@ -24,7 +25,7 @@ const adminUser = { id: 1, email: 'integration-admin@example.test' };
 function makeGateway({ refundCode = '00', queryCode = '00', failLocalResponse = false } = {}) {
   const calls = [];
   const httpClient = async (_url, options) => {
-    const request = Object.fromEntries(new URLSearchParams(options.body));
+    const request = JSON.parse(options.body);
     calls.push(request);
     if (failLocalResponse) {
       const error = new Error('simulated gateway timeout');
@@ -34,17 +35,22 @@ function makeGateway({ refundCode = '00', queryCode = '00', failLocalResponse = 
     const isRefund = request.vnp_Command === 'refund';
     const code = isRefund ? refundCode : queryCode;
     const response = {
-      vnp_RequestId: request.vnp_RequestId,
+      vnp_ResponseId: `RESP-${request.vnp_RequestId}`,
       vnp_Command: request.vnp_Command,
       vnp_TmnCode: process.env.VNP_TMN_CODE,
       vnp_TxnRef: request.vnp_TxnRef,
-      vnp_Amount: request.vnp_Amount,
+      vnp_Amount: request.vnp_Amount || '18000000',
+      vnp_Message: code === '00' ? 'Success' : 'Rejected',
+      vnp_BankCode: 'NCB',
+      vnp_PayDate: '20261021050000',
       vnp_ResponseCode: code,
       vnp_TransactionStatus: code,
       vnp_TransactionNo: isRefund ? 'REFUND-IT' : 'QUERY-IT',
-      vnp_Message: code === '00' ? 'Success' : 'Rejected',
+      vnp_TransactionType: isRefund ? '02' : '01',
+      vnp_OrderInfo: request.vnp_OrderInfo,
     };
-    response.vnp_SecureHash = signVnpayParams(response, process.env.VNP_HASH_SECRET);
+    if (!isRefund) { response.vnp_PromotionCode = ''; response.vnp_PromotionAmount = ''; }
+    response.vnp_SecureHash = merchantResponseHash(response, request.vnp_Command, process.env.VNP_HASH_SECRET);
     return { ok: true, status: 200, text: async () => JSON.stringify(response) };
   };
   return { gateway: new VnpayGateway({ httpClient, timeoutMs: 1000 }), calls };

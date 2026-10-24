@@ -224,7 +224,7 @@ test('IT-04 successful webhook racing stale-payment reconciliation preserves the
   }
 });
 
-test('IT-05 concurrent refund refunds and releases seats exactly once', { timeout: 20000 }, async (t) => {
+test('IT-05 concurrent legacy VNPay refunds fail closed without mutation', { timeout: 20000 }, async (t) => {
   t.mock.method(emailService, 'sendBookingConfirmation', async () => ({ id: 'integration-email-disabled' }));
   const fixture = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
   try {
@@ -236,8 +236,8 @@ test('IT-05 concurrent refund refunds and releases seats exactly once', { timeou
       paymentService.processRefund(booking.id, 'IT-05 concurrent refund A', adminUser),
       paymentService.processRefund(booking.id, 'IT-05 concurrent refund B', adminUser),
     ]);
-    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
-    assert.equal(results.filter((result) => result.status === 'rejected').length, 1);
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 0);
+    assert.equal(results.filter((result) => result.status === 'rejected').length, 2);
     assertNoLockFailure(results);
 
     const [persistedBooking, persistedPayment, persistedFlight] = await Promise.all([
@@ -245,9 +245,9 @@ test('IT-05 concurrent refund refunds and releases seats exactly once', { timeou
       models.Payment.findByPk(payment.id),
       models.Flight.findByPk(fixture.flight.id),
     ]);
-    assert.equal(persistedBooking.status, 'cancelled');
-    assert.equal(persistedPayment.status, 'refunded');
-    assert.equal(persistedFlight.available_seats, 1);
+    assert.equal(persistedBooking.status, 'confirmed');
+    assert.equal(persistedPayment.status, 'success');
+    assert.equal(persistedFlight.available_seats, 0);
   } finally {
     await cleanupTrackedFixtures();
   }
@@ -266,7 +266,8 @@ test('IT-06 refund racing a duplicate success webhook remains consistent', { tim
       paymentService.processRefund(booking.id, 'IT-06 refund vs webhook', adminUser),
       paymentService.handleVnpayIpn({ ...payload }),
     ]);
-    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 2);
+    assert.equal(results.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(results.filter((result) => result.status === 'rejected').length, 1);
     assertNoLockFailure(results);
 
     const [persistedBooking, persistedPayment, persistedFlight] = await Promise.all([
@@ -274,9 +275,9 @@ test('IT-06 refund racing a duplicate success webhook remains consistent', { tim
       models.Payment.findByPk(payment.id),
       models.Flight.findByPk(fixture.flight.id),
     ]);
-    assert.equal(persistedBooking.status, 'cancelled');
-    assert.equal(persistedPayment.status, 'refunded');
-    assert.equal(persistedFlight.available_seats, 1);
+    assert.equal(persistedBooking.status, 'confirmed');
+    assert.equal(persistedPayment.status, 'success');
+    assert.equal(persistedFlight.available_seats, 0);
   } finally {
     await cleanupTrackedFixtures();
   }
@@ -430,19 +431,18 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
     assert.equal(persistedFlight.status, 'cancelled');
     assert.equal(persistedFlight.available_seats, 0);
 
-    await paymentService.processRefund(
-      paymentFirstBooking.id,
-      'IT-09 cancelled flight reconciliation',
-      adminUser
+    await assert.rejects(
+      () => paymentService.processRefund(paymentFirstBooking.id, 'IT-09 cancelled flight reconciliation', adminUser),
+      (error) => error.statusCode === 409 && error.code === 'VNPAY_REFUND_REQUIRES_DEDICATED_ENDPOINT',
     );
     const [refundedBooking, refundedPayment, flightAfterRefund] = await Promise.all([
       models.Booking.findByPk(paymentFirstBooking.id),
       models.Payment.findByPk(payment.id),
       models.Flight.findByPk(paymentFirst.flight.id),
     ]);
-    assert.equal(refundedBooking.status, 'cancelled');
-    assert.equal(refundedPayment.status, 'refunded');
-    assert.equal(flightAfterRefund.available_seats, 1);
+    assert.equal(refundedBooking.status, 'pending_payment');
+    assert.equal(refundedPayment.status, 'success');
+    assert.equal(flightAfterRefund.available_seats, 0);
 
     // Refund and Flight cancellation touch the Flight row from independent
     // workflows. They must serialize without deadlock or double seat release.
@@ -455,16 +455,17 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
       flightService.cancelFlight(refundRace.flight.id),
     ]);
     assertNoLockFailure(refundRaceResults);
-    assert.equal(refundRaceResults.filter((result) => result.status === 'fulfilled').length, 2);
+    assert.equal(refundRaceResults.filter((result) => result.status === 'fulfilled').length, 1);
+    assert.equal(refundRaceResults.filter((result) => result.status === 'rejected').length, 1);
     const [raceBooking, racePayment, raceFlight] = await Promise.all([
       models.Booking.findByPk(refundRaceBooking.id),
       models.Payment.findByPk(refundRacePayment.payment.id),
       models.Flight.findByPk(refundRace.flight.id),
     ]);
-    assert.equal(raceBooking.status, 'cancelled');
-    assert.equal(racePayment.status, 'refunded');
+    assert.equal(raceBooking.status, 'confirmed');
+    assert.equal(racePayment.status, 'success');
     assert.equal(raceFlight.status, 'cancelled');
-    assert.equal(raceFlight.available_seats, 1);
+    assert.equal(raceFlight.available_seats, 0);
   } finally {
     if (hookName) models.sequelize.removeHook('afterQuery', hookName);
     await cleanupTrackedFixtures();

@@ -344,14 +344,17 @@ test('#35 stale pending reconciliation fails payment and releases resources once
   assert.equal((await bookingService.reconcileStalePendingPayments()).reconciledCount, 0);
 });
 
-test('#33 refund cancels confirmed booking, refunds payment and releases seats once', async (t) => {
+test('#33 legacy VNPay refund rejects before mutating financial or booking state', async (t) => {
   const f = fixture(t, { status: 'confirmed' }); f.payment.status = 'success';
-  const result = await paymentService.processRefund(1, 'test', { email: 'admin@example.com' });
-  assert.equal(result.refundedAmount, 180000); assert.equal(f.payment.status, 'refunded');
-  assert.equal(f.booking.status, 'cancelled'); assert.equal(f.flight.available_seats, 10);
-  assert.deepEqual(f.lockSequence.slice(0, 2), ['payment', 'booking']);
-  await assert.rejects(paymentService.processRefund(1, 'test', { email: 'admin@example.com' }), denied(400));
-  assert.equal(f.flight.available_seats, 10);
+  await assert.rejects(
+    paymentService.processRefund(1, 'test', { email: 'admin@example.com' }),
+    (error) => error.statusCode === 409 && error.code === 'VNPAY_REFUND_REQUIRES_DEDICATED_ENDPOINT',
+  );
+  assert.equal(f.payment.status, 'success');
+  assert.equal(f.booking.status, 'confirmed');
+  assert.equal(f.flight.available_seats, 8);
+  assert.equal(f.promo.used_count, 1);
+  assert.equal(f.writes.length, 0);
 });
 
 test('#33 rejects automatic payOS refund before mutating payment, booking, seats or promotion', async (t) => {
@@ -377,74 +380,17 @@ test('#33 rejects automatic payOS refund before mutating payment, booking, seats
   assert.equal(f.writes.length, 0);
 });
 
-test('#33 VNPay booking refund remains available through the shared legacy flow', async (t) => {
+test('#33 legacy VNPay refund directs operators to the dedicated endpoint', async (t) => {
   const f = fixture(t, { status: 'confirmed' });
   f.payment.status = 'success';
   f.payment.payment_method = 'vnpay';
-
-  const result = await paymentService.refundPayment(1, 'VNPay regression', { email: 'admin@example.com' });
-
-  assert.equal(result.paymentMethod, 'vnpay');
-  assert.equal(f.payment.status, 'refunded');
-  assert.equal(f.booking.status, 'cancelled');
-  assert.equal(f.flight.available_seats, 10);
-});
-
-for (const bookingStatus of ['pending_payment', 'expired']) {
-  test(`#33 refund handles charged ${bookingStatus} booking without returning seats twice`, async (t) => {
-    const f = fixture(t, { status: bookingStatus });
-    f.payment.status = 'success';
-    if (bookingStatus === 'expired') f.flight.available_seats = 10;
-
-    await paymentService.processRefund(1, 'manual reconciliation', { email: 'admin@example.com' });
-
-    assert.equal(f.payment.status, 'refunded');
-    assert.equal(f.booking.status, 'cancelled');
-    assert.equal(f.flight.available_seats, 10);
-  });
-}
-
-test('#33 refund marks every successful charge but releases booking seats once', async (t) => {
-  const f = fixture(t, { status: 'confirmed' });
-  f.payment.status = 'success';
-  const secondPayment = {
-    ...f.payment,
-    id: 5,
-    amount: 180000,
-    status: 'success',
-    async save(options) {
-      assert.equal(options.transaction, f.tx);
-    },
-  };
-  t.mock.method(models.Payment, 'findAll', async ({ transaction }) => {
-    assert.equal(transaction, f.tx);
-    f.lockSequence.push('payment');
-    return [f.payment, secondPayment];
-  });
-
-  const result = await paymentService.processRefund(1, 'duplicate charge', { email: 'admin@example.com' });
-
-  assert.equal(f.payment.status, 'refunded');
-  assert.equal(secondPayment.status, 'refunded');
-  assert.equal(result.refundedAmount, 360000);
-  assert.deepEqual(result.refundedPaymentIds, [4, 5]);
-  assert.equal(f.flight.available_seats, 10);
-});
-
-test('multi-leg refund returns each passenger seat on every leg exactly once', async (t) => {
-  const f = fixture(t, { status: 'confirmed' }, [{ flight_id: 3 }]);
-  f.payment.status = 'success';
-  f.booking.passengers = [{ passenger_name: 'An' }, { passenger_name: 'Binh' }, { passenger_name: 'Chi' }];
-  const result = await paymentService.processRefund(1, 'multi-leg test', { email: 'admin@example.com' });
-  assert.equal(result.refundedAmount, 180000);
-  assert.equal(f.payment.status, 'refunded');
-  assert.equal(f.booking.status, 'cancelled');
-  assert.equal(f.flight.available_seats, 11);
-  assert.equal(f.nextFlight.available_seats, 7);
-  assert.deepEqual(f.seatUpdates.map(({ flight_id }) => flight_id), [2, 3]);
-  await assert.rejects(paymentService.processRefund(1, 'duplicate multi-leg test', { email: 'admin@example.com' }), denied(400));
-  assert.equal(f.flight.available_seats, 11);
-  assert.equal(f.nextFlight.available_seats, 7);
+  await assert.rejects(
+    paymentService.refundPayment(1, 'VNPay regression', { email: 'admin@example.com' }),
+    (error) => error.statusCode === 409 && /dedicated payment refund endpoint/i.test(error.message),
+  );
+  assert.equal(f.payment.status, 'success');
+  assert.equal(f.booking.status, 'confirmed');
+  assert.equal(f.flight.available_seats, 8);
 });
 
 for (const group_by of ['day', 'month']) {
