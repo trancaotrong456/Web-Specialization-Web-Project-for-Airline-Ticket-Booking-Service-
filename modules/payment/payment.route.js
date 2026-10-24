@@ -8,17 +8,20 @@ const {
     refundValidator,
     paymentListValidator,
     paymentIdValidator,
+    reconciliationCaseIdValidator,
+    reconciliationReviewActionValidator,
+    reconciliationCaseListValidator,
     revenueValidator,
 } = require('../../validators/payment.validator');
 
 const defaultGuards = { authenticate, optionalAuth, authorize };
-const defaultValidators = { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, revenueValidator };
+const defaultValidators = { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator };
 const defaultValidation = { validate };
 
 function createPaymentRouter({ paymentController, guards = defaultGuards, validators = defaultValidators, validation = defaultValidation, expressModule = express } = {}) {
 const router = expressModule.Router();
 const { authenticate, optionalAuth, authorize } = guards;
-const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, revenueValidator } = validators;
+const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator } = validators;
 const { validate } = validation;
 
 // Administrative payment history and detail (report Table 2.1).
@@ -30,6 +33,12 @@ router.get(
     validate,
     paymentController.getAllPayments
 );
+
+router.get('/reconciliation-cases', authenticate, authorize('admin', 'staff'), reconciliationCaseListValidator, validate, paymentController.getReconciliationCases);
+router.get('/reconciliation-cases/:id', authenticate, authorize('admin', 'staff'), reconciliationCaseIdValidator, validate, paymentController.getReconciliationCaseById);
+router.get('/reconciliation-metrics', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetrics);
+router.get('/reconciliation-metrics/prometheus', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetricsPrometheus);
+router.post('/reconciliation-cases/:id/manual-review', authenticate, authorize('admin', 'staff'), reconciliationReviewActionValidator, validate, paymentController.recordManualReviewAction);
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);

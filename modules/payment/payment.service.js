@@ -14,6 +14,8 @@ const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util
 const { getVnpayConfig } = require('../../config/vnpay');
 const crypto = require('crypto');
 const { VnpayGateway } = require('./vnpay.gateway');
+const { redactString } = require('../../shared/security/redactSensitive');
+const { emitReconciliationEvent, evaluateReconciliationAlerts } = require('../../infrastructure/observability/reconciliationObservability');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -32,7 +34,7 @@ const formatDateVnpay = (date) => {
 };
 
 class PaymentService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payOSFactory, qrCode = QRCode, emailProvider, vnpayGateway, clock = () => new Date(), workerId, logger = console } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Payment repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
@@ -42,6 +44,9 @@ class PaymentService {
     this.qrCode = qrCode;
     this.emailProvider = emailProvider;
     this.vnpayGateway = vnpayGateway || new VnpayGateway();
+    this.clock = clock;
+    this.workerId = workerId || `payos-reconcile-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
+    this.logger = logger;
   }
 
   _isPaymentConfirmationWindowExpired(booking, now = new Date()) {
@@ -80,6 +85,76 @@ class PaymentService {
     }
 
     return payment;
+  }
+
+  async getReconciliationCases({ page = 1, limit = 20, provider, state, payment_id, booking_id, booking_code, manual_review_reason, sort = 'created_at', order = 'desc' } = {}) {
+    const normalizedPage = Math.max(1, Number.parseInt(page, 10) || 1);
+    const normalizedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
+    const where = {};
+    if (provider) where.provider = provider;
+    if (state) where.state = state;
+    if (payment_id) where.payment_id = payment_id;
+    if (booking_id) where.booking_id = booking_id;
+    if (manual_review_reason) where.manual_review_reason = manual_review_reason;
+    const result = await this.repository.listReconciliationCases({
+      where: { ...where, ...(booking_code ? { '$booking.booking_code$': booking_code } : {}) },
+      limit: normalizedLimit,
+      offset: (normalizedPage - 1) * normalizedLimit,
+      order: [[sort, order.toUpperCase()]],
+    });
+    return { data: result.rows.map((row) => this._safeReconciliationCase(row)), total: result.count, page: normalizedPage, limit: normalizedLimit };
+  }
+
+  async getReconciliationCaseById(id) {
+    const row = await this.repository.findReconciliationCaseDetail(id);
+    if (!row) { const error = new Error('Reconciliation case not found'); error.statusCode = 404; throw error; }
+    return this._safeReconciliationCase(row, true);
+  }
+
+  async recordManualReviewAction(caseId, { action, reason, outcome_reference: outcomeReference = null } = {}, operator) {
+    if (!operator?.id) { const error = new Error('An authenticated operator is required'); error.statusCode = 401; throw error; }
+    if (!['acknowledge', 'financial_reconciled', 'escalate'].includes(action)) { const error = new Error('Unsupported manual-review action'); error.statusCode = 422; throw error; }
+    if (!reason || String(reason).trim().length < 3) { const error = new Error('A manual-review reason is required'); error.statusCode = 422; throw error; }
+    return this.transactionManager.transaction(async (transaction) => {
+      const actionRow = await this.repository.createManualReviewAction(caseId, operator.id, { action, reason: redactString(reason), outcomeReference }, { transaction });
+      return actionRow.toJSON ? actionRow.toJSON() : actionRow;
+    });
+  }
+
+  _safeReconciliationCase(row, detail = false) {
+    const value = row.toJSON ? row.toJSON() : row;
+    const payment = value.payment || {};
+    const booking = value.booking || {};
+    const latePaid = value.last_gateway_status === 'PAID'
+      && (value.manual_review_reason || '').toUpperCase().includes('LATE');
+    const result = {
+      id: value.id, provider: value.provider, state: value.state, payment_id: value.payment_id,
+      booking_id: value.booking_id, attempt_count: value.attempt_count, max_attempts: value.max_attempts,
+      last_gateway_status: value.last_gateway_status, last_checked_at: value.last_checked_at,
+      next_attempt_at: value.next_attempt_at, manual_review_reason: value.manual_review_reason,
+      created_at: value.created_at, updated_at: value.updated_at,
+      payment: { id: payment.id, status: payment.status, ...(detail ? { amount: payment.amount, paid_at: payment.paid_at } : {}) },
+      booking: { id: booking.id, booking_code: booking.booking_code, status: booking.status },
+      is_late_paid_exception: latePaid,
+    };
+    if (detail) {
+      result.last_attempt_at = value.last_attempt_at;
+      result.resolved_at = value.resolved_at;
+      result.last_error = redactString(value.last_error || '');
+      result.lease_expires_at = value.lease_expires_at;
+      if (value.reviewAction) {
+        result.manual_review_action = {
+          id: value.reviewAction.id,
+          action: value.reviewAction.action,
+          reason: redactString(value.reviewAction.reason || ''),
+          outcome_reference: value.reviewAction.outcome_reference || null,
+          operator_user_id: value.reviewAction.operator_user_id,
+          operator_name: value.reviewAction.operator?.full_name || null,
+          created_at: value.reviewAction.created_at,
+        };
+      }
+    }
+    return result;
   }
 
   _getPayOSMode() {
@@ -131,6 +206,189 @@ class PaymentService {
       checksumKey: process.env.PAYOS_CHECKSUM_KEY,
       baseURL: process.env.PAYOS_BASE_URL || undefined,
     });
+  }
+
+  async getPayosPaymentStatus(transactionRef) {
+    const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(transactionRef));
+    return paymentLink;
+  }
+
+  _payosRetryDelayMs(attemptCount, jitterRatio = 0) {
+    const baseMinutes = Math.min(2 ** Math.max(0, Number(attemptCount) - 1), 16);
+    const ratio = Number.isFinite(Number(jitterRatio)) ? Math.max(0, Math.min(0.2, Number(jitterRatio))) : 0;
+    const jitter = ratio === 0 ? 1 : 1 + ((Math.random() * 2 - 1) * ratio);
+    return Math.round(baseMinutes * 60 * 1000 * jitter);
+  }
+
+  async ensurePayosReconciliationCases({ now = this.clock(), graceMinutes = 5, limit = 100 } = {}) {
+    if (typeof this.repository.findPendingPayosPaymentsWithoutCase !== 'function') return 0;
+    const configuredGrace = Number(graceMinutes);
+    const effectiveGrace = Number.isFinite(configuredGrace) && configuredGrace >= 0 ? configuredGrace : 5;
+    const cutoff = new Date(new Date(now).getTime() - effectiveGrace * 60 * 1000);
+    const payments = await this.repository.findPendingPayosPaymentsWithoutCase(cutoff, limit);
+    let created = 0;
+    for (const payment of payments) {
+      if (payment.reconciliationCase) continue;
+      try {
+        await this.transactionManager.transaction(async (transaction) => {
+          await this.repository.createOrFindCase({
+            paymentId: payment.id,
+            bookingId: payment.booking_id,
+            provider: 'payos',
+            nextAttemptAt: now,
+          }, { transaction });
+          created += 1;
+        });
+      } catch (error) {
+        emitReconciliationEvent(this.logger, 'case_creation_failed', { payment_id: payment.id, booking_id: payment.booking_id, error_code: error.code || error.name || 'CASE_STORE_ERROR' });
+        console.warn('[payOS reconciliation] case discovery failed', {
+          paymentId: payment.id,
+          bookingId: payment.booking_id,
+          error: String(error?.message || error).replace(/[\r\n\t]+/g, ' ').slice(0, 240),
+        });
+      }
+    }
+    return created;
+  }
+
+  async _processPayosReconciliationCase(reconciliationCase, { now = this.clock(), jitterRatio = 0 } = {}) {
+    let gatewayStatus;
+    let gatewayError = null;
+    try {
+      const paymentSnapshot = await this.repository.findPaymentByPk(reconciliationCase.payment_id);
+      if (!paymentSnapshot || paymentSnapshot.payment_method !== 'payos') return;
+      gatewayStatus = await this.getPayosPaymentStatus(paymentSnapshot.transaction_ref);
+    } catch (error) {
+      gatewayError = error;
+      emitReconciliationEvent(this.logger, 'gateway_timeout', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id, error_code: error.code || error.name || 'GATEWAY_ERROR' });
+    }
+
+    let seatUpdates = [];
+    await this.transactionManager.transaction(async (transaction) => {
+      const payment = await this.repository.findLockedPaymentById(reconciliationCase.payment_id, transaction);
+      const booking = payment ? await this.repository.findLockedBookingWithPassengers(payment.booking_id, transaction) : null;
+      if (!payment || !booking) return;
+      if (payment.status === 'success') {
+        await this.repository.resolveCase(reconciliationCase.id, this.workerId, {
+          resolvedAt: now, lastGatewayStatus: String(gatewayStatus?.status || 'PAID').toUpperCase(),
+        }, { transaction });
+        return;
+      }
+
+      const status = String(gatewayStatus?.status || '').toUpperCase();
+      const sameOrder = String(gatewayStatus?.orderCode ?? gatewayStatus?.order_code ?? '') === String(payment.transaction_ref);
+      const sameAmount = Number(gatewayStatus?.amount) === Number(payment.amount);
+      const valid = !gatewayError && sameOrder && sameAmount;
+
+      if (valid && status === 'PAID' && payment.status === 'pending') {
+        payment.status = 'success';
+        payment.paid_at = payment.paid_at || new Date(now);
+        await this.repository.save(payment, { transaction });
+        const holdValid = booking.status === 'pending_payment'
+          && booking.hold_expires_at && new Date(booking.hold_expires_at) >= new Date(now);
+        const flight = holdValid ? await this.repository.findLockedFlight(booking.flight_id, transaction) : null;
+        const eligible = holdValid && flight && flight.status === 'scheduled'
+          && new Date(flight.departure_time).getTime() > new Date(now).getTime();
+        if (eligible) {
+          booking.status = 'confirmed';
+          await this.repository.save(booking, { transaction });
+          await this.repository.resolveCase(reconciliationCase.id, this.workerId, { resolvedAt: now, lastGatewayStatus: status }, { transaction });
+        } else {
+          emitReconciliationEvent(this.logger, 'late_paid_detected', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
+          await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Late PAID payment requires financial reconciliation', { transaction });
+        }
+        return;
+      }
+
+      if (valid && status === 'CANCELLED' && payment.status === 'pending') {
+        payment.status = 'failed';
+        await this.repository.save(payment, { transaction });
+        if (booking.status === 'pending_payment') {
+          const holdValid = booking.hold_expires_at && new Date(booking.hold_expires_at) >= new Date(now);
+          if (holdValid) booking.status = 'holding';
+          else {
+            booking.status = 'expired';
+            seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+          }
+          await this.repository.save(booking, { transaction });
+        }
+        await this.repository.resolveCase(reconciliationCase.id, this.workerId, { resolvedAt: now, lastGatewayStatus: status }, { transaction });
+        return;
+      }
+
+      const attemptCount = Number(reconciliationCase.attempt_count);
+      if (attemptCount >= Number(reconciliationCase.max_attempts)) {
+        emitReconciliationEvent(this.logger, 'manual_review_required', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id, reason: 'RETRY_EXHAUSTED' });
+        await this.repository.markManualReview(reconciliationCase.id, this.workerId,
+          gatewayError ? `payOS lookup unavailable: ${gatewayError.message}` : `payOS status ${status || 'UNKNOWN'} remains unresolved`, { transaction });
+        return;
+      }
+      const nextAttemptAt = new Date(new Date(now).getTime() + this._payosRetryDelayMs(attemptCount, jitterRatio));
+      emitReconciliationEvent(this.logger, 'retry_scheduled', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id, attempt_count: attemptCount, next_attempt_at: nextAttemptAt.toISOString() });
+      await this.repository.completeAttempt(reconciliationCase.id, this.workerId, {
+        lastGatewayStatus: status || 'UNKNOWN',
+        lastError: gatewayError,
+        nextAttemptAt,
+      }, { transaction });
+    });
+    if (seatUpdates.length > 0) await this._emitSeatUpdates(seatUpdates);
+  }
+
+  async reconcilePayosCases({ now = this.clock(), graceMinutes = 5, limit = 10, jitterRatio = 0 } = {}) {
+    const startedAt = Date.now();
+    emitReconciliationEvent(this.logger, 'worker_started', { worker_id: this.workerId });
+    if (typeof this.repository.acquirePayosReconciliationOwnership !== 'function'
+      || typeof this.repository.releasePayosReconciliationOwnership !== 'function') {
+      this.logger.warn?.('[payOS reconciliation] distributed ownership is unavailable; polling skipped');
+      return { claimedCount: 0, ownership: 'unavailable' };
+    }
+    const leaseMs = Math.max(1000, Number(process.env.PAYOS_RECONCILIATION_OWNERSHIP_LEASE_MS) || 120000);
+    const acquired = await this.transactionManager.transaction((transaction) => this.repository.acquirePayosReconciliationOwnership({ owner: this.workerId, now, leaseMs }, { transaction }));
+    if (!acquired) return { claimedCount: 0, ownership: 'busy' };
+    try {
+      await this.ensurePayosReconciliationCases({ now, graceMinutes });
+      if (typeof this.repository.releaseExpiredLease === 'function') {
+        const released = await this.transactionManager.transaction((transaction) => this.repository.releaseExpiredLease({ now }, { transaction }));
+        const releasedCount = Array.isArray(released) ? released[0] : Number(released?.count || released || 0);
+        if (releasedCount > 0) emitReconciliationEvent(this.logger, 'lease_recovered', { worker_id: this.workerId, recovered_count: releasedCount });
+      }
+      const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({
+        owner: this.workerId, provider: 'payos', now, limit,
+      }, { transaction }));
+      let processedCount = 0;
+      for (const reconciliationCase of due) {
+        const renewed = await this.transactionManager.transaction((transaction) => this.repository.renewPayosReconciliationOwnership({ owner: this.workerId, now, leaseMs }, { transaction }));
+        if (!renewed) break;
+        emitReconciliationEvent(this.logger, 'case_claimed', { worker_id: this.workerId, case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
+        await this._processPayosReconciliationCase(reconciliationCase, { now, jitterRatio });
+        processedCount += 1;
+      }
+      emitReconciliationEvent(this.logger, 'worker_completed', { worker_id: this.workerId, claimed_count: processedCount, duration_ms: Date.now() - startedAt });
+      return { claimedCount: processedCount, ownership: 'acquired' };
+    } finally {
+      await this.transactionManager.transaction((transaction) => this.repository.releasePayosReconciliationOwnership({ owner: this.workerId }, { transaction }));
+    }
+  }
+
+  async getReconciliationMetrics({ now = this.clock(), pendingSlaMinutes = Number(process.env.PAYMENT_PENDING_SLA_MINUTES || 30) } = {}) {
+    const raw = await this.repository.getReconciliationMetrics({ pendingSince: new Date(new Date(now).getTime() - Math.max(0, pendingSlaMinutes) * 60000) });
+    const metrics = {
+      active_reconciliation_cases: raw.activeCases,
+      manual_review_cases: raw.manualReviewCases,
+      oldest_unresolved_age_minutes: raw.oldestUnresolvedAt ? Math.max(0, Math.floor((new Date(now).getTime() - new Date(raw.oldestUnresolvedAt).getTime()) / 60000)) : 0,
+      pending_payments_beyond_sla: raw.pendingPaymentsBeyondSla,
+      retry_exhaustion_cases: raw.retryExhaustionCases,
+      late_paid_cases: raw.latePaidCases,
+      gateway_timeout_cases: raw.gatewayTimeoutCases,
+      measured_at: new Date(now).toISOString(),
+    };
+    return { metrics, alerts: evaluateReconciliationAlerts(metrics, process.env) };
+  }
+
+  async getReconciliationMetricsPrometheus() {
+    if (this.metricsCollector?.renderPrometheus) return this.metricsCollector.renderPrometheus();
+    const { createReconciliationMetricsExporter } = require('../../infrastructure/observability/reconciliationMetricsExporter');
+    return createReconciliationMetricsExporter({ service: this, logger: this.logger }).renderPrometheus();
   }
 
   _getVnpayConfig() {
@@ -220,7 +478,7 @@ class PaymentService {
       const emailService = this.emailProvider || require('../../services/email.service');
       await emailService.sendBookingConfirmation(bookingId);
     } catch (error) {
-      console.error(`[Email] Failed to send ticket confirmation email for booking #${bookingId}:`, error.message);
+      console.error(`[Email] Failed to send ticket confirmation email for booking #${bookingId}:`, redactString(error.message));
     }
   }
 
@@ -241,6 +499,7 @@ class PaymentService {
       ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
       : `TXN_${booking_id}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     let bookingData = null;
+    let paymentRecordId = null;
     const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
 
     if (payment_method === 'payos' && payosMode === 'disabled') {
@@ -331,7 +590,7 @@ class PaymentService {
       await this.repository.save(booking, { transaction: t });
 
       // Create pending payment record
-      await this.repository.createPayment(
+      const paymentRecord = await this.repository.createPayment(
         {
           booking_id: booking.id,
           amount: booking.total_amount,
@@ -341,6 +600,7 @@ class PaymentService {
         },
         { transaction: t }
       );
+      paymentRecordId = paymentRecord?.id || null;
 
       bookingData = booking;
     });
@@ -461,6 +721,18 @@ class PaymentService {
         const error = new Error(`Unable to confirm payOS payment-link creation: ${gatewayError.message}`);
         error.statusCode = 502;
         error.transactionRef = txnRef;
+        if (paymentRecordId && typeof this.repository.createOrFindCase === 'function') {
+          try {
+            await this.transactionManager.transaction((transaction) => this.repository.createOrFindCase({
+              paymentId: paymentRecordId,
+              bookingId: bookingData.id,
+              provider: 'payos',
+              nextAttemptAt: new Date(),
+            }, { transaction }));
+          } catch (caseError) {
+            console.warn('[payOS] Could not persist reconciliation case after ambiguous link creation:', caseError.message);
+          }
+        }
         throw error;
       }
     }
@@ -780,7 +1052,9 @@ class PaymentService {
       throw error;
     }
 
-    const isRecordableLateSuccess = isSuccess && payment.status === 'failed';
+    const isRecordableLateSuccess = isSuccess
+      && (payment.status === 'failed'
+        || (payment.status === 'pending' && payment.booking.status !== 'pending_payment'));
 
     if (payment.status === 'success' || (payment.booking.status === 'confirmed' && !isRecordableLateSuccess)) {
       return { message: 'Order already confirmed' };
@@ -803,7 +1077,8 @@ class PaymentService {
       // requests from confirming and emailing the same booking concurrently.
       if (!lockedPayment || !lockedBooking) return;
       if (lockedPayment.status === 'success') return;
-      if (isSuccess && lockedPayment.status === 'failed') {
+      if (isSuccess && (lockedPayment.status === 'failed'
+        || (lockedPayment.status === 'pending' && lockedBooking.status !== 'pending_payment'))) {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });
@@ -949,7 +1224,7 @@ class PaymentService {
       return { operationId: operation.id, ...result };
     } catch (error) {
       const status = error.outcome || 'unknown';
-      await this._updateGatewayOperation(operation.id, { status, last_error: String(error.message).slice(0, 500), completed_at: status === 'unknown' ? null : new Date() });
+      await this._updateGatewayOperation(operation.id, { status, last_error: redactString(error.message), completed_at: status === 'unknown' ? null : new Date() });
       throw error;
     }
   }
@@ -1028,7 +1303,7 @@ class PaymentService {
         }
       });
     } catch (error) {
-      await this._updateGatewayOperation(operation.id, { status: error.outcome || 'unknown', last_error: String(error.message).slice(0, 500), completed_at: error.outcome === 'failed' ? new Date() : null });
+      await this._updateGatewayOperation(operation.id, { status: error.outcome || 'unknown', last_error: redactString(error.message), completed_at: error.outcome === 'failed' ? new Date() : null });
       throw error;
     }
 
@@ -1113,6 +1388,16 @@ class PaymentService {
       if (successfulPayments.length === 0) {
         const error = new Error('No successful payment found for this booking to refund.');
         error.statusCode = 400;
+        throw error;
+      }
+
+      // payOS currently has no verified bank-refund adapter. The shared
+      // booking refund endpoint must fail before changing any payment,
+      // booking, seat or promotion state rather than treating a payment-link
+      // cancellation as a refund.
+      if (successfulPayments.some((payment) => payment.payment_method === 'payos')) {
+        const error = new Error('Automatic payOS refund is not supported; manual refund reconciliation is required.');
+        error.statusCode = 409;
         throw error;
       }
 

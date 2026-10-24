@@ -12,6 +12,7 @@ const created = {
   promotionIds: new Set(),
   bookingIds: new Set(),
   paymentIds: new Set(),
+  userIds: new Set(),
 };
 
 function randomLetters(length) {
@@ -21,10 +22,14 @@ function randomLetters(length) {
 
 async function createFlightFixture({ availableSeats = 1, totalSeats = availableSeats } = {}) {
   const suffix = crypto.randomUUID().slice(0, 8);
-  const airline = await models.Airline.create({
-    name: `IT Airline ${suffix}`,
-    iata_code: randomLetters(3),
-  });
+  let airline;
+  while (!airline) {
+    try {
+      airline = await models.Airline.create({ name: `IT Airline ${suffix}`, iata_code: randomLetters(3) });
+    } catch (error) {
+      if (error.name !== 'SequelizeUniqueConstraintError') throw error;
+    }
+  }
   created.airlineIds.add(airline.id);
 
   let departure;
@@ -134,6 +139,13 @@ async function cleanupTrackedFixtures() {
       const operationPaymentIds = paymentIds.map(({ id }) => id);
       if (operationPaymentIds.length > 0) {
         await models.PaymentGatewayOperation.destroy({ where: { payment_id: operationPaymentIds }, force: true });
+        if (models.PaymentReconciliationCase) {
+          if (models.ReconciliationReviewAction) {
+            const caseIds = await models.PaymentReconciliationCase.findAll({ where: { payment_id: operationPaymentIds }, attributes: ['id'], raw: true });
+            if (caseIds.length > 0) await models.ReconciliationReviewAction.destroy({ where: { case_id: caseIds.map(({ id }) => id) }, force: true });
+          }
+          await models.PaymentReconciliationCase.destroy({ where: { payment_id: operationPaymentIds }, force: true });
+        }
       }
     }
     await models.Payment.destroy({ where: { booking_id: bookingIds }, force: true });
@@ -157,8 +169,17 @@ async function cleanupTrackedFixtures() {
   if (airlineIds.length > 0) await models.Airline.destroy({ where: { id: airlineIds }, force: true });
   const airportIds = ids(created.airportIds);
   if (airportIds.length > 0) await models.Airport.destroy({ where: { id: airportIds }, force: true });
+  const userIds = ids(created.userIds);
+  if (userIds.length > 0) await models.User.destroy({ where: { id: userIds }, force: true });
 
   Object.values(created).forEach((set) => set.clear());
+}
+
+async function createOperatorFixture() {
+  const [role] = await models.Role.findOrCreate({ where: { name: 'admin' }, defaults: { description: 'Integration admin' } });
+  const user = await models.User.create({ role_id: role.id, full_name: `IT Operator ${Date.now()}`, email: `it-operator-${Date.now()}@example.test`, password_hash: 'integration-only-hash', status: 'active' });
+  created.userIds.add(user.id);
+  return user;
 }
 
 module.exports = {
@@ -168,4 +189,5 @@ module.exports = {
   trackBooking,
   trackPayment,
   trackPromotion,
+  createOperatorFixture,
 };

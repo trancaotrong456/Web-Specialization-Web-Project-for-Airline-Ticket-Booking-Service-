@@ -3,14 +3,21 @@ const { getIO } = require('../../sockets');
 const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
+const { redactString } = require('../../shared/security/redactSensitive');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
     this.socket = socket;
     this.flightSeatService = flightSeatService;
+    this.payosStatusLookup = payosStatusLookup;
+  }
+
+  async _lookupPayosStatus(transactionRef) {
+    if (typeof this.payosStatusLookup !== 'function') return null;
+    return this.payosStatusLookup(transactionRef);
   }
   /**
    * Helper to generate unique booking code
@@ -418,10 +425,36 @@ class BookingService {
       try {
         let seatUpdates = [];
 
+        // Gateway calls must happen without database row locks. A payOS
+        // payment-link timeout is ambiguous, so query the same orderCode
+        // before deciding whether to fail the local attempt.
+        const paymentSnapshot = typeof this.repository.findPendingPaymentSnapshotForReconciliation === 'function'
+          ? await this.repository.findPendingPaymentSnapshotForReconciliation(candidate.id)
+          : null;
+        if (process.env.PAYOS_RECONCILIATION_WORKER === 'true'
+          && paymentSnapshot?.payment_method === 'payos') continue;
+        let payosStatus = null;
+        if (paymentSnapshot && paymentSnapshot.payment_method === 'payos') {
+          if (paymentSnapshot.status === 'success') {
+            payosStatus = {
+              status: 'PAID', orderCode: paymentSnapshot.transaction_ref, amount: paymentSnapshot.amount,
+            };
+          } else {
+            try {
+              payosStatus = await this._lookupPayosStatus(paymentSnapshot.transaction_ref);
+            } catch (error) {
+              console.warn(`[Cron] payOS status lookup unavailable for booking #${candidate.id}:`, redactString(error.message));
+              continue;
+            }
+          }
+        }
+
         await this.transactionManager.transaction(async (t) => {
           // Match the webhook lock order (Payment -> Booking) when a pending
           // payment exists, reducing deadlock risk during callback races.
-          const payment = await this.repository.findPendingPaymentForReconciliation(candidate.id, t);
+          const payment = typeof this.repository.findPaymentForReconciliation === 'function'
+            ? await this.repository.findPaymentForReconciliation(candidate.id, t)
+            : await this.repository.findPendingPaymentForReconciliation(candidate.id, t);
 
           const booking = await this.repository.findBookingForReconciliation(candidate.id, t);
 
@@ -431,6 +464,47 @@ class BookingService {
           // investigation instead of risking expiry after a successful charge.
           if (!payment) return;
           if (!booking.hold_expires_at || new Date(booking.hold_expires_at) >= cutoff) return;
+          // The expanded lookup includes a successful payOS payment only so a
+          // webhook/reconciliation race can finish expiring its booking. Keep
+          // the legacy VNPay reconciliation path unchanged.
+          if (payment.status === 'success' && payment.payment_method !== 'payos') return;
+
+          if (payment.payment_method === 'payos') {
+            const status = payment.status === 'success'
+              ? 'PAID'
+              : String(payosStatus?.status || '').toUpperCase();
+
+            const sameOrder = String(payosStatus?.orderCode ?? payosStatus?.order_code ?? '')
+              === String(payment.transaction_ref);
+            const sameAmount = Number(payosStatus?.amount) === Number(payment.amount);
+
+            // PENDING, unknown and malformed responses remain pending for a
+            // later reconciliation. They must never release inventory.
+            if (!['PAID', 'CANCELLED'].includes(status) || !sameOrder || !sameAmount) return;
+
+            if (status === 'PAID') {
+              if (payment.status === 'pending') {
+                payment.status = 'success';
+                payment.paid_at = payment.paid_at || new Date();
+                await this.repository.save(payment, { transaction: t });
+              }
+
+              // The hold has expired, so record the charge for manual review
+              // but do not confirm the expired booking. Release resources only
+              // while transitioning this pending booking once.
+              seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
+              if (booking.promotion_id) {
+                const promo = await this.repository.findPromotionByIdForUpdate(booking.promotion_id, t);
+                if (promo && promo.used_count > 0) {
+                  await this.repository.decrement(promo, 'used_count', { by: 1, transaction: t });
+                }
+              }
+              booking.status = 'expired';
+              await this.repository.save(booking, { transaction: t });
+              reconciledCount++;
+              return;
+            }
+          }
 
           payment.status = 'failed';
           await this.repository.save(payment, { transaction: t });
@@ -451,7 +525,7 @@ class BookingService {
 
         await this._emitSeatUpdates(seatUpdates);
       } catch (error) {
-        console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, error.message);
+          console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, redactString(error.message));
       }
     }
 

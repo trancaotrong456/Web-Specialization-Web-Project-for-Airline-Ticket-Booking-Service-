@@ -209,3 +209,29 @@ test('IT-18 WebSocket emission failure after commit does not change successful r
     await cleanupTrackedFixtures();
   }
 });
+
+test('IT-19 payOS refund is rejected without changing payment, booking, seats or promotion', { timeout: 20000 }, async () => {
+  const promotion = await createPromotionFixture({ maxUses: 1 });
+  const { fixture, booking, payment } = await createPaidPayment('IT19', { promotionCode: promotion.code });
+  const storedPayment = await models.Payment.findByPk(payment.id);
+  storedPayment.payment_method = 'payos';
+  await storedPayment.save();
+
+  const beforeFlight = await models.Flight.findByPk(fixture.flight.id);
+  const beforePromotion = await models.Promotion.findByPk(promotion.id);
+  const beforeBooking = await models.Booking.findByPk(booking.id);
+
+  await assert.rejects(
+    () => paymentService.processRefund(booking.id, 'IT-19 payOS refund', adminUser),
+    (error) => error.statusCode === 409 && /manual refund reconciliation/i.test(error.message),
+  );
+
+  const afterPayment = await models.Payment.findByPk(payment.id);
+  const afterBooking = await models.Booking.findByPk(booking.id);
+  const afterFlight = await models.Flight.findByPk(fixture.flight.id);
+  const afterPromotion = await models.Promotion.findByPk(promotion.id);
+  assert.equal(afterPayment.status, 'success');
+  assert.equal(afterBooking.status, beforeBooking.status);
+  assert.equal(afterFlight.available_seats, beforeFlight.available_seats);
+  assert.equal(afterPromotion.used_count, beforePromotion.used_count);
+});

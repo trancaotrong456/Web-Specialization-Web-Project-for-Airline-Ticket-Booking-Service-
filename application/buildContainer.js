@@ -197,6 +197,7 @@ function getDefaultBookingModule() {
     transactionManager: models.sequelize,
     ticketController: getDefaultTicketModule().controller,
     socket: getSocket,
+    payosStatusLookup: async (transactionRef) => getDefaultPaymentModule().service.getPayosPaymentStatus(transactionRef),
   });
   return defaultBookingModule;
 }

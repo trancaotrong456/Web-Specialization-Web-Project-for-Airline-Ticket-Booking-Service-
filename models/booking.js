@@ -10,6 +10,7 @@ module.exports = (sequelize, DataTypes) => {
       Booking.belongsTo(models.Promotion, { foreignKey: 'promotion_id', as: 'promotion' });
       Booking.hasMany(models.BookingPassenger, { foreignKey: 'booking_id', as: 'passengers' });
       Booking.hasMany(models.Payment, { foreignKey: 'booking_id', as: 'payments' });
+      Booking.hasMany(models.PaymentReconciliationCase, { foreignKey: 'booking_id', as: 'reconciliationCases' });
       if (models.BookingSegment) Booking.hasMany(models.BookingSegment, { foreignKey: 'booking_id', as: 'itinerarySegments' });
     }
   }

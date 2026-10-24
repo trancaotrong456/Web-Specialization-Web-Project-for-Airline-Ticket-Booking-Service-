@@ -1,12 +1,13 @@
 const ApiResponse = require('../../utils/apiResponse');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
+const { redactError } = require('../../shared/security/redactSensitive');
 
 class PaymentController {
   constructor({ service, apiResponse = ApiResponse } = {}) {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -26,6 +27,26 @@ class PaymentController {
     } catch (error) {
       next(error);
     }
+  }
+  async getReconciliationCases(req, res, next) {
+    try { return this.apiResponse.paginated(res, await this.service.getReconciliationCases(req.query), 'Reconciliation cases retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationCaseById(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getReconciliationCaseById(req.params.id), 'Reconciliation case retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationMetrics(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getReconciliationMetrics(), 'Reconciliation metrics retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationMetricsPrometheus(req, res, next) {
+    try { return res.type('text/plain').send(await this.service.getReconciliationMetricsPrometheus()); }
+    catch (error) { next(error); }
+  }
+  async recordManualReviewAction(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.recordManualReviewAction(req.params.id, req.body, req.user), 'Manual-review action recorded successfully'); }
+    catch (error) { next(error); }
   }
 
   async initiatePayment(req, res, next) {
@@ -60,7 +81,7 @@ class PaymentController {
       // VNPay expects HTTP 200 with JSON { RspCode: '...', Message: '...' }
       return res.status(200).json(result);
     } catch (error) {
-      console.error('[VNPay IPN Error]', error);
+      console.error('[VNPay IPN Error]', redactError(error));
       return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
     }
   }

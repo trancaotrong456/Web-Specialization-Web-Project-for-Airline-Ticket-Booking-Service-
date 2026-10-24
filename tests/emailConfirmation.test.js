@@ -14,6 +14,7 @@ test('confirmation email generates and sends the e-ticket PDF attachment', async
   const originalFetch = global.fetch;
   const pdfBuffer = Buffer.from('%PDF-test-ticket');
   let requestBody;
+  emailService.setAdapter({ send: async (message) => { requestBody = message; return { id: 'email-test-id' }; } });
 
   models.Booking.findByPk = async () => ({
     id: 321,
@@ -58,6 +59,7 @@ test('confirmation email generates and sends the e-ticket PDF attachment', async
     models.Booking.findByPk = originalFindByPk;
     ticketService.generateTicketPDF = originalGenerateTicket;
     global.fetch = originalFetch;
+    emailService.resetAdapter();
   }
 });
 
@@ -66,6 +68,7 @@ test('multi-leg confirmation email lists ordered flights, fares, passengers and 
   const originalGenerateTicket = ticketService.generateTicketPDF;
   const originalFetch = global.fetch;
   let requestBody;
+  emailService.setAdapter({ send: async (message) => { requestBody = message; return { id: 'email-multi-test' }; } });
   const flight = (airline, from, to) => ({
     departure_time: new Date('2026-11-01T06:45:00+07:00'), arrival_time: new Date('2026-11-01T08:55:00+07:00'),
     airline: { name: airline }, departureAirport: { city: from, iata_code: from }, arrivalAirport: { city: to, iata_code: to },
@@ -99,5 +102,6 @@ test('multi-leg confirmation email lists ordered flights, fares, passengers and 
     models.Booking.findByPk = originalFindByPk;
     ticketService.generateTicketPDF = originalGenerateTicket;
     global.fetch = originalFetch;
+    emailService.resetAdapter();
   }
 });

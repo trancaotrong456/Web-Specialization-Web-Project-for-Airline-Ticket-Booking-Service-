@@ -1,6 +1,8 @@
 const cron = require('node-cron');
 const bookingService = require('../services/booking.service');
+const paymentService = require('../services/payment.service');
 const { createBookingMaintenanceJob } = require('../infrastructure/jobs/bookingMaintenanceJob');
+const { createReconciliationMetricsExporter, createConfiguredAlertSink } = require('../infrastructure/observability/reconciliationMetricsExporter');
 
 /**
  * Expire holding bookings cron job
@@ -9,8 +11,10 @@ const { createBookingMaintenanceJob } = require('../infrastructure/jobs/bookingM
  *
  * IMPORTANT: Only targets { status: 'holding' } — NOT 'pending_payment'.
  */
-const defaultJob = createBookingMaintenanceJob({ cron, bookingService });
-const initExpireBookingsJob = () => defaultJob.start();
+const metricsCollector = createReconciliationMetricsExporter({ service: paymentService, alertSink: createConfiguredAlertSink() });
+paymentService.metricsCollector = metricsCollector;
+const defaultJob = createBookingMaintenanceJob({ cron, bookingService, paymentService, metricsCollector });
+const initExpireBookingsJob = () => { defaultJob.start(); return defaultJob; };
 
 module.exports = {
   initExpireBookingsJob,
