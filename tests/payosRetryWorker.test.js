@@ -59,3 +59,21 @@ test('maintenance feature flags select exactly one reconciliation path', async (
     }
   }
 });
+
+test('maintenance runs VNPay and payOS reconcilers independently', async () => {
+  let run;
+  const calls = [];
+  const job = createBookingMaintenanceJob({
+    cron: { schedule(_expression, callback) { run = callback; return {}; } },
+    bookingService: { expireHoldingBookings: async () => ({ expiredCount: 0 }), reconcileStalePendingPayments: async () => { throw new Error('legacy poll must not run'); } },
+    paymentService: {
+      reconcileVnpayCases: async () => { calls.push('vnpay'); throw new Error('VNPay unavailable'); },
+      reconcilePayosCases: async () => { calls.push('payos'); return { claimedCount: 1 }; },
+    },
+    environment: { ENABLE_PENDING_RECONCILIATION: 'true', VNPAY_RECONCILIATION_WORKER: 'true', PAYOS_RECONCILIATION_WORKER: 'true' },
+    logger: { log() {}, error() {} },
+  });
+  job.start();
+  await run();
+  assert.deepEqual(calls, ['vnpay', 'payos']);
+});

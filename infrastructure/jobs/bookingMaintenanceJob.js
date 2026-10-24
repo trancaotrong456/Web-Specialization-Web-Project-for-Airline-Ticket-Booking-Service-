@@ -14,10 +14,17 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, met
         const result = await bookingService.expireHoldingBookings();
         if (result.expiredCount > 0) logger.log(`[Cron] Expired ${result.expiredCount} holding booking(s) at ${new Date().toISOString()}`);
         if (environment.ENABLE_PENDING_RECONCILIATION === 'true') {
-          const reconciliation = environment.PAYOS_RECONCILIATION_WORKER === 'true' && paymentService
-            ? await paymentService.reconcilePayosCases({ jitterRatio: Number(environment.PAYOS_RECONCILIATION_JITTER || 0) })
-            : await bookingService.reconcileStalePendingPayments();
-          const count = reconciliation.reconciledCount ?? reconciliation.claimedCount ?? 0;
+          const results = [];
+          if (environment.VNPAY_RECONCILIATION_WORKER === 'true' && paymentService?.reconcileVnpayCases) {
+            try { results.push(await paymentService.reconcileVnpayCases()); }
+            catch (error) { logger.error('[Cron] VNPay reconciliation failed:', error.message); }
+          }
+          if (environment.PAYOS_RECONCILIATION_WORKER === 'true' && paymentService?.reconcilePayosCases) {
+            try { results.push(await paymentService.reconcilePayosCases({ jitterRatio: Number(environment.PAYOS_RECONCILIATION_JITTER || 0) })); }
+            catch (error) { logger.error('[Cron] payOS reconciliation failed:', error.message); }
+          }
+          if (results.length === 0) results.push(await bookingService.reconcileStalePendingPayments());
+          const count = results.reduce((sum, reconciliation) => sum + Number(reconciliation?.reconciledCount ?? reconciliation?.claimedCount ?? 0), 0);
           if (count > 0) logger.log(`[Cron] Reconciled ${count} stale pending payment(s) at ${new Date().toISOString()}`);
         }
         await metricsCollector?.refresh?.();

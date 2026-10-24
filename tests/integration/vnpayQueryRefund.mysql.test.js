@@ -39,7 +39,7 @@ function makeGateway({ refundCode = '00', queryCode = '00', failLocalResponse = 
       vnp_Command: request.vnp_Command,
       vnp_TmnCode: process.env.VNP_TMN_CODE,
       vnp_TxnRef: request.vnp_TxnRef,
-      vnp_Amount: request.vnp_Amount || '18000000',
+      vnp_Amount: request.vnp_Amount || '100000000',
       vnp_Message: code === '00' ? 'Success' : 'Rejected',
       vnp_BankCode: 'NCB',
       vnp_PayDate: '20261021050000',
@@ -148,8 +148,10 @@ test('IT-14 QueryDR persists a verified reconciliation result', { timeout: 20000
   try {
     const { payment } = await createPaidPayment('IT14');
     const result = await paymentService.queryVnpayPayment(payment.id);
+    const duplicate = await paymentService.queryVnpayPayment(payment.id);
     const operation = await models.PaymentGatewayOperation.findOne({ where: { payment_id: payment.id, operation_type: 'querydr' } });
     assert.equal(result.status, 'success'); assert.equal(calls[0].vnp_Command, 'querydr');
+    assert.equal(duplicate.status, 'success'); assert.equal(calls.length, 1);
     assert.equal(operation.status, 'success'); assert.equal(operation.response_json.vnp_ResponseCode, '00');
   } finally { restore(); await cleanupTrackedFixtures(); }
 });

@@ -62,6 +62,52 @@ class PaymentService {
     return Boolean(latest && String(latest.id) === String(payment.id));
   }
 
+  async _releaseExpiredBookingResources(booking, transaction) {
+    const seatUpdates = await releaseBookingFlightSeats(booking, {
+      repository: this.repository,
+      transaction,
+      findFlight: this.repository.findLockedFlight.bind(this.repository),
+    });
+    if (booking.promotion_id) {
+      const promo = await this.repository.findLockedPromotion(booking.promotion_id, transaction);
+      if (promo && Number(promo.used_count) > 0) {
+        await this.repository.decrement(promo, 'used_count', { by: 1, transaction });
+      }
+    }
+    return seatUpdates;
+  }
+
+  async _recordFinancialException(payment, booking, transaction, {
+    status = 'PAID', reason = 'Late PAID payment requires financial reconciliation',
+    releaseIfPending = true,
+  } = {}) {
+    // Lightweight service unit fixtures use a transaction-shaped object with
+    // no database identity; durable cases are exercised by integration tests.
+    if (typeof this.repository.createOrFindCase !== 'function' || (!transaction?.id && !transaction?.connection)) return null;
+    const reconciliationCase = await this.repository.createOrFindCase({
+      paymentId: payment.id,
+      bookingId: booking.id,
+      provider: payment.payment_method,
+      nextAttemptAt: this.clock(),
+    }, { transaction });
+    if (typeof this.repository.markCaseManualReview === 'function') {
+      await this.repository.markCaseManualReview(reconciliationCase.id, reason, {
+        lastGatewayStatus: status,
+        transaction,
+      });
+    }
+    // A late financial result never revives a booking. If its hold is still
+    // represented by pending_payment, close that hold and release resources
+    // atomically; terminal bookings have already released resources.
+    if (releaseIfPending && booking.status === 'pending_payment') {
+      booking.status = 'expired';
+      const seatUpdates = await this._releaseExpiredBookingResources(booking, transaction);
+      await this.repository.save(booking, { transaction });
+      return { reconciliationCase, seatUpdates };
+    }
+    return { reconciliationCase, seatUpdates: [] };
+  }
+
   async _getItineraryPaymentError(booking, transaction, now = new Date()) {
     const flightIds = await getBookingFlightIds(booking, this.repository, transaction);
     const flights = [];
@@ -294,9 +340,20 @@ class PaymentService {
       const booking = payment ? await this.repository.findLockedBookingWithPassengers(payment.booking_id, transaction) : null;
       if (!payment || !booking) return;
       if (payment.status === 'success') {
-        await this.repository.resolveCase(reconciliationCase.id, this.workerId, {
-          resolvedAt: now, lastGatewayStatus: String(gatewayStatus?.status || 'PAID').toUpperCase(),
-        }, { transaction });
+        if (booking.status === 'confirmed') {
+          await this.repository.resolveCase(reconciliationCase.id, this.workerId, {
+            resolvedAt: now, lastGatewayStatus: String(gatewayStatus?.status || 'PAID').toUpperCase(),
+          }, { transaction });
+        } else {
+          const exception = await this._recordFinancialException(payment, booking, transaction, {
+            status: String(gatewayStatus?.status || 'PAID').toUpperCase(),
+            reason: 'Successful payment remains unresolved and requires financial reconciliation',
+          });
+          if (!exception && typeof this.repository.markManualReview === 'function') {
+            await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Successful payment remains unresolved and requires financial reconciliation', { transaction });
+          }
+          seatUpdates = exception?.seatUpdates || [];
+        }
         return;
       }
 
@@ -321,7 +378,13 @@ class PaymentService {
           await this.repository.resolveCase(reconciliationCase.id, this.workerId, { resolvedAt: now, lastGatewayStatus: status }, { transaction });
         } else {
           emitReconciliationEvent(this.logger, 'late_paid_detected', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
-          await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Late PAID payment requires financial reconciliation', { transaction });
+          const exception = await this._recordFinancialException(payment, booking, transaction, {
+            status: 'PAID', reason: 'Late PAID payment requires financial reconciliation',
+          });
+          if (!exception && typeof this.repository.markManualReview === 'function') {
+            await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Late PAID payment requires financial reconciliation', { transaction });
+          }
+          seatUpdates = exception?.seatUpdates || [];
         }
         return;
       }
@@ -335,7 +398,7 @@ class PaymentService {
           if (holdValid) booking.status = 'holding';
           else {
             booking.status = 'expired';
-            seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction, findFlight: this.repository.findLockedFlight.bind(this.repository) });
+            seatUpdates = await this._releaseExpiredBookingResources(booking, transaction);
           }
           await this.repository.save(booking, { transaction });
         }
@@ -874,7 +937,8 @@ class PaymentService {
       return { RspCode: '02', Message: 'Order already confirmed' };
     }
 
-    const isRecordableLateSuccess = isGatewaySuccess && payment.status === 'failed';
+    const isRecordableLateSuccess = isGatewaySuccess
+      && (payment.status === 'failed' || payment.booking.status !== 'pending_payment');
 
     // A signed late success must be recorded for manual reconciliation.
     if (payment.booking.status === 'confirmed' && !isRecordableLateSuccess) {
@@ -920,6 +984,15 @@ class PaymentService {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });
+        const activeAttempt = await this._isLatestPaymentAttempt(lockedPayment, t);
+        const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+          status: 'PAID',
+          reason: activeAttempt
+            ? 'Late PAID payment for a previous attempt requires financial reconciliation'
+            : 'PAID result belongs to an older payment attempt',
+          releaseIfPending: activeAttempt,
+        });
+        seatUpdates = exception?.seatUpdates || [];
         transactionOutcome = 'requires_review';
         return;
       }
@@ -931,11 +1004,28 @@ class PaymentService {
         lockedPayment.status = isGatewaySuccess ? 'success' : 'failed';
         if (isGatewaySuccess) lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });
+        if (isGatewaySuccess) {
+          const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+            status: 'PAID', reason: 'PAID result belongs to an older payment attempt', releaseIfPending: false,
+          });
+          seatUpdates = exception?.seatUpdates || [];
+        }
         transactionOutcome = isGatewaySuccess ? 'requires_review' : 'invalid_state';
         return;
       }
       if (lockedBooking.status === 'confirmed') {
         transactionOutcome = 'already_confirmed';
+        return;
+      }
+      if (isGatewaySuccess && lockedBooking.status !== 'pending_payment') {
+        lockedPayment.status = 'success';
+        lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+        await this.repository.save(lockedPayment, { transaction: t });
+        const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+          status: 'PAID', reason: 'PAID payment arrived after the booking hold ended',
+        });
+        seatUpdates = exception?.seatUpdates || [];
+        transactionOutcome = 'requires_review';
         return;
       }
       if (lockedBooking.status !== 'pending_payment') {
@@ -950,6 +1040,11 @@ class PaymentService {
           lockedPayment.status = 'success';
           lockedPayment.paid_at = lockedPayment.paid_at || new Date();
           await this.repository.save(lockedPayment, { transaction: t });
+          const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+            status: 'PAID',
+            reason: itineraryError || 'Late PAID payment requires financial reconciliation',
+          });
+          seatUpdates = exception?.seatUpdates || [];
           transactionOutcome = 'requires_review';
           return;
         }
@@ -998,6 +1093,7 @@ class PaymentService {
     });
 
     if (transactionOutcome === 'requires_review') {
+      await this._emitSeatUpdates(seatUpdates);
       return { RspCode: '00', Message: 'Payment recorded; booking requires manual review' };
     }
 
@@ -1118,6 +1214,13 @@ class PaymentService {
         lockedPayment.status = 'success';
         lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });
+        const activeAttempt = await this._isLatestPaymentAttempt(lockedPayment, t);
+        const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+          status: 'PAID',
+          reason: activeAttempt ? 'Late PAID payment requires financial reconciliation' : 'PAID result belongs to an older payment attempt',
+          releaseIfPending: activeAttempt,
+        });
+        seatUpdates = exception?.seatUpdates || [];
         requiresManualReview = true;
         return;
       }
@@ -1126,10 +1229,27 @@ class PaymentService {
         lockedPayment.status = isSuccess ? 'success' : 'failed';
         if (isSuccess) lockedPayment.paid_at = lockedPayment.paid_at || new Date();
         await this.repository.save(lockedPayment, { transaction: t });
+        if (isSuccess) {
+          const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+            status: 'PAID', reason: 'PAID result belongs to an older payment attempt', releaseIfPending: false,
+          });
+          seatUpdates = exception?.seatUpdates || [];
+        }
         requiresManualReview = isSuccess;
         return;
       }
       if (lockedBooking.status === 'confirmed') return;
+      if (isSuccess && lockedBooking.status !== 'pending_payment') {
+        lockedPayment.status = 'success';
+        lockedPayment.paid_at = lockedPayment.paid_at || new Date();
+        await this.repository.save(lockedPayment, { transaction: t });
+        const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+          status: 'PAID', reason: 'PAID payment arrived after the booking hold ended',
+        });
+        seatUpdates = exception?.seatUpdates || [];
+        requiresManualReview = true;
+        return;
+      }
       if (lockedBooking.status !== 'pending_payment') return;
 
       if (isSuccess) {
@@ -1139,6 +1259,10 @@ class PaymentService {
           lockedPayment.status = 'success';
           lockedPayment.paid_at = lockedPayment.paid_at || new Date();
           await this.repository.save(lockedPayment, { transaction: t });
+          const exception = await this._recordFinancialException(lockedPayment, lockedBooking, t, {
+            status: 'PAID', reason: itineraryError || 'Late PAID payment requires financial reconciliation',
+          });
+          seatUpdates = exception?.seatUpdates || [];
           requiresManualReview = true;
           return;
         }
@@ -1164,16 +1288,8 @@ class PaymentService {
           await this.repository.save(lockedBooking, { transaction: t });
         } else {
           lockedBooking.status = 'expired';
+          seatUpdates = await this._releaseExpiredBookingResources(lockedBooking, t);
           await this.repository.save(lockedBooking, { transaction: t });
-
-          seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) });
-
-          if (lockedBooking.promotion_id) {
-            const promo = await this.repository.findLockedPromotion(lockedBooking.promotion_id, t);
-            if (promo && promo.used_count > 0) {
-              await this.repository.decrement(promo, 'used_count', { by: 1, transaction: t });
-            }
-          }
         }
       }
     });
@@ -1244,19 +1360,143 @@ class PaymentService {
     });
   }
 
+  async _applyVnpayQueryResult(paymentId, result, { reconciliationCaseId = null } = {}) {
+    let bookingIdToEmail = null;
+    let seatUpdates = [];
+    await this.transactionManager.transaction(async (transaction) => {
+      const payment = await this.repository.findLockedPaymentById(paymentId, transaction);
+      const booking = payment ? await this.repository.findLockedBookingWithPassengers(payment.booking_id, transaction) : null;
+      if (!payment || !booking) return;
+      if (result.status === 'pending' || result.status === 'unknown') return;
+      if (payment.status === 'success' || payment.status === 'refunded') {
+        if (reconciliationCaseId && payment.status === 'success' && booking.status === 'confirmed') {
+          await this.repository.resolveCase(reconciliationCaseId, this.workerId, {
+            resolvedAt: this.clock(), lastGatewayStatus: String(result.status || 'PAID').toUpperCase(),
+          }, { transaction });
+        }
+        return;
+      }
+      if (!await this._isLatestPaymentAttempt(payment, transaction)) return;
+
+      if (result.status === 'success') {
+        payment.status = 'success';
+        payment.paid_at = payment.paid_at || this.clock();
+        await this.repository.save(payment, { transaction });
+        const itineraryError = await this._getItineraryPaymentError(booking, transaction, this.clock());
+        const eligible = booking.status === 'pending_payment'
+          && !this._isPaymentConfirmationWindowExpired(booking, this.clock())
+          && !itineraryError;
+        if (eligible) {
+          booking.status = 'confirmed';
+          await this.repository.save(booking, { transaction });
+          bookingIdToEmail = booking.id;
+        } else {
+          const exception = await this._recordFinancialException(payment, booking, transaction, {
+            status: 'PAID', reason: itineraryError || 'Late PAID payment requires financial reconciliation',
+          });
+          seatUpdates = exception?.seatUpdates || [];
+        }
+      } else if (result.status === 'failed' && payment.status === 'pending') {
+        payment.status = 'failed';
+        await this.repository.save(payment, { transaction });
+        if (booking.status === 'pending_payment') {
+          if (booking.hold_expires_at && new Date(booking.hold_expires_at) >= this.clock()) {
+            booking.status = 'holding';
+          } else {
+            booking.status = 'expired';
+            seatUpdates = await this._releaseExpiredBookingResources(booking, transaction);
+          }
+          await this.repository.save(booking, { transaction });
+        }
+      }
+      if (reconciliationCaseId && typeof this.repository.resolveCase === 'function') {
+        await this.repository.resolveCase(reconciliationCaseId, this.workerId, {
+          resolvedAt: this.clock(), lastGatewayStatus: result.status.toUpperCase(),
+        }, { transaction });
+      }
+    });
+    await this._emitSeatUpdates(seatUpdates);
+    if (bookingIdToEmail) this._triggerBookingConfirmationEmail(bookingIdToEmail);
+    return { bookingIdToEmail, seatUpdates };
+  }
+
+  async ensureVnpayReconciliationCases({ now = this.clock(), graceMinutes = 5, limit = 100 } = {}) {
+    if (typeof this.repository.findPendingPaymentsWithoutCase !== 'function') return 0;
+    const grace = Number.isFinite(Number(graceMinutes)) && Number(graceMinutes) >= 0 ? Number(graceMinutes) : 5;
+    const cutoff = new Date(new Date(now).getTime() - grace * 60000);
+    const payments = await this.repository.findPendingPaymentsWithoutCase('vnpay', cutoff, limit);
+    let created = 0;
+    for (const payment of payments) {
+      await this.transactionManager.transaction(async (transaction) => {
+        await this.repository.createOrFindCase({ paymentId: payment.id, bookingId: payment.booking_id, provider: 'vnpay', nextAttemptAt: now }, { transaction });
+        created += 1;
+      });
+    }
+    return created;
+  }
+
+  async _processVnpayReconciliationCase(reconciliationCase, { now = this.clock() } = {}) {
+    const payment = await this.repository.findPaymentByPk(reconciliationCase.payment_id);
+    if (!payment || payment.payment_method !== 'vnpay') return;
+    let result;
+    try {
+      result = await this.queryVnpayPayment(payment.id);
+    } catch (error) {
+      await this.transactionManager.transaction((transaction) => this.repository.completeAttempt(reconciliationCase.id, this.workerId, {
+        lastGatewayStatus: error.outcome || 'UNKNOWN', lastError: error, nextAttemptAt: new Date(new Date(now).getTime() + this._payosRetryDelayMs(reconciliationCase.attempt_count)),
+      }, { transaction }));
+      return;
+    }
+    if (['pending', 'unknown'].includes(result.status)) {
+      await this.transactionManager.transaction((transaction) => this.repository.completeAttempt(reconciliationCase.id, this.workerId, {
+        lastGatewayStatus: result.status.toUpperCase(), nextAttemptAt: new Date(new Date(now).getTime() + this._payosRetryDelayMs(reconciliationCase.attempt_count)),
+      }, { transaction }));
+      return;
+    }
+    await this._applyVnpayQueryResult(payment.id, result, { reconciliationCaseId: reconciliationCase.id });
+  }
+
+  async reconcileVnpayCases({ now = this.clock(), graceMinutes = 5, limit = 10 } = {}) {
+    if (typeof this.repository.acquireGatewayReconciliationOwnership !== 'function') return { claimedCount: 0, ownership: 'unavailable' };
+    const leaseMs = Math.max(1000, Number(process.env.VNPAY_RECONCILIATION_OWNERSHIP_LEASE_MS) || 120000);
+    const acquired = await this.transactionManager.transaction((transaction) => this.repository.acquireGatewayReconciliationOwnership({ provider: 'vnpay', owner: this.workerId, now, leaseMs }, { transaction }));
+    if (!acquired) return { claimedCount: 0, ownership: 'busy' };
+    try {
+      await this.ensureVnpayReconciliationCases({ now, graceMinutes });
+      const due = await this.transactionManager.transaction((transaction) => this.repository.claimDueCases({ owner: this.workerId, provider: 'vnpay', now, limit }, { transaction }));
+      for (const reconciliationCase of due) await this._processVnpayReconciliationCase(reconciliationCase, { now });
+      return { claimedCount: due.length, ownership: 'acquired' };
+    } finally {
+      await this.transactionManager.transaction((transaction) => this.repository.releaseGatewayReconciliationOwnership({ provider: 'vnpay', owner: this.workerId }, { transaction }));
+    }
+  }
+
   async queryVnpayPayment(paymentId) {
     let operation;
     const payment = await this.repository.findPaymentByPk(paymentId);
     if (!payment || payment.payment_method !== 'vnpay') { const e = new Error('VNPay payment not found'); e.statusCode = 404; throw e; }
     await this.transactionManager.transaction(async (t) => {
       const lockedPayment = await this.repository.findLockedPaymentById(paymentId, t);
-      operation = await this._createGatewayOperation(lockedPayment, 'querydr', `querydr:${paymentId}:${Date.now()}`, lockedPayment.amount, t);
-      operation.attempt_count += 1; operation.last_attempt_at = new Date();
-      await this.repository.save(operation, { transaction: t });
+      operation = await this._createGatewayOperation(lockedPayment, 'querydr', `querydr:${paymentId}`, lockedPayment.amount, t);
+      if (!['success', 'failed', 'unknown'].includes(operation.status)) {
+        operation.attempt_count += 1; operation.last_attempt_at = new Date();
+        await this.repository.save(operation, { transaction: t });
+      }
     });
+    if (['success', 'failed', 'unknown'].includes(operation.status) && operation.response_json) {
+      const storedResult = {
+        operationId: operation.id,
+        status: operation.status,
+        response: operation.response_json,
+        transactionRef: operation.gateway_transaction_ref || String(payment.transaction_ref),
+      };
+      await this._applyVnpayQueryResult(payment.id, storedResult);
+      return storedResult;
+    }
     try {
       const result = await this.vnpayGateway.query({ payment, requestId: operation.request_id });
-      await this._updateGatewayOperation(operation.id, { status: result.status, response_json: result.response, gateway_transaction_ref: result.transactionRef, completed_at: result.status === 'pending' ? null : new Date(), last_error: null });
+      await this._updateGatewayOperation(operation.id, { status: result.status, response_json: result.response, gateway_transaction_ref: result.transactionRef, completed_at: ['pending', 'unknown'].includes(result.status) ? null : new Date(), last_error: null });
+      await this._applyVnpayQueryResult(payment.id, result);
       return { operationId: operation.id, ...result };
     } catch (error) {
       const status = error.outcome || 'unknown';

@@ -375,7 +375,8 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
     // pending attempt before cancellation commits. The callback must retain a
     // later charge for review without confirming a booking on a cancelled flight.
     const paymentFirst = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
-    const paymentFirstBooking = await createHoldingBooking(paymentFirst, 'IT09B');
+    const paymentFirstPromotion = await createPromotionFixture({ maxUses: 1 });
+    const paymentFirstBooking = await createHoldingBooking(paymentFirst, 'IT09B', paymentFirstPromotion.code);
     let signalFlightLock;
     const flightLocked = new Promise((resolve) => { signalFlightLock = resolve; });
     hookName = `it09-flight-lock-${Date.now()}`;
@@ -427,9 +428,20 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
     const chargedPayment = await models.Payment.findByPk(payment.id);
     assert.match(webhookResult.Message, /manual review/i);
     assert.equal(chargedPayment.status, 'success');
-    assert.equal(persistedBooking.status, 'pending_payment');
+    assert.equal(persistedBooking.status, 'expired');
     assert.equal(persistedFlight.status, 'cancelled');
-    assert.equal(persistedFlight.available_seats, 0);
+    assert.equal(persistedFlight.available_seats, 1);
+    const persistedPromotion = await models.Promotion.findByPk(paymentFirstPromotion.id);
+    assert.equal(persistedPromotion.used_count, 0);
+    const reconciliationCase = await models.PaymentReconciliationCase.findOne({
+      where: { payment_id: payment.id },
+    });
+    assert.ok(reconciliationCase, 'late PAID must create a durable reconciliation case');
+    assert.equal(reconciliationCase.state, 'manual_review');
+    assert.equal(reconciliationCase.provider, 'vnpay');
+    assert.equal(reconciliationCase.booking_id, paymentFirstBooking.id);
+    assert.equal(reconciliationCase.last_gateway_status, 'PAID');
+    assert.match(reconciliationCase.manual_review_reason, /booking cannot be paid|late paid/i);
 
     await assert.rejects(
       () => paymentService.processRefund(paymentFirstBooking.id, 'IT-09 cancelled flight reconciliation', adminUser),
@@ -440,9 +452,27 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
       models.Payment.findByPk(payment.id),
       models.Flight.findByPk(paymentFirst.flight.id),
     ]);
-    assert.equal(refundedBooking.status, 'pending_payment');
+    assert.equal(refundedBooking.status, 'expired');
     assert.equal(refundedPayment.status, 'success');
-    assert.equal(flightAfterRefund.available_seats, 0);
+    assert.equal(flightAfterRefund.available_seats, 1);
+    assert.equal((await models.Promotion.findByPk(paymentFirstPromotion.id)).used_count, 0);
+
+    // A duplicate late PAID callback is idempotent: it cannot release seats or
+    // restore the promotion a second time, and it keeps the durable case.
+    const duplicateWebhook = await paymentService.handleVnpayIpn(successfulVnpayIpn(payment));
+    assert.match(duplicateWebhook.Message, /already processed|already confirmed|success|manual review/i);
+    const [afterDuplicateBooking, afterDuplicatePayment, afterDuplicateFlight, afterDuplicatePromotion, cases] = await Promise.all([
+      models.Booking.findByPk(paymentFirstBooking.id),
+      models.Payment.findByPk(payment.id),
+      models.Flight.findByPk(paymentFirst.flight.id),
+      models.Promotion.findByPk(paymentFirstPromotion.id),
+      models.PaymentReconciliationCase.count({ where: { payment_id: payment.id } }),
+    ]);
+    assert.equal(afterDuplicateBooking.status, 'expired');
+    assert.equal(afterDuplicatePayment.status, 'success');
+    assert.equal(afterDuplicateFlight.available_seats, 1);
+    assert.equal(afterDuplicatePromotion.used_count, 0);
+    assert.equal(cases, 1);
 
     // Refund and Flight cancellation touch the Flight row from independent
     // workflows. They must serialize without deadlock or double seat release.

@@ -433,6 +433,8 @@ class BookingService {
           : null;
         if (process.env.PAYOS_RECONCILIATION_WORKER === 'true'
           && paymentSnapshot?.payment_method === 'payos') continue;
+        if (process.env.VNPAY_RECONCILIATION_WORKER === 'true'
+          && paymentSnapshot?.payment_method === 'vnpay') continue;
         let payosStatus = null;
         if (paymentSnapshot && paymentSnapshot.payment_method === 'payos') {
           if (paymentSnapshot.status === 'success') {

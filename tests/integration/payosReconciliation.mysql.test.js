@@ -7,7 +7,7 @@ const bookingService = require('../../services/booking.service');
 const { signPayosDemoPayload } = require('../../utils/checksum.util');
 const { models, verifyConnectedDatabase } = require('./helpers/mysqlTestDatabase');
 const {
-  cleanupTrackedFixtures, createFlightFixture, trackBooking, trackPayment,
+  cleanupTrackedFixtures, createFlightFixture, createPromotionFixture, trackBooking, trackPayment,
 } = require('./helpers/testFixtures');
 
 process.env.PAYOS_MODE = 'demo';
@@ -17,7 +17,7 @@ paymentService._triggerBookingConfirmationEmail = async () => {};
 
 const adminUser = { id: 1, email: 'integration-admin@example.test' };
 
-async function createStalePayosBooking(suffix) {
+async function createStalePayosBooking(suffix, { promotionCode } = {}) {
   const fixture = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
   const booking = trackBooking(await bookingService.createHoldingBooking({
     flight_id: fixture.flight.id,
@@ -110,6 +110,14 @@ test('IT-23 payOS CANCELLED lookup fails payment and releases inventory once', {
   assert.equal((await models.Payment.findByPk(payment.id)).status, 'failed');
   assert.equal((await models.Booking.findByPk(booking.id)).status, 'expired');
   assert.equal((await models.Flight.findByPk(fixture.flight.id)).available_seats, 1);
+});
+
+test('IT-23a payOS CANCELLED reconciliation restores promotion usage once', { timeout: 20000 }, async () => {
+  const promotion = await createPromotionFixture({ maxUses: 1 });
+  const { fixture } = await createStalePayosBooking('IT23A', { promotionCode: promotion.code });
+  await withStatus('CANCELLED', async () => { await bookingService.reconcileStalePendingPayments(); });
+  assert.equal((await models.Flight.findByPk(fixture.flight.id)).available_seats, 1);
+  assert.equal((await models.Promotion.findByPk(promotion.id)).used_count, 0);
 });
 
 test('IT-24 payOS lookup timeout is unknown and preserves pending state', { timeout: 20000 }, async () => {
