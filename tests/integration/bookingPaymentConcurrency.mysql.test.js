@@ -355,7 +355,7 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
     // cancelled flight and leave the holding booking/payment state untouched.
     const cancelledFirst = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
     const cancelledFirstBooking = await createHoldingBooking(cancelledFirst, 'IT09A');
-    await flightService.cancelFlight(cancelledFirst.flight.id);
+    await flightService.cancelFlight(cancelledFirst.flight.id, { reason: 'IT-09 cancellation before payment initiation' });
     await assert.rejects(
       paymentService.initiatePayment({
         booking_id: cancelledFirstBooking.id,
@@ -403,7 +403,7 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
         resolve();
       }, reject);
     });
-    const cancelFlightPromise = flightService.cancelFlight(paymentFirst.flight.id);
+    const cancelFlightPromise = flightService.cancelFlight(paymentFirst.flight.id, { reason: 'IT-09 cancellation racing payment initiation' });
 
     const results = await Promise.allSettled([initiatePromise, cancelFlightPromise]);
     models.sequelize.removeHook('afterQuery', hookName);
@@ -482,7 +482,7 @@ test('IT-09 flight cancellation and payment initiation preserve commit order and
     await paymentService.handleVnpayIpn(successfulVnpayIpn(refundRacePayment.payment));
     const refundRaceResults = await Promise.allSettled([
       paymentService.processRefund(refundRaceBooking.id, 'IT-09 refund vs cancellation', adminUser),
-      flightService.cancelFlight(refundRace.flight.id),
+      flightService.cancelFlight(refundRace.flight.id, { reason: 'IT-09 cancellation racing refund' }),
     ]);
     assertNoLockFailure(refundRaceResults);
     assert.equal(refundRaceResults.filter((result) => result.status === 'fulfilled').length, 1);

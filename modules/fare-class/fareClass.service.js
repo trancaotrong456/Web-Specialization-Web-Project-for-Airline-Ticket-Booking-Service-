@@ -1,3 +1,5 @@
+const { wholeVndAmount } = require('../ancillaries/money.util');
+
 class FareClassService {
   constructor({ repository } = {}) {
     if (!repository) throw new TypeError('A FareClass repository is required');
@@ -38,12 +40,13 @@ class FareClassService {
         const error = new Error('Số ghế phân bổ (seat_quota) phải là số nguyên không âm'); error.statusCode = 400; throw error;
       }
     }
+    const price = wholeVndAmount(data.price);
     const flight = await this.repository.findFlightById(data.flight_id);
     if (!flight) { const error = new Error('Flight not found'); error.statusCode = 404; throw error; }
     return this.repository.create({
       flight_id: Number(data.flight_id),
       class_name: data.class_name.trim(),
-      price: Number(data.price),
+      price,
       seat_quota: data.seat_quota !== undefined && data.seat_quota !== null ? Number(data.seat_quota) : null,
     });
   }
@@ -74,6 +77,7 @@ class FareClassService {
       if (Number.isNaN(numPrice) || numPrice < 0) {
         const error = new Error('Giá vé (price) phải là số không âm'); error.statusCode = 400; throw error;
       }
+      wholeVndAmount(data.price);
     }
     if (data.seat_quota !== undefined && data.seat_quota !== null) {
       const numQuota = Number(data.seat_quota);

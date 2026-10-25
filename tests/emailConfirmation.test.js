@@ -81,6 +81,7 @@ test('multi-leg confirmation email lists ordered flights, fares, passengers and 
       { leg_order: 2, flight: flight('Vietjet Air', 'TP. Hồ Chí Minh', 'Đà Nẵng'), fareClass: { class_name: 'Premium Economy' } },
     ],
     passengers: [{ passenger_name: 'Nguyễn Văn An', seat_no: '12A' }, { passenger_name: 'Trần Thị Bình', seat_no: '12B' }],
+    ancillaries: [{ service_name_snapshot: 'Hành lý bổ sung', offer_name_snapshot: '20 kg', quantity: 1, line_total_snapshot: '250000.00', currency_snapshot: 'VND', passenger: { passenger_name: 'Nguyễn Văn An' }, segment: { leg_order: 2 } }],
     payments: [{ status: 'success' }], user: null,
   });
   ticketService.generateTicketPDF = async () => Buffer.from('%PDF-multi-leg');
@@ -93,7 +94,7 @@ test('multi-leg confirmation email lists ordered flights, fares, passengers and 
     await emailService.sendBookingConfirmation(322);
     const html = requestBody.html;
     for (const expected of ['Vietnam Airlines', 'Hà Nội', 'TP. Hồ Chí Minh', 'Vietjet Air', 'Đà Nẵng', 'Bamboo Airways', 'Nha Trang',
-      'Economy', 'Premium Economy', 'Business', 'Nguyễn Văn An', 'Trần Thị Bình', '3.750.000 VND']) {
+      'Economy', 'Premium Economy', 'Business', 'Nguyễn Văn An', 'Trần Thị Bình', '3.750.000 VND', 'Dịch vụ bổ sung', 'Hành lý bổ sung', '20 kg', '250.000 VND']) {
       assert.ok(html.includes(expected), `Expected confirmation email to include ${expected}`);
     }
     assert.ok(html.indexOf('Vietjet Air') < html.indexOf('Bamboo Airways'), 'itinerary legs should appear in leg_order');

@@ -4,15 +4,20 @@ const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
 const { redactString } = require('../../shared/security/redactSensitive');
+const { toMinorUnits, fromMinorUnits, wholeVndAmount } = require('../ancillaries/money.util');
+const { recordBookingStatusTransition } = require('./bookingStatusHistory.util');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
     this.socket = socket;
     this.flightSeatService = flightSeatService;
     this.payosStatusLookup = payosStatusLookup;
+    this.seatSelectionService = seatSelectionService;
+    this.ancillaryService = ancillaryService;
+    this.notificationPublisher = notificationPublisher;
   }
 
   async _lookupPayosStatus(transactionRef) {
@@ -60,7 +65,7 @@ class BookingService {
   /**
    * 1. Create holding booking with row-level locking
    */
-  async createHoldingBooking({ flight_id, fare_class_id, trip_type, itinerary_legs, promotion_code, passengers, guest_email, user_id, currentUser = null }) {
+  async createHoldingBooking({ flight_id, fare_class_id, trip_type, itinerary_legs, seat_selections = [], ancillary_selections = [], promotion_code, passengers, guest_email, user_id, currentUser = null }) {
     guest_email = normalizeGuestEmail(guest_email);
     if (!user_id && !guest_email) {
       const error = new Error('Guest email is required if you are not logged in');
@@ -68,6 +73,11 @@ class BookingService {
       throw error;
     }
 
+    if (!Array.isArray(passengers) || passengers.length === 0) {
+      const error = new Error('passengers must contain at least 1 passenger');
+      error.statusCode = 400;
+      throw error;
+    }
     const passengerCount = passengers.length;
     const holdingMinutes = parseInt(process.env.HOLDING_TIME_MINUTES || '15', 10);
     const holdExpiresAt = new Date(Date.now() + holdingMinutes * 60 * 1000);
@@ -137,6 +147,17 @@ class BookingService {
         if (!fareClass) {
           const error = new Error('Selected fare class does not belong to this flight'); error.statusCode = 404; throw error;
         }
+        if (fareClass.seat_quota !== null && fareClass.seat_quota !== undefined && typeof this.repository.countReservedFareSeats === 'function') {
+          const reserved = Number(await this.repository.countReservedFareSeats(requested.fare_class_id, t));
+          const quota = Number(fareClass.seat_quota);
+          if (!Number.isSafeInteger(quota) || quota < 0 || !Number.isSafeInteger(reserved) || reserved < 0) throw new Error('Invalid fare inventory data');
+          const remaining = Math.max(0, quota - reserved);
+          if (passengerCount > remaining) {
+            const error = new Error(`Not enough seats in selected fare class. Only ${remaining} remaining`);
+            error.statusCode = 400;
+            throw error;
+          }
+        }
         legs.push({ ...requested, flight, fareClass });
       }
 
@@ -148,8 +169,8 @@ class BookingService {
         }
       }
 
-      const baseAmount = legs.reduce((sum, leg) => sum + Number(leg.fareClass.price) * passengerCount, 0);
-      let totalAmount = baseAmount;
+      const baseAmountMinor = legs.reduce((sum, leg) => sum + wholeVndAmount(leg.fareClass.price) * 100 * passengerCount, 0);
+      let totalAmountMinor = baseAmountMinor;
       let promotionId = null;
 
       // 3. Check promotion if provided
@@ -175,19 +196,22 @@ class BookingService {
           throw error;
         }
 
-        let discount = 0;
+        let discountMinor = 0;
         if (promo.discount_type === 'percent') {
-          discount = (baseAmount * Number(promo.discount_value)) / 100;
+          const percentHundredths = BigInt(toMinorUnits(promo.discount_value));
+          discountMinor = Number((BigInt(baseAmountMinor) * percentHundredths + 5000n) / 10000n);
         } else if (promo.discount_type === 'amount') {
-          discount = Number(promo.discount_value);
+          discountMinor = toMinorUnits(promo.discount_value);
         }
 
-        totalAmount = Math.max(0, baseAmount - discount);
+        totalAmountMinor = Math.max(0, baseAmountMinor - discountMinor);
         promotionId = promo.id;
 
         // Increment promotion usage
         await this.repository.increment(promo, 'used_count', { by: 1, transaction: t });
       }
+
+      wholeVndAmount(fromMinorUnits(totalAmountMinor));
 
       // 4. Hold seats on every selected flight atomically.
       for (const leg of legs) {
@@ -216,17 +240,23 @@ class BookingService {
           fare_class_id,
           promotion_id: promotionId,
           status: 'holding',
-          total_amount: totalAmount,
+          total_amount: Number(fromMinorUnits(totalAmountMinor)),
           hold_expires_at: holdExpiresAt,
           guest_email: user_id ? null : guest_email,
         },
         { transaction: t }
       );
 
-      if (legs.length > 1) {
-        await this.repository.createBookingSegments(legs.slice(1).map((leg, index) => ({
+      if (typeof this.repository.createStatusHistory === 'function'
+        && (t?.id || t?.connection || !Object.prototype.hasOwnProperty.call(this.repository, 'BookingStatusHistory'))) {
+        await recordBookingStatusTransition({ booking, fromStatusOverride: null, toStatus: 'holding', source: 'booking_created', actorUserId: user_id, repository: this.repository, transaction: t });
+      }
+
+      let createdSegments = [];
+      if (legs.length > 0 && (t?.id || t?.connection || !Object.prototype.hasOwnProperty.call(this.repository, 'BookingSegment'))) {
+        createdSegments = await this.repository.createBookingSegments(legs.map((leg, index) => ({
           booking_id: booking.id,
-          leg_order: index + 2,
+          leg_order: index + 1,
           flight_id: leg.flight_id,
           fare_class_id: leg.fare_class_id,
           price_per_passenger: Number(leg.fareClass.price),
@@ -234,14 +264,31 @@ class BookingService {
       }
 
       // 7. Create Passenger records
-      const passengerRecords = passengers.map((p) => ({
+      const passengerRecords = passengers.map((p, passengerIndex) => ({
         booking_id: booking.id,
         passenger_name: p.passenger_name,
         passport_no: p.passport_no || null,
-        seat_no: p.seat_no || null,
+        seat_no: seat_selections.find((selection) => Number(selection.leg_order) === 1 && Number(selection.passenger_index) === passengerIndex)?.seat_no || p.seat_no || null,
       }));
 
-      await this.repository.createPassengers(passengerRecords, { transaction: t });
+      const createdPassengers = await this.repository.createPassengers(passengerRecords, { transaction: t });
+      if (seat_selections.length) {
+        if (!this.seatSelectionService) throw new Error('Seat selection is not available for this booking');
+        await this.seatSelectionService.reserveSeats({ bookingId: booking.id, passengers: createdPassengers, selections: seat_selections, legs, holdExpiresAt, transaction: t });
+      }
+      if (ancillary_selections.length) {
+        if (!this.ancillaryService) throw new Error('Ancillary services are not available for this booking');
+        const reserved = await this.ancillaryService.reserveForBooking({ booking, passengers: createdPassengers, segments: createdSegments, selections: ancillary_selections, transaction: t });
+        booking.total_amount = wholeVndAmount(fromMinorUnits(toMinorUnits(booking.total_amount) + toMinorUnits(reserved.subtotal)));
+        await this.repository.save(booking, { transaction: t });
+      }
+      if (this.notificationPublisher) {
+        await this.notificationPublisher.publish({
+          eventKey: `booking:${booking.id}:created`, eventType: 'BOOKING_CREATED', aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: guest_email, relatedType: 'booking', relatedId: booking.id,
+          variables: { code: booking.booking_code },
+        }, { transaction: t });
+      }
 
       return { booking, flightSeatUpdates: legs.map(({ flight }) => ({ id: flight.id, availableSeats: flight.available_seats })) };
     });

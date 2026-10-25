@@ -38,6 +38,19 @@ module.exports = (sequelize, DataTypes) => {
         allowNull: true,
         unique: true,
       },
+      idempotency_key: {
+        type: DataTypes.STRING(128),
+        allowNull: true,
+        unique: true,
+      },
+      request_fingerprint: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+      },
+      idempotency_response: {
+        type: DataTypes.JSON,
+        allowNull: true,
+      },
       paid_at: {
         type: DataTypes.DATE,
         allowNull: true,

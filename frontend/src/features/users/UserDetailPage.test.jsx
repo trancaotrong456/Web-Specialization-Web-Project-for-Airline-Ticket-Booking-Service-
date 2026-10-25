@@ -15,6 +15,11 @@ const createFetch = ({ actor = admin, user = target, actionError, roleOptions = 
   if (url.endsWith('/auth/refresh-token')) return response({ success: true, data: { accessToken: 'access' } });
   if (url.endsWith('/auth/me')) return response({ success: true, data: actor });
   if (url.endsWith(`/users/${user.id}`) && method === 'GET') return response({ success: true, data: user });
+  if (actionError && method === 'PATCH') return response({ success: false, message: actionError.message }, actionError.status);
+  if (url.endsWith(`/users/${user.id}`) && method === 'PATCH') {
+    const profile = JSON.parse(options.body);
+    return response({ success: true, data: { ...user, ...profile } });
+  }
   if (url.endsWith('/roles')) return response({ success: true, data: roleOptions });
   if (actionError && method !== 'GET') return response({ success: false, message: actionError.message }, actionError.status);
   if (url.endsWith(`/users/${user.id}/status`)) return response({ success: true, data: { id: user.id, status: JSON.parse(options.body).status } });
@@ -34,6 +39,41 @@ const renderDetail = (fetchImpl, id = 9) => {
 };
 
 describe('admin user detail', () => {
+  it('allows an admin to edit only profile fields and refreshes the displayed details', async () => {
+    const user = userEvent.setup();
+    const fetchImpl = createFetch();
+    renderDetail(fetchImpl);
+    await screen.findByText('user@example.com');
+
+    await user.click(screen.getByRole('button', { name: 'Chỉnh sửa thông tin' }));
+    expect(screen.getByLabelText('Họ và tên')).toHaveValue('Nguyễn Văn An');
+    expect(screen.getByLabelText('Số điện thoại')).toHaveValue('0912345678');
+    expect(screen.queryByLabelText('Email')).not.toBeInTheDocument();
+    await user.clear(screen.getByLabelText('Họ và tên'));
+    await user.type(screen.getByLabelText('Họ và tên'), 'Nguyễn Minh Anh');
+    await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+
+    expect(await screen.findByText('Thông tin người dùng đã được cập nhật.')).toBeInTheDocument();
+    expect(screen.getByText('Nguyễn Minh Anh')).toBeInTheDocument();
+    const update = fetchImpl.mock.calls.find(([, options]) => options?.method === 'PATCH');
+    expect(JSON.parse(update[1].body)).toEqual({ full_name: 'Nguyễn Minh Anh', phone: '0912345678' });
+  });
+
+  it('keeps edits after an API validation error and cancels without changing displayed details', async () => {
+    const user = userEvent.setup();
+    renderDetail(createFetch({ actionError: { status: 422, message: 'Số điện thoại không hợp lệ.' } }));
+    await screen.findByText('user@example.com');
+    await user.click(screen.getByRole('button', { name: 'Chỉnh sửa thông tin' }));
+    await user.clear(screen.getByLabelText('Họ và tên'));
+    await user.type(screen.getByLabelText('Họ và tên'), 'Tên đang sửa');
+    await user.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+
+    expect(await screen.findByText('Số điện thoại không hợp lệ.')).toBeInTheDocument();
+    expect(screen.getByLabelText('Họ và tên')).toHaveValue('Tên đang sửa');
+    await user.click(screen.getByRole('button', { name: 'Hủy' }));
+    expect(screen.getByText('Nguyễn Văn An')).toBeInTheDocument();
+  });
+
   it('loads detail and roles, then confirms status, role and delete actions', async () => {
     const user = userEvent.setup();
     const fetchImpl = createFetch();

@@ -16,6 +16,7 @@ const crypto = require('crypto');
 const { VnpayGateway } = require('./vnpay.gateway');
 const { redactString } = require('../../shared/security/redactSensitive');
 const { emitReconciliationEvent, evaluateReconciliationAlerts } = require('../../infrastructure/observability/reconciliationObservability');
+const { wholeVndAmount } = require('../ancillaries/money.util');
 
 // Format date to yyyyMMddHHmmss for VNPay
 const formatDateVnpay = (date) => {
@@ -47,6 +48,17 @@ class PaymentService {
     this.clock = clock;
     this.workerId = workerId || `payos-reconcile-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
     this.logger = logger;
+    this._idempotencyInflight = new Map();
+  }
+
+  _paymentRequestFingerprint({ booking, payment_method, return_url, currentUser, guest_email }) {
+    return crypto.createHash('sha256').update(JSON.stringify({
+      booking_id: booking.id,
+      payment_method,
+      return_url: return_url || null,
+      user_id: currentUser?.id || null,
+      guest_email: guest_email || null,
+    })).digest('hex');
   }
 
   _isPaymentConfirmationWindowExpired(booking, now = new Date()) {
@@ -576,7 +588,17 @@ class PaymentService {
   /**
    * 1. Initiate Payment: holding -> pending_payment -> build gateway URL
    */
-  async initiatePayment({ booking_id, payment_method, ip_addr = '127.0.0.1', return_url, currentUser = null, guest_email = null }) {
+  async initiatePayment(args = {}) {
+    const key = args.idempotency_key;
+    if (!key) return this._initiatePayment(args);
+    const existing = this._idempotencyInflight.get(key);
+    if (existing) return existing;
+    const pending = this._initiatePayment(args).finally(() => this._idempotencyInflight.delete(key));
+    this._idempotencyInflight.set(key, pending);
+    return pending;
+  }
+
+  async _initiatePayment({ booking_id, payment_method, ip_addr = '127.0.0.1', return_url, currentUser = null, guest_email = null, idempotency_key = null }) {
     guest_email = normalizeGuestEmail(guest_email);
     // payOS requires a numeric orderCode. Timestamp plus three random digits
     // stays below Number.MAX_SAFE_INTEGER and avoids same-millisecond collisions.
@@ -586,11 +608,15 @@ class PaymentService {
       error.statusCode = 503;
       throw error;
     }
-    const txnRef = payment_method === 'payos'
+    let txnRef = payment_method === 'payos'
       ? String(Date.now() * 1000 + Math.floor(Math.random() * 1000))
       : `TXN_${booking_id}_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`;
     let bookingData = null;
     let paymentRecordId = null;
+    let paymentRecord = null;
+    let replayResponse = null;
+    let requestFingerprint = null;
+    let paymentTransaction = null;
     const payosMode = payment_method === 'payos' ? this._getPayOSMode() : null;
 
     if (payment_method === 'payos' && payosMode === 'disabled') {
@@ -639,6 +665,7 @@ class PaymentService {
 
     // STEP 1: Update status to pending_payment in transaction with row-lock
     await this.transactionManager.transaction(async (t) => {
+      paymentTransaction = t;
       const booking = await this.repository.findLockedBooking(booking_id, t);
 
       if (!booking) {
@@ -648,6 +675,24 @@ class PaymentService {
       }
 
       verifyBookingAccess(booking, currentUser, guest_email);
+
+      wholeVndAmount(booking.total_amount);
+      if (idempotency_key && typeof this.repository.findPaymentByIdempotencyKey === 'function') {
+        requestFingerprint = this._paymentRequestFingerprint({ booking, payment_method, return_url: resolvedReturnUrl || return_url, currentUser, guest_email });
+        const existingPayment = await this.repository.findPaymentByIdempotencyKey(idempotency_key, t);
+        if (existingPayment) {
+          if (existingPayment.request_fingerprint !== requestFingerprint) {
+            const error = new Error('Idempotency-Key was already used for a different payment request.');
+            error.statusCode = 409;
+            throw error;
+          }
+          paymentRecord = existingPayment;
+          replayResponse = existingPayment.idempotency_response || null;
+          txnRef = existingPayment.transaction_ref;
+          bookingData = booking;
+          return;
+        }
+      }
 
       // CRITICAL: Must be in holding status
       if (booking.status !== 'holding') {
@@ -681,13 +726,14 @@ class PaymentService {
       await this.repository.save(booking, { transaction: t });
 
       // Create pending payment record
-      const paymentRecord = await this.repository.createPayment(
+      paymentRecord = await this.repository.createPayment(
         {
           booking_id: booking.id,
           amount: booking.total_amount,
           payment_method,
           status: 'pending',
           transaction_ref: txnRef,
+          ...(idempotency_key ? { idempotency_key, request_fingerprint: requestFingerprint } : {}),
         },
         { transaction: t }
       );
@@ -695,6 +741,8 @@ class PaymentService {
 
       bookingData = booking;
     });
+
+    if (replayResponse) return replayResponse;
 
     // STEP 2: Build Payment Gateway URL
     let paymentUrl = '';
@@ -759,7 +807,7 @@ class PaymentService {
           width: 320,
         });
 
-        return {
+        const response = {
           payment_url: null,
           qr_code: qrCode,
           qr_payload: qrPayload,
@@ -776,6 +824,12 @@ class PaymentService {
             body: { ...demoData, signature },
           },
         };
+        if (idempotency_key && paymentRecord && typeof this.repository.save === 'function') {
+          paymentRecord.idempotency_response = response;
+          if (typeof paymentRecord.save === 'function') await paymentRecord.save({});
+          else await this.repository.save(paymentRecord, { transaction: paymentTransaction });
+        }
+        return response;
       }
 
       const returnUrl = resolvedReturnUrl;
@@ -828,13 +882,19 @@ class PaymentService {
       }
     }
 
-    return {
+    const response = {
       payment_url: paymentUrl,
       transaction_ref: txnRef,
       booking_id: bookingData.id,
       amount: bookingData.total_amount,
       status: 'pending_payment',
     };
+    if (idempotency_key && paymentRecord && typeof this.repository.save === 'function') {
+      paymentRecord.idempotency_response = response;
+      if (typeof paymentRecord.save === 'function') await paymentRecord.save({});
+      else await this.repository.save(paymentRecord, { transaction: paymentTransaction });
+    }
+    return response;
   }
 
   /**
@@ -1177,7 +1237,17 @@ class PaymentService {
       return { message: 'Webhook acknowledged; local order not found' };
     }
 
-    if (Math.round(Number(payment.amount)) !== Math.round(Number(amount))) {
+    let storedAmount;
+    let gatewayAmount;
+    try {
+      storedAmount = wholeVndAmount(payment.amount);
+      gatewayAmount = wholeVndAmount(amount);
+    } catch (_error) {
+      const error = new Error('Amount mismatch');
+      error.statusCode = 400;
+      throw error;
+    }
+    if (storedAmount !== gatewayAmount) {
       const error = new Error('Amount mismatch');
       error.statusCode = 400;
       throw error;
@@ -1665,7 +1735,9 @@ class PaymentService {
     const result = await this.transactionManager.transaction(async (t) => {
       // Use the same global lock order as gateway callbacks and reconciliation:
       // Payment -> Booking -> Flight -> Promotion.
-      const successfulPayments = await this.repository.findSuccessfulPaymentsForRefund(bookingId, t);
+      const successfulPayments = typeof this.repository.findSuccessfulPaymentsForRefund === 'function'
+        ? await this.repository.findSuccessfulPaymentsForRefund(bookingId, t)
+        : [await this.repository.findSuccessfulPaymentForRefund(bookingId, t)].filter(Boolean);
 
       if (successfulPayments.length === 0) {
         const error = new Error('No successful payment found for this booking to refund.');
@@ -1706,6 +1778,14 @@ class PaymentService {
       if (!refundableStatuses.includes(booking.status)) {
         const error = new Error(`Cannot refund booking with status '${booking.status}'.`);
         error.statusCode = 400;
+        throw error;
+      }
+
+      const bookingAmount = wholeVndAmount(booking.total_amount);
+      const successfulAmount = successfulPayments.reduce((total, payment) => total + wholeVndAmount(payment.amount), 0);
+      if (bookingAmount !== successfulAmount) {
+        const error = new Error('Booking and successful payment amounts do not match.');
+        error.statusCode = 409;
         throw error;
       }
 

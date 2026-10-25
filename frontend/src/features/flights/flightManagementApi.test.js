@@ -24,10 +24,19 @@ describe('flight management API adapter', () => {
     const request = vi.fn().mockResolvedValue({});
     const api = createFlightManagementApi(request);
 
-    await api.cancelFlight(7);
+    await api.cancelFlight(7, 'Thời tiết');
     await api.deleteFlight(7);
 
-    expect(request).toHaveBeenNthCalledWith(1, '/flights/7/cancel', { method: 'PUT' });
+    expect(request).toHaveBeenNthCalledWith(1, '/flights/7/cancel', { method: 'PUT', body: { reason: 'Thời tiết' } });
     expect(request).toHaveBeenNthCalledWith(2, '/flights/7', { method: 'DELETE' });
+  });
+
+  it('uses canonical public status read and authenticated status update endpoints', async () => {
+    const request = vi.fn().mockResolvedValue({});
+    const api = createFlightManagementApi(request);
+    await api.getFlightStatus(12);
+    await api.updateFlightStatus(12, { status: 'delayed', reason: 'Weather' });
+    expect(request).toHaveBeenNthCalledWith(1, '/flights/status/12');
+    expect(request).toHaveBeenNthCalledWith(2, '/flights/status/12', { method: 'PATCH', body: { status: 'delayed', reason: 'Weather' } });
   });
 });
