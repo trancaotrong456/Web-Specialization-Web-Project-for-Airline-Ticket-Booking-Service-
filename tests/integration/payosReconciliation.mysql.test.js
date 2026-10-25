@@ -54,8 +54,8 @@ test('IT-20 payOS Payment Link timeout keeps pending attempt for reconciliation'
   process.env.PAYOS_CLIENT_ID = 'integration-client';
   process.env.PAYOS_API_KEY = 'integration-key';
   process.env.PAYOS_CHECKSUM_KEY = 'integration-checksum';
-  process.env.PAYOS_RETURN_URL = 'https://integration.example/payos-return';
-  process.env.PAYOS_CANCEL_URL = 'https://integration.example/payos-cancel';
+  process.env.PAYOS_RETURN_URL = 'https://integration.example/payments/result';
+  process.env.PAYOS_CANCEL_URL = 'https://integration.example/payments/result';
   paymentService._getPayOSClient = () => ({ paymentRequests: { create: async () => { throw new Error('simulated create timeout'); } } });
   try {
     const fixture = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });

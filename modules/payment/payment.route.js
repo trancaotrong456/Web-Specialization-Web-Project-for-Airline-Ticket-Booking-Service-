@@ -8,6 +8,7 @@ const {
     refundValidator,
     paymentListValidator,
     paymentIdValidator,
+    paymentStatusValidator,
     reconciliationCaseIdValidator,
     reconciliationReviewActionValidator,
     reconciliationCaseListValidator,
@@ -15,14 +16,16 @@ const {
 } = require('../../validators/payment.validator');
 
 const defaultGuards = { authenticate, optionalAuth, authorize };
-const defaultValidators = { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator };
+const defaultValidators = { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator };
 const defaultValidation = { validate };
 
 function createPaymentRouter({ paymentController, guards = defaultGuards, validators = defaultValidators, validation = defaultValidation, expressModule = express } = {}) {
 const router = expressModule.Router();
 const { authenticate, optionalAuth, authorize } = guards;
-const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator } = validators;
+const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator } = validators;
 const { validate } = validation;
+const resolvedPaymentStatusValidator = paymentStatusValidator || defaultValidators.paymentStatusValidator;
+const customerPaymentStatusHandler = paymentController.getCustomerPaymentStatus || ((_req, _res, next) => next());
 
 // Administrative payment history and detail (report Table 2.1).
 router.get(
@@ -42,6 +45,9 @@ router.post('/reconciliation-cases/:id/manual-review', authenticate, authorize('
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);
+
+// Customer status is read-only and must remain before the generic /:id route.
+router.get('/bookings/:bookingId/status', optionalAuth, resolvedPaymentStatusValidator, validate, customerPaymentStatusHandler);
 
 // VNPay Return URL (Browser redirect from VNPay)
 router.get('/vnpay/return', paymentController.vnpayReturn);

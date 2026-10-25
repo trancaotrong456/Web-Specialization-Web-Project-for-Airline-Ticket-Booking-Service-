@@ -84,6 +84,22 @@ const paymentIdValidator = [
   param('id').isInt({ min: 1 }).withMessage('Payment ID must be a positive integer'),
 ];
 
+const paymentStatusValidator = [
+  param('bookingId').isInt({ min: 1 }).withMessage('Booking ID must be a positive integer'),
+  query('guest_email')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('guest_email must be a valid email if provided')
+    .bail()
+    .trim()
+    .isEmail()
+    .withMessage('guest_email must be a valid email if provided')
+    .bail()
+    .isLength({ max: 191 })
+    .withMessage('guest_email must not exceed 191 characters')
+    .customSanitizer(normalizeGuestEmail),
+];
+
 const reconciliationCaseListValidator = [
   query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
   query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
@@ -145,6 +161,7 @@ module.exports = {
   refundValidator,
   paymentListValidator,
   paymentIdValidator,
+  paymentStatusValidator,
   revenueValidator,
   reconciliationCaseListValidator,
   reconciliationCaseIdValidator,

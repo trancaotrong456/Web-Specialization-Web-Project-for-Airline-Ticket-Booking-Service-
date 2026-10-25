@@ -9,12 +9,23 @@ import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
 import { StatusBadge, statusLabel } from '../../components/StatusBadge';
 import { createBookingsApi } from './bookingsApi';
+import { isSafeCheckoutUrl } from './paymentQr';
+import { PaymentQr } from './PaymentQr';
 
 const money = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
 const time = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const rowsOf = (result) => Array.isArray(result) ? result : result?.data || [];
 const emailKey = (id) => `booking_guest_email_${id}`;
-const PAYMENT_CONTEXT_KEY = 'airline_payment_return_context';
+const paymentContextKey = (value) => `airline_payment_return_context:${String(value)}`;
+const readPaymentContext = (values = []) => {
+  for (const value of values.filter(Boolean)) {
+    try {
+      const context = JSON.parse(sessionStorage.getItem(paymentContextKey(value)) || 'null');
+      if (context) return context;
+    } catch { /* Ignore malformed browser context and use the secure lookup flow. */ }
+  }
+  return {};
+};
 
 function PaymentShell({ children }) { return <div className="public-page booking-page"><AppHeader /><main className="booking-main">{children}</main><footer className="site-footer"><span>Serene Flightways</span><span>Thanh toán được xác nhận từ trạng thái hệ thống.</span></footer></div>; }
 function Heading({ eyebrow = 'THANH TOÁN', title, description, actions }) { return <header className="booking-heading"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1>{description ? <p>{description}</p> : null}</div>{actions ? <div className="booking-heading-actions">{actions}</div> : null}</header>; }
@@ -43,8 +54,10 @@ export function PaymentInitiatePage() {
     try {
       const result = await api.initiatePayment({ booking_id: Number(id), payment_method: method, return_url: returnUrl, ...(!user ? { guest_email: guestEmail } : {}) }, idempotencyKey.current);
       setState({ loading: false, submitting: false, error: '', result });
-      sessionStorage.setItem(PAYMENT_CONTEXT_KEY, JSON.stringify({ bookingId: id, guestEmail, paymentMethod: method }));
-      if (result?.payment_url) window.location.assign(result.payment_url);
+      const context = JSON.stringify({ bookingId: id, guestEmail, paymentMethod: method, transactionRef: result?.transaction_ref || null });
+      sessionStorage.setItem(paymentContextKey(id), context);
+      if (result?.transaction_ref) sessionStorage.setItem(paymentContextKey(result.transaction_ref), context);
+      if (method === 'vnpay' && result?.payment_url) window.location.assign(result.payment_url);
     } catch (error) { if (error?.status === 502) idempotencyKey.current = null; setState((current) => ({ ...current, submitting: false, error: errorText(error, 'Không thể bắt đầu thanh toán.') })); }
   };
   const simulatePayos = async () => {
@@ -59,33 +72,55 @@ export function PaymentInitiatePage() {
     {state.error ? <Notice type="error">{state.error}</Notice> : null}
     <div className="payment-layout"><section className="surface-card booking-panel"><h2>Tóm tắt</h2><dl className="booking-facts"><div><dt>Mã đặt chỗ</dt><dd>{booking?.booking_code || `#${id}`}</dd></div><div><dt>Chặng đầu</dt><dd>{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div><div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div><div><dt>Số hành khách</dt><dd>{booking?.passengers?.length || '—'}</dd></div><div><dt>Thành tiền</dt><dd><strong>{money(booking?.total_amount)}</strong></dd></div><div><dt>Giữ chỗ đến</dt><dd>{time(booking?.hold_expires_at)}</dd></div></dl>{additionalSegments.length ? <><h3>Các chặng tiếp theo</h3><ol className="booking-itinerary-summary">{[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => <li key={segment.id}><div><strong>{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong><span>{time(segment.flight?.departure_time)}</span></div></li>)}</ol></> : null}{booking?.ancillaries?.length ? <><h3>Dịch vụ bổ sung</h3><ul>{booking.ancillaries.map((line) => <li key={line.id}>{line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · {line.service_name_snapshot} × {line.quantity}: {money(line.line_total_snapshot)}</li>)}</ul></> : null}</section>
         <section className="surface-card booking-panel"><h2>Phương thức thanh toán</h2><form onSubmit={startPayment}><div className="payment-method-options"><label className={method === 'vnpay' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => { idempotencyKey.current = null; setMethod('vnpay'); }} /><span><strong>VNPay</strong><small>Cổng thanh toán sandbox của đồ án.</small></span></label><label className={method === 'payos' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => { idempotencyKey.current = null; setMethod('payos'); }} /><span><strong>payOS · VietQR</strong><small>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small></span></label></div><button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}>{state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}</button>{booking?.status !== 'holding' ? <p className="field-hint">Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}</form>
-        {state.result?.qr_code ? <div className="payment-qr-result"><Notice>payOS trả về dữ liệu thanh toán ở chế độ {state.result.mode || 'gateway'}. Kiểm tra thông tin đích chuyển trước khi thao tác.</Notice><img src={state.result.qr_code} alt="Mã QR do payOS trả về" /><p>Mã giao dịch: <code>{state.result.transaction_ref}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
+        {state.result ? <div className="payment-qr-result"><Notice>Kiểm tra thông tin đích chuyển trước khi thao tác. Thanh toán chỉ được xác nhận từ trạng thái hệ thống.</Notice>{state.result.qr_code ? <PaymentQr value={state.result.qr_code} /> : null}{isSafeCheckoutUrl(state.result.payment_url) ? <a className="button button-primary" href={state.result.payment_url} target="_blank" rel="noreferrer">Mở trang thanh toán payOS</a> : null}{!state.result.qr_code && !isSafeCheckoutUrl(state.result.payment_url) ? <p role="status" className="field-hint">Chưa có mã QR hoặc liên kết thanh toán khả dụng. Vui lòng thử lại sau.</p> : null}<p>Mã giao dịch: <code>{state.result.transaction_ref || '—'}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
       </section></div>
   </PaymentShell>;
 }
 
 export function PaymentResultPage() {
   const api = usePaymentApi(); const location = useLocation(); const [params] = useSearchParams(); const { status } = useAuth();
-  const returnContext = useMemo(() => { try { return JSON.parse(sessionStorage.getItem(PAYMENT_CONTEXT_KEY) || '{}'); } catch { return {}; } }, []);
+  const contextHint = location.state?.bookingId || params.get('booking_id') || params.get('vnp_TxnRef') || params.get('orderCode');
+  const returnContext = useMemo(() => readPaymentContext([contextHint, params.get('vnp_TxnRef'), params.get('orderCode')]), [contextHint, params]);
   const bookingId = location.state?.bookingId || params.get('booking_id') || returnContext.bookingId || '';
   const guestEmail = location.state?.guestEmail || returnContext.guestEmail || (bookingId ? sessionStorage.getItem(emailKey(bookingId)) : '') || '';
   const gateway = params.has('vnp_TxnRef') ? 'vnpay' : params.has('orderCode') ? 'payos' : params.get('demo') ? 'demo' : '';
-  const [state, setState] = useState({ loading: true, error: '', gatewayResult: null, booking: null });
+  const [state, setState] = useState({ loading: true, error: '', gatewayError: '', gatewayResult: null, statusResult: null });
   const load = useCallback(async () => {
     if (status === 'loading') return;
-    setState((current) => ({ ...current, loading: true, error: '' }));
+    setState((current) => ({ ...current, loading: true, error: '', gatewayError: '' }));
     try {
       let gatewayResult = null;
-      if (gateway === 'vnpay') gatewayResult = await api.vnpayReturn(Object.fromEntries(params.entries()));
-      else if (gateway === 'payos') gatewayResult = await api.payosReturn(Object.fromEntries(params.entries()));
+      let gatewayError = '';
+      try {
+        if (gateway === 'vnpay') gatewayResult = await api.vnpayReturn(Object.fromEntries(params.entries()));
+        else if (gateway === 'payos') gatewayResult = await api.payosReturn(Object.fromEntries(params.entries()));
+      } catch (error) {
+        gatewayError = errorText(error, 'Chưa thể đọc thông tin chuyển hướng từ cổng thanh toán.');
+      }
       let resolvedId = gatewayResult?.bookingId || bookingId;
-      let booking = null;
-      if (resolvedId) booking = await api.bookingDetail(resolvedId, guestEmail || undefined);
-      setState({ loading: false, error: '', gatewayResult, booking });
-    } catch (error) { setState({ loading: false, error: errorText(error, 'Chưa thể xác minh kết quả thanh toán.'), gatewayResult: null, booking: null }); }
+      let statusResult = null;
+      if (resolvedId) statusResult = await api.paymentStatus(resolvedId, guestEmail || undefined);
+      setState({ loading: false, error: '', gatewayError, gatewayResult, statusResult });
+    } catch (error) { setState({ loading: false, error: errorText(error, 'Chưa thể xác minh kết quả thanh toán.'), gatewayError: '', gatewayResult: null, statusResult: null }); }
   }, [api, bookingId, gateway, guestEmail, params, status]);
   useEffect(() => { void load(); }, [load]);
-  return <PaymentShell><Heading eyebrow="KẾT QUẢ THANH TOÁN" title="Kiểm tra trạng thái đặt chỗ" description="Thông tin trả về từ trình duyệt không tự xác nhận thanh toán. Trạng thái đặt chỗ bên dưới được tải lại từ hệ thống." />{state.loading || status === 'loading' ? <LoadingView label="Đang kiểm tra trạng thái…" /> : <section className="surface-card booking-panel payment-result-panel">{state.error ? <Notice type="error">{state.error}</Notice> : null}{state.gatewayResult?.isValidChecksum === false ? <Notice type="error">Thông tin VNPay trả về không xác minh được chữ ký.</Notice> : null}{state.gatewayResult?.processed === false && gateway === 'payos' ? <Notice>payOS đã chuyển hướng về ứng dụng; trạng thái giao dịch cần được xác nhận qua webhook.</Notice> : null}{state.booking ? <><div className="booking-detail-title"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2>{state.booking.booking_code}</h2></div><StatusBadge status={state.booking.status} /></div><p>Đặt chỗ được xác nhận khi trạng thái hệ thống là “Đã xác nhận”. Hiện tại: <strong>{statusLabel(state.booking.status)}</strong>.</p><div className="booking-actions"><Link className="button button-primary" to={`/bookings/${state.booking.id}`} state={{ guestEmail }}>Xem đặt chỗ</Link><button className="button button-outline" type="button" onClick={() => void load()}>Kiểm tra lại</button></div></> : <><p>Không có mã đặt chỗ để tải trạng thái. Tra cứu bằng mã đặt chỗ và email để kiểm tra.</p><Link className="button button-primary" to="/bookings/lookup">Tra cứu đặt chỗ</Link></>}</section>}</PaymentShell>;
+  const booking = state.statusResult?.booking;
+  const payment = state.statusResult?.payment;
+  const activePayment = payment?.active_attempt;
+  const statusMessage = booking?.status === 'confirmed' && activePayment?.status === 'success'
+    ? 'Thanh toán thành công và đặt chỗ đã được xác nhận.'
+    : payment?.manual_review_required && ['expired', 'cancelled'].includes(booking?.status)
+      ? 'Đã nhận thông tin thanh toán, nhưng đặt chỗ không còn đủ điều kiện. Bộ phận hỗ trợ sẽ xử lý tiếp; hệ thống không tự động hoàn tiền hoặc đặt lại vé.'
+      : activePayment?.status === 'failed'
+        ? 'Thanh toán chưa thành công. Trạng thái đặt chỗ hiện tại được hiển thị từ hệ thống.'
+        : booking?.status === 'expired'
+          ? 'Đặt chỗ đã hết hạn. Trạng thái thanh toán đang được hệ thống đối soát.'
+          : booking?.status === 'cancelled'
+            ? 'Đặt chỗ đã bị hủy. Không có xác nhận vé mới được phát hành.'
+            : activePayment?.status === 'pending' || booking?.status === 'pending_payment'
+              ? 'Thanh toán đang chờ xác nhận từ hệ thống.'
+              : 'Trạng thái đặt chỗ được tải từ hệ thống.';
+  return <PaymentShell><Heading eyebrow="KẾT QUẢ THANH TOÁN" title="Kiểm tra trạng thái đặt chỗ" description="Thông tin trả về từ trình duyệt không tự xác nhận thanh toán. Trạng thái đặt chỗ bên dưới được tải lại từ hệ thống." />{state.loading || status === 'loading' ? <LoadingView label="Đang kiểm tra trạng thái…" /> : <section className="surface-card booking-panel payment-result-panel">{state.error ? <Notice type="error">{state.error}</Notice> : null}{state.gatewayError ? <Notice>{state.gatewayError} Trạng thái bên dưới vẫn được đọc từ hệ thống.</Notice> : null}{state.gatewayResult?.isValidChecksum === false ? <Notice type="error">Thông tin VNPay trả về không xác minh được chữ ký.</Notice> : null}{state.gatewayResult?.processed === false && gateway === 'payos' ? <Notice>payOS đã chuyển hướng về ứng dụng; trạng thái giao dịch cần được xác nhận qua webhook.</Notice> : null}{booking ? <><div className="booking-detail-title"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2>{booking.booking_code}</h2></div><StatusBadge status={booking.status} /></div><p>{statusMessage}</p>{activePayment ? <p>Thanh toán hiện tại: <strong>{statusLabel(activePayment.status)}</strong>{activePayment.transaction_ref ? <> · Mã giao dịch <code>{activePayment.transaction_ref}</code></> : null}</p> : <p>Chưa có giao dịch thanh toán được ghi nhận cho đặt chỗ này.</p>}{payment?.previous_attempts?.length ? <p className="field-hint">Các giao dịch trước đó không quyết định trạng thái thanh toán hiện tại.</p> : null}{payment?.manual_review_required ? <Notice>Giao dịch cần được hỗ trợ kiểm tra thủ công. Vui lòng giữ lại mã đặt chỗ khi liên hệ hỗ trợ.</Notice> : null}<div className="booking-actions"><Link className="button button-primary" to={`/bookings/${booking.id}`} state={{ guestEmail }}>Xem đặt chỗ</Link><button className="button button-outline" type="button" onClick={() => void load()}>Kiểm tra lại</button></div></> : <><p>Không có mã đặt chỗ hợp lệ để tải trạng thái. Tra cứu bằng mã đặt chỗ và email để kiểm tra.</p><Link className="button button-primary" to="/bookings/lookup">Tra cứu đặt chỗ</Link><button className="button button-outline" type="button" onClick={() => void load()}>Thử lại</button></>}</section>}</PaymentShell>;
 }
 
 export function AdminPaymentsPage() {

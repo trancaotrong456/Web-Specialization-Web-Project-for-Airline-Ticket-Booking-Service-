@@ -104,14 +104,16 @@ for (const path of ['vnpay', 'payos', 'reconciliation']) {
     test(`PAY02A MySQL ${path}: ${state} at confirmation`, { timeout: 20000 }, async () => {
       const f = await fixture({ multiLeg: state !== 'single_valid' });
       const payment = await initiate(f, path === 'vnpay' ? 'vnpay' : 'payos');
-      if (state === 'cancelled') await flightService.cancelFlight(f.second.flight.id);
+      if (state === 'cancelled') await flightService.cancelFlight(f.second.flight.id, { reason: 'PAY02A integration cancellation fixture' });
       if (state === 'departed') await f.second.flight.update({ departure_time: new Date(0) });
       if (path === 'reconciliation') await reconcile(payment, 'PAID');
       else await callback(payment);
+      const valid = state.endsWith('valid');
       assert.equal((await models.Booking.findByPk(f.booking.id)).status,
-        state.endsWith('valid') ? 'confirmed' : 'pending_payment');
+        valid ? 'confirmed' : 'expired');
       assert.equal((await payment.reload()).status, 'success');
-      await assertInventory(f);
+      await assertInventory(f, !valid);
+      if (!valid) assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: payment.id, state: 'manual_review' } }), 1);
     });
   }
 
@@ -139,9 +141,10 @@ for (const path of ['vnpay', 'payos', 'reconciliation']) {
       })]);
     } finally { release.resolve(); }
     await Promise.all([cancellation, confirmation]);
-    assert.equal((await models.Booking.findByPk(f.booking.id)).status, 'pending_payment');
+    assert.equal((await models.Booking.findByPk(f.booking.id)).status, 'expired');
     assert.equal((await payment.reload()).status, 'success');
-    await assertInventory(f);
+    await assertInventory(f, true);
+    assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: payment.id, state: 'manual_review' } }), 1);
   });
 }
 
@@ -209,6 +212,10 @@ for (const status of ['PAID', 'CANCELLED']) {
     assert.equal((await models.Booking.findByPk(f.booking.id)).status, 'pending_payment');
     assert.equal((await b.reload()).status, 'pending');
     await assertInventory(f);
+    if (status === 'PAID') {
+      assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: a.id, state: 'manual_review' } }), 1);
+      assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: a.id } }), 1);
+    }
   });
 }
 

@@ -170,6 +170,64 @@ class PaymentService {
     return payment;
   }
 
+  async getCustomerPaymentStatus(bookingId, currentUser = null, guestEmail = null) {
+    const booking = await this.repository.findCustomerPaymentStatus(bookingId);
+    const notFound = () => {
+      const error = new Error('Booking payment status not found');
+      error.statusCode = 404;
+      return error;
+    };
+
+    if (!booking) throw notFound();
+
+    const roleName = currentUser?.role?.name;
+    // Customer status is intentionally not an admin/staff shortcut. Operators
+    // use the existing protected payment/reconciliation endpoints instead.
+    if (roleName === 'admin' || roleName === 'staff') {
+      const error = new Error('Customer payment status is not available for this account');
+      error.statusCode = 403;
+      throw error;
+    }
+
+    try {
+      verifyBookingAccess(booking, currentUser, guestEmail);
+    } catch (error) {
+      if (!currentUser) throw notFound();
+      throw error;
+    }
+
+    const attempts = Array.isArray(booking.payments)
+      ? [...booking.payments].sort((a, b) => Number(b.id) - Number(a.id))
+      : [];
+    const active = attempts[0] || null;
+    const safeAttempt = (payment, isActive) => ({
+      payment_method: payment.payment_method,
+      status: payment.status,
+      amount: payment.amount,
+      ...(isActive ? { transaction_ref: payment.transaction_ref || null, paid_at: payment.paid_at || null } : { is_stale: true }),
+    });
+    const manualReviewRequired = attempts.some((payment) => payment.status === 'success'
+      && payment.reconciliationCase?.state === 'manual_review');
+    const data = booking.toJSON ? booking.toJSON() : booking;
+
+    return {
+      booking: {
+        id: data.id,
+        booking_code: data.booking_code,
+        status: data.status,
+        total_amount: data.total_amount,
+        hold_expires_at: data.hold_expires_at || null,
+      },
+      payment: {
+        active_attempt: active ? safeAttempt(active, true) : null,
+        previous_attempts: attempts.slice(1).map((payment) => safeAttempt(payment, false)),
+        manual_review_required: manualReviewRequired,
+        status_confidence: 'authoritative',
+      },
+      checked_at: new Date().toISOString(),
+    };
+  }
+
   async getReconciliationCases({ page = 1, limit = 20, provider, state, payment_id, booking_id, booking_code, manual_review_reason, sort = 'created_at', order = 'desc' } = {}) {
     const normalizedPage = Math.max(1, Number.parseInt(page, 10) || 1);
     const normalizedLimit = Math.min(100, Math.max(1, Number.parseInt(limit, 10) || 20));
@@ -352,6 +410,7 @@ class PaymentService {
       const booking = payment ? await this.repository.findLockedBookingWithPassengers(payment.booking_id, transaction) : null;
       if (!payment || !booking) return;
       if (payment.status === 'success') {
+        const activeAttempt = await this._isLatestPaymentAttempt(payment, transaction);
         if (booking.status === 'confirmed') {
           await this.repository.resolveCase(reconciliationCase.id, this.workerId, {
             resolvedAt: now, lastGatewayStatus: String(gatewayStatus?.status || 'PAID').toUpperCase(),
@@ -359,7 +418,10 @@ class PaymentService {
         } else {
           const exception = await this._recordFinancialException(payment, booking, transaction, {
             status: String(gatewayStatus?.status || 'PAID').toUpperCase(),
-            reason: 'Successful payment remains unresolved and requires financial reconciliation',
+            reason: activeAttempt
+              ? 'Successful payment remains unresolved and requires financial reconciliation'
+              : 'PAID result belongs to an older payment attempt',
+            releaseIfPending: activeAttempt,
           });
           if (!exception && typeof this.repository.markManualReview === 'function') {
             await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Successful payment remains unresolved and requires financial reconciliation', { transaction });
@@ -391,7 +453,10 @@ class PaymentService {
         } else {
           emitReconciliationEvent(this.logger, 'late_paid_detected', { case_id: reconciliationCase.id, payment_id: reconciliationCase.payment_id });
           const exception = await this._recordFinancialException(payment, booking, transaction, {
-            status: 'PAID', reason: 'Late PAID payment requires financial reconciliation',
+            status: 'PAID', reason: activeAttempt
+              ? 'Late PAID payment requires financial reconciliation'
+              : 'PAID result belongs to an older payment attempt',
+            releaseIfPending: activeAttempt,
           });
           if (!exception && typeof this.repository.markManualReview === 'function') {
             await this.repository.markManualReview(reconciliationCase.id, this.workerId, 'Late PAID payment requires financial reconciliation', { transaction });
@@ -641,12 +706,13 @@ class PaymentService {
     let resolvedCancelUrl = null;
     if (payment_method === 'vnpay') {
       const localFrontendReturnUrl = process.env.CLIENT_URL
-        ? new URL('/payment/vnpay-return', process.env.CLIENT_URL).toString()
+        ? new URL('/payments/result', process.env.CLIENT_URL).toString()
         : null;
       resolvedReturnUrl = resolvePaymentReturnUrl(
         return_url,
         process.env.VNP_RETURN_URL,
-        localFrontendReturnUrl
+        localFrontendReturnUrl,
+        '/payments/result'
       );
       if (!resolvedReturnUrl) {
         const error = new Error('VNPay return URL is not configured. Set VNP_RETURN_URL or CLIENT_URL.');
@@ -654,8 +720,8 @@ class PaymentService {
         throw error;
       }
     } else if (payment_method === 'payos' && payosMode === 'live') {
-      resolvedReturnUrl = resolvePaymentReturnUrl(return_url, process.env.PAYOS_RETURN_URL);
-      resolvedCancelUrl = resolvePaymentReturnUrl(null, process.env.PAYOS_CANCEL_URL);
+      resolvedReturnUrl = resolvePaymentReturnUrl(return_url, process.env.PAYOS_RETURN_URL, null, '/payments/result');
+      resolvedCancelUrl = resolvePaymentReturnUrl(null, process.env.PAYOS_CANCEL_URL, null, '/payments/result');
       if (!resolvedReturnUrl || !resolvedCancelUrl) {
         const error = new Error('payOS return and cancel URLs must be configured.');
         error.statusCode = 503;

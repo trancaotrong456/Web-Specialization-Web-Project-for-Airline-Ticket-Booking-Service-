@@ -27,6 +27,7 @@ export const createBookingsApi = (request) => ({
     body: payload,
     ...(idempotencyKey ? { headers: { 'Idempotency-Key': idempotencyKey } } : {}),
   }),
+  paymentStatus: (bookingId, guestEmail) => request(`/payments/bookings/${encodeURIComponent(bookingId)}/status?${toQuery({ guest_email: guestEmail })}`),
   payments: ({ page = 1, limit = 20, status, payment_method, booking_id } = {}) => request(`/payments?${toQuery({ page, limit, status, payment_method, booking_id })}`),
   paymentDetail: (id) => request(`/payments/${encodeURIComponent(id)}`),
   refundBooking: (id, reason) => request(`/payments/bookings/${encodeURIComponent(id)}/refund`, { method: 'POST', body: reason ? { reason } : {} }),

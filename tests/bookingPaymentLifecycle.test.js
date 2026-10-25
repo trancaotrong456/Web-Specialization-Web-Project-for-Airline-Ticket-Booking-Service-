@@ -482,8 +482,8 @@ test('#38 ambiguous payOS link creation failure keeps payment pending for reconc
     PAYOS_CANCEL_URL: process.env.PAYOS_CANCEL_URL,
   };
   process.env.PAYOS_MODE = 'live';
-  process.env.PAYOS_RETURN_URL = 'https://frontend.example/payment/payos-return';
-  process.env.PAYOS_CANCEL_URL = 'https://frontend.example/payment/payos-cancel';
+  process.env.PAYOS_RETURN_URL = 'https://frontend.example/payments/result';
+  process.env.PAYOS_CANCEL_URL = 'https://frontend.example/payments/result';
 
   try {
     await assert.rejects(

@@ -292,6 +292,28 @@ class SequelizePaymentRepository {
     if (paymentMethod) where.payment_method = paymentMethod;
     return this.Payment.findOne({ where, include: [{ model: this.Booking, as: 'booking' }] });
   }
+
+  // One read query keeps Booking, attempts and reconciliation projections from
+  // being assembled from contradictory multi-query snapshots. No row lock is
+  // needed because this endpoint never mutates payment or booking state.
+  findCustomerPaymentStatus(bookingId) {
+    return this.Booking.findByPk(bookingId, {
+      attributes: ['id', 'booking_code', 'status', 'user_id', 'guest_email', 'total_amount', 'hold_expires_at'],
+      include: [{
+        model: this.Payment,
+        as: 'payments',
+        attributes: ['id', 'payment_method', 'status', 'amount', 'transaction_ref', 'paid_at'],
+        required: false,
+        order: [['id', 'DESC']],
+        include: this.PaymentReconciliationCase ? [{
+          model: this.PaymentReconciliationCase,
+          as: 'reconciliationCase',
+          attributes: ['state'],
+          required: false,
+        }] : [],
+      }],
+    });
+  }
   findLockedFlight(id, transaction) {
     return this.Flight.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction });
   }

@@ -7,7 +7,7 @@ class PaymentController {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'initiatePayment', 'getCustomerPaymentStatus', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -60,6 +60,19 @@ class PaymentController {
         idempotency_key: req.headers['idempotency-key'] || null,
       });
       return this.apiResponse.success(res, result, 'Payment initiated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getCustomerPaymentStatus(req, res, next) {
+    try {
+      const result = await this.service.getCustomerPaymentStatus(
+        req.params.bookingId,
+        req.user || null,
+        normalizeGuestEmail(req.query.guest_email)
+      );
+      return this.apiResponse.success(res, result, 'Payment status retrieved successfully');
     } catch (error) {
       next(error);
     }

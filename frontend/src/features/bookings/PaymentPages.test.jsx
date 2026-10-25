@@ -30,6 +30,37 @@ describe('payment pages', () => {
     expect(mocks.request.mock.calls.find(([path]) => path === '/payments/initiate')[1].headers['Idempotency-Key']).toMatch(/^[0-9a-f-]{36}$/i);
   });
 
+  it('keeps the QR visible and offers a safe checkout link without automatic redirect', async () => {
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/bookings/7?')) return booking;
+      if (path === '/payments/initiate') return { payment_url: 'https://pay.example.test/checkout', qr_code: 'data:image/png;base64,serverQr', transaction_ref: 'txn-2' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    routes(<PaymentInitiatePage />, '/bookings/:id/payment', '/bookings/7/payment');
+    await screen.findByText('BK123');
+    await user.click(screen.getByRole('radio', { name: /payOS · VietQR/ }));
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục thanh toán' }));
+    expect(await screen.findByRole('img', { name: 'Mã QR do payOS trả về' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Mở trang thanh toán payOS' })).toHaveAttribute('href', 'https://pay.example.test/checkout');
+    expect(window.location.pathname).not.toBe('/checkout');
+  });
+
+  it('shows a fallback when both QR and checkout URL are unavailable', async () => {
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/bookings/7?')) return booking;
+      if (path === '/payments/initiate') return { payment_url: null, qr_code: null, transaction_ref: 'txn-3' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const user = userEvent.setup();
+    routes(<PaymentInitiatePage />, '/bookings/:id/payment', '/bookings/7/payment');
+    await screen.findByText('BK123');
+    await user.click(screen.getByRole('radio', { name: /payOS · VietQR/ }));
+    await user.click(screen.getByRole('button', { name: 'Tiếp tục thanh toán' }));
+    expect(await screen.findByText('Chưa có mã QR hoặc liên kết thanh toán khả dụng. Vui lòng thử lại sau.')).toBeInTheDocument();
+    expect(screen.getByText('txn-3')).toBeInTheDocument();
+  });
+
   it('shows every itinerary leg in the payment summary and keeps the server total', async () => {
     mocks.request.mockResolvedValue({
       ...booking,
@@ -53,10 +84,49 @@ describe('payment pages', () => {
   });
 
   it('uses the submitted-report booking status label on payment result', async () => {
-    mocks.request.mockResolvedValue(booking);
+    mocks.request.mockResolvedValue({ booking, payment: { active_attempt: { payment_method: 'payos', status: 'pending', amount: booking.total_amount, transaction_ref: 'txn-result', paid_at: null }, previous_attempts: [], manual_review_required: false, status_confidence: 'authoritative' }, checked_at: '2026-10-12T10:00:00Z' });
     routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&demo=1');
     expect(await screen.findByText('BK123')).toBeInTheDocument();
-    expect(screen.getByText(/Đặt chỗ được xác nhận khi trạng thái hệ thống/)).toHaveTextContent('Hiện tại: Giữ chỗ / Chờ thanh toán');
+    expect(screen.getByText(/Thanh toán đang chờ xác nhận từ hệ thống/)).toBeInTheDocument();
+  });
+
+  it('uses authoritative payment status and shows manual review without false confirmation', async () => {
+    mocks.request.mockResolvedValue({
+      booking: { ...booking, status: 'expired' },
+      payment: { active_attempt: { payment_method: 'payos', status: 'success', amount: booking.total_amount, transaction_ref: 'late-1', paid_at: '2026-10-12T10:00:00Z' }, previous_attempts: [], manual_review_required: true, status_confidence: 'authoritative' },
+      checked_at: '2026-10-12T10:00:00Z',
+    });
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&status=PAID');
+    expect(await screen.findByText('BK123')).toBeInTheDocument();
+    expect(screen.getByText(/không còn đủ điều kiện/i)).toBeInTheDocument();
+    expect(screen.getByText(/cần được hỗ trợ kiểm tra thủ công/i)).toBeInTheDocument();
+    expect(screen.queryByText(/Đã xác nhận/)).not.toBeInTheDocument();
+  });
+
+  it('treats VNPay browser return as a hint and reads the authorized status endpoint', async () => {
+    const calls = [];
+    mocks.request.mockImplementation(async (path) => {
+      calls.push(path);
+      if (path.startsWith('/payments/vnpay/return?')) return { isSuccess: true, isValidChecksum: true, bookingId: 7 };
+      if (path.startsWith('/payments/bookings/7/status?')) return { booking: { ...booking, status: 'confirmed' }, payment: { active_attempt: { payment_method: 'vnpay', status: 'success', amount: booking.total_amount, transaction_ref: 'TXN-1', paid_at: '2026-10-12T10:00:00Z' }, previous_attempts: [], manual_review_required: false, status_confidence: 'authoritative' }, checked_at: '2026-10-12T10:00:00Z' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&vnp_TxnRef=TXN-1&vnp_ResponseCode=00');
+    expect(await screen.findByText('BK123')).toBeInTheDocument();
+    expect(screen.getByText(/Thanh toán thành công và đặt chỗ đã được xác nhận/)).toBeInTheDocument();
+    expect(calls.some((path) => path.startsWith('/payments/bookings/7/status?'))).toBe(true);
+  });
+
+  it('handles payOS cancel as informational and never shows false refund confirmation', async () => {
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/payments/payos/return?')) return { orderCode: '1001', status: 'CANCELLED', processed: false };
+      if (path.startsWith('/payments/bookings/7/status?')) return { booking: { ...booking, status: 'holding' }, payment: { active_attempt: { payment_method: 'payos', status: 'failed', amount: booking.total_amount, transaction_ref: '1001', paid_at: null }, previous_attempts: [], manual_review_required: false, status_confidence: 'authoritative' }, checked_at: '2026-10-12T10:00:00Z' };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&orderCode=1001&cancel=true&status=CANCELLED');
+    expect(await screen.findByText('BK123')).toBeInTheDocument();
+    expect(screen.getByText(/Thanh toán chưa thành công/)).toBeInTheDocument();
+    expect(screen.queryByText(/hoàn tiền thành công/i)).not.toBeInTheDocument();
   });
 
   it('rejects reversed revenue dates before making the request', async () => {

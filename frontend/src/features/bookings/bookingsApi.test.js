@@ -52,6 +52,13 @@ describe('booking and payment API adapter', () => {
     });
   });
 
+  it('reads customer payment status with optional guest authorization', async () => {
+    const request = vi.fn(async () => ({}));
+    const api = createBookingsApi(request);
+    await api.paymentStatus(7, 'guest@example.com');
+    expect(request).toHaveBeenCalledWith('/payments/bookings/7/status?guest_email=guest%40example.com');
+  });
+
   it('validates a promotion through the public code-validation route', async () => {
     const request = vi.fn(async () => ({ code: 'SKY10' }));
     const api = createBookingsApi(request);
