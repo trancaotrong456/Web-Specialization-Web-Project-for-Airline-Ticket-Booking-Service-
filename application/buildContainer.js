@@ -25,6 +25,13 @@ const { SequelizeBookingRepository } = require('../modules/booking/booking.repos
 const { createPaymentModule } = require('../modules/payment');
 const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
 const { VnpayGateway } = require('../modules/payment/vnpay.gateway');
+const { createSeatSelectionModule } = require('../modules/seat-selection');
+const SequelizeSeatSelectionRepository = require('../modules/seat-selection/seatSelection.repository');
+const { createAncillariesModule } = require('../modules/ancillaries');
+const { SequelizeAncillariesRepository } = require('../modules/ancillaries/ancillaries.repository');
+const { createNotificationModule } = require('../modules/notification');
+const { SequelizeNotificationRepository } = require('../modules/notification/notification.repository');
+const { NotificationEventPublisher } = require('../modules/notification/notificationEventPublisher');
 const createAuthGuards = require('../shared/http/guards/createAuthGuards');
 const createValidationAdapter = require('../shared/http/validation/validationAdapter');
 const { getEmailProvider } = require('../infrastructure/email/emailProvider');
@@ -110,7 +117,7 @@ function getDefaultFareClassModule() {
 let defaultFlightModule;
 function getDefaultFlightModule() {
   if (defaultFlightModule) return defaultFlightModule;
-  const { sequelize, Flight, Airline, Airport, FareClass, Booking } = require('../models');
+  const { sequelize, Flight, Airline, Airport, FareClass, Booking, BookingSegment, FlightStatusHistory, User } = require('../models');
   const { Op } = require('sequelize');
   const guards = createAuthGuards({
     authenticate: require('../middlewares/auth.middleware'),
@@ -119,8 +126,10 @@ function getDefaultFlightModule() {
   });
   const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
   defaultFlightModule = createFlightModule({
-    repository: new SequelizeFlightRepository({ sequelize, Flight, Airline, Airport, FareClass, Booking, Op }),
+    repository: new SequelizeFlightRepository({ sequelize, Flight, Airline, Airport, FareClass, Booking, BookingSegment, FlightStatusHistory, User, Op }),
     guards, validation, validators: require('../validators/flight.validator'), getIO: getSocket,
+    flightStatusNotifier: require('../modules/notification/flightStatusNotificationAdapter')
+      .createFlightStatusNotificationAdapter({ publisher: getDefaultNotificationPublisher() }),
   });
   return defaultFlightModule;
 }
@@ -189,6 +198,22 @@ function getDefaultTicketModule() {
 }
 
 let defaultBookingModule;
+let defaultSeatSelectionModule;
+let defaultAncillariesModule;
+function getDefaultAncillariesModule() {
+  if (defaultAncillariesModule) return defaultAncillariesModule;
+  const models = require('../models');
+  const guards = createAuthGuards({ authenticate: require('../middlewares/auth.middleware'), optionalAuth: require('../middlewares/optionalAuth.middleware'), authorize: require('../middlewares/rbac.middleware') });
+  defaultAncillariesModule = createAncillariesModule({ repository: new SequelizeAncillariesRepository(models), transactionManager: models.sequelize, guards });
+  return defaultAncillariesModule;
+}
+function getDefaultSeatSelectionModule() {
+  if (defaultSeatSelectionModule) return defaultSeatSelectionModule;
+  const models = require('../models');
+  const guards = createAuthGuards({ authenticate: require('../middlewares/auth.middleware'), optionalAuth: require('../middlewares/optionalAuth.middleware'), authorize: require('../middlewares/rbac.middleware') });
+  defaultSeatSelectionModule = createSeatSelectionModule({ repository: new SequelizeSeatSelectionRepository(models), transactionManager: models.sequelize, guards });
+  return defaultSeatSelectionModule;
+}
 function getDefaultBookingModule() {
   if (defaultBookingModule) return defaultBookingModule;
   const models = require('../models');
@@ -198,6 +223,9 @@ function getDefaultBookingModule() {
     ticketController: getDefaultTicketModule().controller,
     socket: getSocket,
     payosStatusLookup: async (transactionRef) => getDefaultPaymentModule().service.getPayosPaymentStatus(transactionRef),
+    seatSelectionService: getDefaultSeatSelectionModule().service,
+    ancillaryService: getDefaultAncillariesModule().service,
+    notificationPublisher: getDefaultNotificationPublisher(),
   });
   return defaultBookingModule;
 }
@@ -212,8 +240,38 @@ function getDefaultPaymentModule() {
     transactionManager: models.sequelize,
     socket: getSocket,
     emailProvider: getEmailProvider(),
+    seatSelectionService: getDefaultSeatSelectionModule().service,
+    ancillaryService: getDefaultAncillariesModule().service,
+    notificationPublisher: getDefaultNotificationPublisher(),
   });
   return defaultPaymentModule;
+}
+
+let defaultNotificationPublisher;
+function getDefaultNotificationPublisher() {
+  if (defaultNotificationPublisher) return defaultNotificationPublisher;
+  const { Notification, NotificationOutbox, User } = require('../models');
+  defaultNotificationPublisher = new NotificationEventPublisher({ Notification, NotificationOutbox, User });
+  return defaultNotificationPublisher;
+}
+
+let defaultNotificationModule;
+function getDefaultNotificationModule() {
+  if (defaultNotificationModule) return defaultNotificationModule;
+  const { Notification } = require('../models');
+  const guards = createAuthGuards({
+    authenticate: require('../middlewares/auth.middleware'),
+    optionalAuth: require('../middlewares/optionalAuth.middleware'),
+    authorize: require('../middlewares/rbac.middleware'),
+  });
+  const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  defaultNotificationModule = createNotificationModule({
+    repository: new SequelizeNotificationRepository({ Notification }),
+    guards,
+    validation,
+    validators: require('../validators/notification.validator'),
+  });
+  return defaultNotificationModule;
 }
 
 function buildContainer({
@@ -228,6 +286,9 @@ function buildContainer({
   authModule,
   bookingModule,
   paymentModule,
+  seatSelectionModule,
+  ancillariesModule,
+  notificationModule,
   errorHandler,
   apiResponse = ApiResponse,
   logger = console,
@@ -243,6 +304,9 @@ function buildContainer({
   const resolvedAuthModule = authModule || (apiRouter ? undefined : getDefaultAuthModule());
   const resolvedBookingModule = bookingModule || (apiRouter ? undefined : getDefaultBookingModule());
   const resolvedPaymentModule = paymentModule || (apiRouter ? undefined : getDefaultPaymentModule());
+  const resolvedSeatSelectionModule = seatSelectionModule || (apiRouter ? undefined : getDefaultSeatSelectionModule());
+  const resolvedAncillariesModule = ancillariesModule || (apiRouter ? undefined : getDefaultAncillariesModule());
+  const resolvedNotificationModule = notificationModule || (apiRouter ? undefined : getDefaultNotificationModule());
   const routeModules = {
     ...(resolvedAuthModule ? { auth: resolvedAuthModule.router } : {}),
     ...(resolvedUserModule ? { users: resolvedUserModule.router } : {}),
@@ -254,8 +318,11 @@ function buildContainer({
     ...(resolvedFlightModule ? { flights: resolvedFlightModule.router } : {}),
     ...(resolvedBookingModule ? { bookings: resolvedBookingModule.router } : {}),
     ...(resolvedPaymentModule ? { payments: resolvedPaymentModule.router } : {}),
+    ...(resolvedSeatSelectionModule ? { seatSelection: resolvedSeatSelectionModule.router } : {}),
+    ...(resolvedAncillariesModule ? { ancillaries: resolvedAncillariesModule.router } : {}),
+    ...(resolvedNotificationModule ? { notifications: resolvedNotificationModule.router } : {}),
   };
-  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule);
+  const hasModuleOverrides = Boolean(airlineModule || airportModule || promotionModule || fareClassModule || flightModule || userModule || roleModule || authModule || bookingModule || paymentModule || seatSelectionModule || ancillariesModule || notificationModule);
   const resolvedApiRouter = apiRouter || (hasModuleOverrides
     ? registerModules({ routeModules })
     : getDefaultApiRouter({ routeModules }));
@@ -272,6 +339,9 @@ function buildContainer({
     ...(resolvedAuthModule ? { authModule: resolvedAuthModule } : {}),
     ...(resolvedBookingModule ? { bookingModule: resolvedBookingModule } : {}),
     ...(resolvedPaymentModule ? { paymentModule: resolvedPaymentModule } : {}),
+    ...(resolvedSeatSelectionModule ? { seatSelectionModule: resolvedSeatSelectionModule } : {}),
+    ...(resolvedAncillariesModule ? { ancillariesModule: resolvedAncillariesModule } : {}),
+    ...(resolvedNotificationModule ? { notificationModule: resolvedNotificationModule } : {}),
     errorHandler: errorHandler || createErrorHandlerAdapter({
       filter: createErrorFilter({ getEnvironment }),
       apiResponse,
@@ -280,4 +350,4 @@ function buildContainer({
   };
 }
 
-module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule };
+module.exports = { buildContainer, getDefaultAirlineModule, getDefaultAirportModule, getDefaultPromotionModule, getDefaultFareClassModule, getDefaultFlightModule, getDefaultUserModule, getDefaultRoleModule, getDefaultAuthModule, getDefaultTicketModule, getDefaultBookingModule, getDefaultPaymentModule, getDefaultSeatSelectionModule, getDefaultAncillariesModule, getDefaultNotificationModule, getDefaultNotificationPublisher };

@@ -85,6 +85,7 @@ describe('admin dashboard navigation shell', () => {
       ['Đặt chỗ', '/admin/bookings'],
       ['Thanh toán', '/admin/payments'],
       ['Khuyến mại', '/admin/promotions'],
+      ['Sơ đồ ghế', '/admin/seat-maps'],
     ]) {
       expect(main.getByRole('link', { name: new RegExp(name) })).toHaveAttribute('href', href);
     }
@@ -101,7 +102,7 @@ describe('admin dashboard navigation shell', () => {
 
     const icons = [...document.querySelectorAll('.admin-module-icon svg[data-module-icon]')];
     expect(icons.map((icon) => icon.getAttribute('data-module-icon'))).toEqual([
-      'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions',
+      'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions', 'seats', 'ancillaries',
     ]);
     expect(icons.every((icon) => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
   });

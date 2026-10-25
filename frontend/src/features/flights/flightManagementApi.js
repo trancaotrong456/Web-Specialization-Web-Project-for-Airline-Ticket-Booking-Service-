@@ -7,11 +7,13 @@ const query = (values) => {
 };
 
 export const createFlightManagementApi = (request) => ({
-  listFlights: ({ page = 1, limit = 20, status = '' } = {}) => request(`/flights?${query({ page, limit, status })}`),
+  listFlights: ({ page = 1, limit = 20, status = '', date_from = '', date_to = '' } = {}) => request(`/flights?${query({ page, limit, status, date_from, date_to })}`),
   getFlight: (id) => request(`/flights/${id}`),
+  getFlightStatus: (id) => request(`/flights/status/${id}`),
+  updateFlightStatus: (id, payload) => request(`/flights/status/${id}`, { method: 'PATCH', body: payload }),
   createFlight: (payload) => request('/flights', { method: 'POST', body: payload }),
   updateFlight: (id, payload) => request(`/flights/${id}`, { method: 'PUT', body: payload }),
-  cancelFlight: (id) => request(`/flights/${id}/cancel`, { method: 'PUT' }),
+  cancelFlight: (id, reason) => request(`/flights/${id}/cancel`, { method: 'PUT', body: { reason } }),
   deleteFlight: (id) => request(`/flights/${id}`, { method: 'DELETE' }),
   listAirlines: ({ page = 1, limit = 100 } = {}) => request(`/airlines?${query({ page, limit })}`),
   listAirports: ({ page = 1, limit = 100 } = {}) => request(`/airports?${query({ page, limit })}`),

@@ -1,7 +1,8 @@
 const { Resend } = require('resend');
+const { Op } = require('sequelize');
 const path = require('path');
 const ejs = require('ejs');
-const { Booking, BookingSegment, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment } = require('../models');
+const { Booking, BookingSegment, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment, BookingAncillary } = require('../models');
 const { redactString } = require('../shared/security/redactSensitive');
 
 let resendClient = null;
@@ -60,9 +61,10 @@ class EmailService {
         },
         { model: FareClass, as: 'fareClass' },
         { model: BookingPassenger, as: 'passengers' },
+        ...(BookingAncillary ? [{ model: BookingAncillary, as: 'ancillaries', include: [{ model: BookingPassenger, as: 'passenger' }, ...(BookingSegment ? [{ model: BookingSegment, as: 'segment' }] : [])] }] : []),
         { model: Payment, as: 'payments' },
         { model: User, as: 'user', attributes: ['id', 'full_name', 'email'] },
-        ...(BookingSegment ? [{ model: BookingSegment, as: 'itinerarySegments', include: [
+        ...(BookingSegment ? [{ model: BookingSegment, as: 'itinerarySegments', required: false, where: { leg_order: { [Op.gt]: 1 } }, include: [
           { model: Flight, as: 'flight', include: [
             { model: Airline, as: 'airline' },
             { model: Airport, as: 'departureAirport' },

@@ -12,6 +12,10 @@ class UserController {
     try { return this.apiResponse.success(res, await this.service.getUserById(req.params.id)); }
     catch (error) { next(error); }
   }
+  async updateProfile(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.updateUserProfile(req.params.id, req.body), 'User profile updated'); }
+    catch (error) { next(error); }
+  }
   async updateStatus(req, res, next) {
     try { return this.apiResponse.success(res, await this.service.updateUserStatus(req.params.id, req.body.status, req.user.id), 'User status updated'); }
     catch (error) { next(error); }

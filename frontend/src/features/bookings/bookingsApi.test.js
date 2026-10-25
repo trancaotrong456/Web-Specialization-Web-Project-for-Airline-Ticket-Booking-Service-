@@ -41,6 +41,17 @@ describe('booking and payment API adapter', () => {
     ]);
   });
 
+  it('sends a stable idempotency key as a payment initiation header', async () => {
+    const request = vi.fn(async () => ({}));
+    const api = createBookingsApi(request);
+    await api.initiatePayment({ booking_id: 3, payment_method: 'vnpay' }, 'payment-attempt-0001');
+    expect(request).toHaveBeenCalledWith('/payments/initiate', {
+      method: 'POST',
+      body: { booking_id: 3, payment_method: 'vnpay' },
+      headers: { 'Idempotency-Key': 'payment-attempt-0001' },
+    });
+  });
+
   it('validates a promotion through the public code-validation route', async () => {
     const request = vi.fn(async () => ({ code: 'SKY10' }));
     const api = createBookingsApi(request);

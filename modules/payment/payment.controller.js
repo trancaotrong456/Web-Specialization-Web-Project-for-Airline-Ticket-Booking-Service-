@@ -57,6 +57,7 @@ class PaymentController {
         guest_email: normalizeGuestEmail(req.body.guest_email),
         ip_addr: clientIp,
         currentUser: req.user || null,
+        idempotency_key: req.headers['idempotency-key'] || null,
       });
       return this.apiResponse.success(res, result, 'Payment initiated successfully');
     } catch (error) {

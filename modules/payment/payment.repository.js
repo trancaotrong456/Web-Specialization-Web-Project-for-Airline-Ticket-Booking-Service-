@@ -234,6 +234,14 @@ class SequelizePaymentRepository {
   }
 
   findPayment(options) { return this.Payment.findOne(options); }
+  findPaymentByIdempotencyKey(key, transaction) {
+    const options = { where: { idempotency_key: key } };
+    if (transaction) {
+      options.lock = transaction.LOCK.UPDATE;
+      options.transaction = transaction;
+    }
+    return this.Payment.findOne(options);
+  }
   findPaymentByPk(id, options) { return this.Payment.findByPk(id, options); }
   findAndCountPayments(options) { return this.Payment.findAndCountAll(options); }
   findPayments(options) { return this.Payment.findAll(options); }

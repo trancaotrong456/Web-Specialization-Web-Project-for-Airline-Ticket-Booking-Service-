@@ -2,6 +2,7 @@ import { io } from 'socket.io-client';
 import { useEffect, useRef, useState } from 'react';
 
 let socketInstance = null;
+let socketAccessToken = null;
 
 /**
  * Returns the shared Socket.IO client singleton.
@@ -39,9 +40,23 @@ export function getSocket(customUrl) {
       reconnection: true,
       reconnectionAttempts: 10,
       reconnectionDelay: 1000,
+      auth: socketAccessToken ? { accessToken: socketAccessToken } : {},
     });
   }
   return socketInstance;
+}
+
+export function setSocketAccessToken(accessToken) {
+  const nextToken = accessToken || null;
+  if (nextToken === socketAccessToken) return;
+  socketAccessToken = nextToken;
+  if (!socketInstance) return;
+
+  socketInstance.auth = nextToken ? { ...(socketInstance.auth || {}), accessToken: nextToken } : {};
+  if (socketInstance.connected) {
+    socketInstance.disconnect();
+    socketInstance.connect();
+  }
 }
 
 export function closeSocket() {
@@ -49,6 +64,7 @@ export function closeSocket() {
     socketInstance.disconnect();
     socketInstance = null;
   }
+  socketAccessToken = null;
 }
 
 /**

@@ -14,6 +14,14 @@ class FlightController {
     try { return this.apiResponse.success(res, await this.service.getFlightById(req.params.id), 'Flight details retrieved'); }
     catch (error) { next(error); }
   }
+  async getFlightStatus(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getFlightStatus(req.params.id), 'Flight status retrieved'); }
+    catch (error) { next(error); }
+  }
+  async updateFlightStatus(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.updateFlightStatus(req.params.id, { ...req.body, actorUserId: req.user?.id }), 'Flight status updated'); }
+    catch (error) { next(error); }
+  }
   async getAllFlights(req, res, next) {
     try { return this.apiResponse.paginated(res, await this.service.getAllFlights(req.query), 'All flights retrieved'); }
     catch (error) { next(error); }
@@ -23,11 +31,11 @@ class FlightController {
     catch (error) { next(error); }
   }
   async updateFlight(req, res, next) {
-    try { return this.apiResponse.success(res, await this.service.updateFlight(req.params.id, req.body), 'Flight updated successfully'); }
+    try { return this.apiResponse.success(res, await this.service.updateFlight(req.params.id, { ...req.body, actorUserId: req.user?.id }), 'Flight updated successfully'); }
     catch (error) { next(error); }
   }
   async cancelFlight(req, res, next) {
-    try { return this.apiResponse.success(res, await this.service.cancelFlight(req.params.id), 'Flight cancelled'); }
+    try { return this.apiResponse.success(res, await this.service.cancelFlight(req.params.id, { reason: req.body?.reason, actorUserId: req.user?.id }), 'Flight cancelled'); }
     catch (error) { next(error); }
   }
   async deleteFlight(req, res, next) {

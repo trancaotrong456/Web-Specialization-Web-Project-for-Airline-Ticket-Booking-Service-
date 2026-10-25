@@ -24,7 +24,7 @@ test('Airline module constructs one service and controller graph around the inje
   assert.equal(module.repository, repository);
   assert.equal(module.service.repository, repository);
   assert.equal(module.controller.service, module.service);
-  assert.equal(module.router.stack.filter((layer) => layer.route).length, 5);
+  assert.equal(module.router.stack.filter((layer) => layer.route).length, 7);
 });
 
 test('legacy Airline imports and composition root resolve the same canonical module objects', () => {

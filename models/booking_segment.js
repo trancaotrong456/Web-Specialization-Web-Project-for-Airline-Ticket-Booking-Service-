@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       BookingSegment.belongsTo(models.Booking, { foreignKey: 'booking_id', as: 'booking' });
       BookingSegment.belongsTo(models.Flight, { foreignKey: 'flight_id', as: 'flight' });
       BookingSegment.belongsTo(models.FareClass, { foreignKey: 'fare_class_id', as: 'fareClass' });
+      if (models.BookingAncillary) BookingSegment.hasMany(models.BookingAncillary, { foreignKey: 'booking_segment_id', as: 'ancillaries' });
     }
   }
 

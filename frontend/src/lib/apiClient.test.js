@@ -31,14 +31,16 @@ describe('createApiClient', () => {
   });
 
   it('returns a PDF response as a Blob when explicitly requested', async () => {
-    const pdf = new Blob(['%PDF-demo'], { type: 'application/pdf' });
-    const fetchImpl = vi.fn().mockResolvedValue(new Response(pdf, { status: 200, headers: { 'Content-Type': 'application/pdf' } }));
+    const pdfContent = '%PDF-demo';
+    const fetchImpl = vi.fn().mockResolvedValue(new Response(pdfContent, { status: 200, headers: { 'Content-Type': 'application/pdf' } }));
     const { request } = makeClient({ fetchImpl });
     const result = await request('/bookings/7/ticket', { responseType: 'blob' });
     // Response may come from Node's fetch realm while Blob is provided by
     // jsdom, so verify the web Blob contract without relying on realm identity.
-    expect(result).toMatchObject({ type: 'application/pdf', size: 13 });
+    expect(result).toMatchObject({ type: 'application/pdf', size: pdfContent.length });
     expect(result.arrayBuffer).toEqual(expect.any(Function));
+    expect(result.type).toBe('application/pdf');
+    expect(result.size).toBe(pdfContent.length);
     expect(fetchImpl.mock.calls[0][1].responseType).toBe('blob');
   });
 

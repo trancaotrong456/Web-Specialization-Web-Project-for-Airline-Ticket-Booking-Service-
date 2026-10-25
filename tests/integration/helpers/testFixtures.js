@@ -153,6 +153,9 @@ async function cleanupTrackedFixtures() {
     if (models.BookingSegment) {
       await models.BookingSegment.destroy({ where: { booking_id: bookingIds }, force: true });
     }
+    if (models.BookingStatusHistory) {
+      await models.BookingStatusHistory.destroy({ where: { booking_id: bookingIds }, force: true });
+    }
     await models.Booking.destroy({ where: { id: bookingIds }, force: true });
   }
   if (models.BookingSegment && (flightIds.length > 0 || fareClassIds.length > 0)) {

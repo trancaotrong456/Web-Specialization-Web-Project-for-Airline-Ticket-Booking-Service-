@@ -59,6 +59,16 @@
       </tr>
     </table>
 
+    <% if (booking.ancillaries && booking.ancillaries.length > 0) { %>
+    <h3>Dịch vụ bổ sung</h3>
+    <table class="passenger-table">
+      <tr><th>Hành khách</th><th>Chặng</th><th>Dịch vụ</th><th>Số lượng</th><th>Thành tiền</th></tr>
+      <% booking.ancillaries.forEach(function(line) { %>
+      <tr><td><%= line.passenger ? line.passenger.passenger_name : 'Hành khách' %></td><td><%= line.segment ? line.segment.leg_order : 1 %></td><td><%= line.service_name_snapshot %> — <%= line.offer_name_snapshot %></td><td><%= line.quantity %></td><td><%= Number(line.line_total_snapshot).toLocaleString('vi-VN') %> <%= line.currency_snapshot %></td></tr>
+      <% }); %>
+    </table>
+    <% } %>
+
     <% if (booking.passengers && booking.passengers.length > 0) { %>
     <table class="passenger-table">
       <tr>

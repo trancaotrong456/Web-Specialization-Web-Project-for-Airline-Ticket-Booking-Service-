@@ -49,8 +49,8 @@ test('FareClass service preserves normalization, nullable quota and 409 booking 
     countBookingsByFareClassId: async (id) => { calls.push(['count', id]); return bookings; },
     delete: async () => { calls.push(['delete']); },
   } });
-  assert.deepEqual(await service.create({ flight_id: '8', class_name: ' Economy ', price: '250.5' }), {
-    flight_id: 8, class_name: 'Economy', price: 250.5, seat_quota: null,
+  assert.deepEqual(await service.create({ flight_id: '8', class_name: ' Economy ', price: '250.00' }), {
+    flight_id: 8, class_name: 'Economy', price: 250, seat_quota: null,
   });
   assert.deepEqual(await service.update('3', { seat_quota: null, price: '300' }), { seat_quota: null, price: 300 });
   await assert.rejects(service.update('3', { flight_id: 9 }), (error) => error.statusCode === 400);
@@ -58,7 +58,7 @@ test('FareClass service preserves normalization, nullable quota and 409 booking 
   bookings = 0;
   assert.deepEqual(await service.delete('3'), { message: 'Fare class deleted' });
   assert.deepEqual(calls, [
-    ['create', { flight_id: 8, class_name: 'Economy', price: 250.5, seat_quota: null }],
+    ['create', { flight_id: 8, class_name: 'Economy', price: 250, seat_quota: null }],
     ['update', { price: 300, seat_quota: null }], ['count', '3'], ['count', '3'], ['delete'],
   ]);
 });

@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const express = require('express');
 const { Op } = require('sequelize');
 const userRouter = require('../routes/user.route');
 const userService = require('../services/user.service');
@@ -19,10 +20,28 @@ test('user administration exposes exactly the implemented report endpoints', () 
   assert.deepEqual(routes, [
     { path: '/', methods: ['get'] },
     { path: '/:id', methods: ['get'] },
+    { path: '/:id', methods: ['patch'] },
     { path: '/:id/status', methods: ['put'] },
     { path: '/:id/role', methods: ['put'] },
     { path: '/:id', methods: ['delete'] },
   ]);
+});
+
+test('admin profile endpoint rejects missing and invalid JWTs before reaching data access', async () => {
+  const app = express();
+  app.use('/api/v1/users', userRouter);
+  const server = await new Promise((resolve) => {
+    const instance = app.listen(0, '127.0.0.1', () => resolve(instance));
+  });
+  try {
+    const url = `http://127.0.0.1:${server.address().port}/api/v1/users/9`;
+    const missing = await fetch(url, { method: 'PATCH' });
+    assert.equal(missing.status, 401);
+    const invalid = await fetch(url, { method: 'PATCH', headers: { Authorization: 'Bearer invalid-token' } });
+    assert.equal(invalid.status, 401);
+  } finally {
+    await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+  }
 });
 
 test('user list applies pagination, search, status, safe fields, and role data', async () => {

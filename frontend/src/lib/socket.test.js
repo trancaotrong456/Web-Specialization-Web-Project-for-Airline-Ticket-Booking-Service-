@@ -56,7 +56,7 @@ function simulateServer(event, data) {
 vi.mock('socket.io-client', () => ({ io: vi.fn(() => mockSocket) }));
 
 // ── Import the REAL module under test ──────────────────────────────────────
-import { closeSocket, getSocket, useFlightSocket } from './socket.js';
+import { closeSocket, getSocket, setSocketAccessToken, useFlightSocket } from './socket.js';
 
 // ── Test lifecycle ──────────────────────────────────────────────────────────
 beforeEach(() => {
@@ -85,6 +85,17 @@ describe('getSocket() singleton', () => {
     // After close the module-level singleton is null; getSocket() calls io() again
     const fresh = getSocket();
     expect(fresh).toBeTruthy(); // io() was called again → returned mockSocket
+  });
+
+  it('updates socket authentication and reconnects the shared socket when identity changes', () => {
+    isConnected = true;
+    const socket = getSocket();
+    setSocketAccessToken('user-access-token');
+    expect(socket.auth).toEqual({ accessToken: 'user-access-token' });
+    expect(socket.disconnect).toHaveBeenCalledTimes(1);
+    expect(socket.connect).toHaveBeenCalledTimes(1);
+    setSocketAccessToken(null);
+    expect(socket.auth).toEqual({});
   });
 });
 

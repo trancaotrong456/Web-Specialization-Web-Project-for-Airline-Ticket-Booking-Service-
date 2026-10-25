@@ -1,10 +1,40 @@
 const { getIO: defaultGetIO } = require('../../sockets');
 
+const FLIGHT_STATUSES = ['scheduled', 'delayed', 'boarding', 'departed', 'arrived', 'cancelled', 'completed'];
+const ALLOWED_TRANSITIONS = {
+  scheduled: ['scheduled', 'delayed', 'boarding', 'cancelled'],
+  delayed: ['delayed', 'boarding', 'cancelled'],
+  boarding: ['boarding', 'departed', 'cancelled'],
+  departed: ['departed', 'arrived'],
+  arrived: ['arrived'],
+  cancelled: ['cancelled'],
+  completed: ['completed'],
+};
+
+function statusError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function statusDate(value, field, current) {
+  if (value === undefined) return current ? new Date(current) : null;
+  if (value === null || value === '') return null;
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw statusError(`${field} không hợp lệ`);
+  return date;
+}
+
+function sameDate(left, right) {
+  return (left == null && right == null) || (left != null && right != null && new Date(left).getTime() === new Date(right).getTime());
+}
+
 class FlightService {
-  constructor({ repository, getIO = defaultGetIO } = {}) {
+  constructor({ repository, getIO = defaultGetIO, flightStatusNotifier } = {}) {
     if (!repository) throw new TypeError('A Flight repository is required');
     this.repository = repository;
     this.getIO = getIO;
+    this.flightStatusNotifier = flightStatusNotifier;
   }
 
   _broadcastFlightUpdate(flightId, data) {
@@ -34,7 +64,12 @@ class FlightService {
     }
   }
 
-  async searchFlights({ departure_airport_id, arrival_airport_id, airline_id, departure_date, min_seats = 1, page = 1, limit = 20 }) {
+  async searchFlights({
+    departure_airport_id, arrival_airport_id, airline_id, departure_date, min_seats = 1, page = 1, limit = 20,
+    min_price, max_price, fare_class, departure_time_from, departure_time_to,
+    arrival_time_from, arrival_time_to, min_duration_minutes, max_duration_minutes,
+    sort_by = 'departure_earliest',
+  }) {
     let dateStart;
     let dateEnd;
     if (departure_date) {
@@ -43,7 +78,15 @@ class FlightService {
       dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
     }
     const { count, rows } = await this.repository.searchPage({
-      departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd, page, limit,
+      departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd,
+      // Giữ chuỗi thập phân để MySQL so sánh đúng với cột DECIMAL(12,2).
+      min_price,
+      max_price,
+      fare_class: fare_class?.trim(), departure_time_from, departure_time_to,
+      arrival_time_from, arrival_time_to,
+      min_duration_minutes: min_duration_minutes === undefined ? undefined : Number(min_duration_minutes),
+      max_duration_minutes: max_duration_minutes === undefined ? undefined : Number(max_duration_minutes),
+      sort_by, page, limit,
     });
     return { total: count, page, limit, data: rows };
   }
@@ -52,6 +95,97 @@ class FlightService {
     const flight = await this.repository.findDetail(id);
     if (!flight) { const error = new Error('Flight not found'); error.statusCode = 404; throw error; }
     return flight;
+  }
+
+  async getFlightStatus(id) {
+    const flight = await this.getFlightById(id);
+    const history = this.repository.findStatusHistory ? await this.repository.findStatusHistory(id) : [];
+    return { flight, history };
+  }
+
+  async updateFlightStatus(flightId, data = {}) {
+    if (!data || typeof data !== 'object' || Array.isArray(data)) throw statusError('Dữ liệu trạng thái chuyến bay không hợp lệ');
+    if (data.status !== undefined && !FLIGHT_STATUSES.includes(data.status)) throw statusError('Trạng thái chuyến bay không hợp lệ');
+
+    const updated = await this.repository.transaction(async (transaction) => {
+      const flight = await this.repository.findFlightForStatusUpdate(flightId, transaction);
+      if (!flight) throw statusError('Flight not found', 404);
+      const oldStatus = flight.status;
+      const nextStatus = data.status || oldStatus;
+      if (!ALLOWED_TRANSITIONS[oldStatus]?.includes(nextStatus)) {
+        throw statusError(`Không thể chuyển trạng thái chuyến bay từ ${oldStatus} sang ${nextStatus}`);
+      }
+
+      const departureTime = statusDate(data.departure_time, 'departure_time', flight.departure_time);
+      const arrivalTime = statusDate(data.arrival_time, 'arrival_time', flight.arrival_time);
+      const actualDepartureTime = statusDate(data.actual_departure_time, 'actual_departure_time', flight.actual_departure_time);
+      const actualArrivalTime = statusDate(data.actual_arrival_time, 'actual_arrival_time', flight.actual_arrival_time);
+      if (!departureTime || !arrivalTime || arrivalTime <= departureTime) throw statusError('Thời gian đến phải sau thời gian khởi hành');
+      if (actualDepartureTime && actualArrivalTime && actualArrivalTime < actualDepartureTime) throw statusError('Thời gian đến thực tế phải sau thời gian khởi hành thực tế');
+
+      const reason = data.reason === undefined ? (flight.status_reason || null) : (String(data.reason).trim() || null);
+      if (['delayed', 'cancelled'].includes(nextStatus) && !reason) throw statusError('Vui lòng cung cấp lý do hoãn hoặc hủy chuyến');
+
+      const nextValues = {
+        status: nextStatus,
+        departure_time: departureTime,
+        arrival_time: arrivalTime,
+        actual_departure_time: actualDepartureTime,
+        actual_arrival_time: actualArrivalTime,
+        status_reason: reason,
+      };
+      const unchanged = oldStatus === nextValues.status
+        && sameDate(flight.departure_time, departureTime)
+        && sameDate(flight.arrival_time, arrivalTime)
+        && sameDate(flight.actual_departure_time, actualDepartureTime)
+        && sameDate(flight.actual_arrival_time, actualArrivalTime)
+        && (flight.status_reason || null) === reason;
+      if (unchanged) return flight;
+
+      const history = {
+        flight_id: flight.id,
+        from_status: oldStatus,
+        to_status: nextStatus,
+        actor_user_id: data.actorUserId || null,
+        reason,
+        old_departure_time: flight.departure_time,
+        new_departure_time: departureTime,
+        old_arrival_time: flight.arrival_time,
+        new_arrival_time: arrivalTime,
+        actual_departure_time: actualDepartureTime,
+        actual_arrival_time: actualArrivalTime,
+      };
+      const scheduleChanged = !sameDate(flight.departure_time, departureTime) || !sameDate(flight.arrival_time, arrivalTime);
+      await this.repository.update(flight, nextValues, { transaction });
+      const createdHistory = await this.repository.createStatusHistory(history, transaction);
+      const changeType = nextStatus === 'cancelled' ? 'cancelled'
+        : nextStatus === 'delayed' ? 'delayed'
+          : scheduleChanged ? 'schedule_changed' : null;
+      if (changeType && this.flightStatusNotifier && this.repository.findStatusNotificationRecipients) {
+        const recipients = await this.repository.findStatusNotificationRecipients(flight.id, transaction);
+        await this.flightStatusNotifier.handleFlightStatusChanged({
+          eventId: createdHistory?.id,
+          flightId: flight.id,
+          changeType,
+          recipients,
+          transaction,
+        });
+      }
+      return flight;
+    });
+
+    const result = await this.getFlightById(flightId);
+    this._broadcastFlightUpdate(flightId, {
+      flight_id: result.id,
+      status: result.status,
+      available_seats: result.available_seats,
+      departure_time: result.departure_time,
+      arrival_time: result.arrival_time,
+      actual_departure_time: result.actual_departure_time,
+      actual_arrival_time: result.actual_arrival_time,
+      status_reason: result.status_reason,
+    });
+    return result;
   }
 
   async createFlight(data) {
@@ -99,48 +233,18 @@ class FlightService {
   }
 
   async updateFlight(flightId, data) {
-    if (!data || typeof data !== 'object') {
-      const error = new Error('Dữ liệu cập nhật không hợp lệ'); error.statusCode = 400; throw error;
+    if (!data || typeof data !== 'object' || Array.isArray(data) || Object.keys(data).length === 0) {
+      throw statusError('Dữ liệu cập nhật không hợp lệ');
     }
-    const payloadKeys = Object.keys(data);
-    if (payloadKeys.length === 0) {
-      const error = new Error('Vui lòng cung cấp ít nhất một trường cần cập nhật'); error.statusCode = 400; throw error;
-    }
-    const ALLOWED_FIELDS = ['departure_time', 'arrival_time', 'status'];
-    const disallowedFields = payloadKeys.filter((key) => !ALLOWED_FIELDS.includes(key));
-    if (disallowedFields.length > 0) {
-      const error = new Error(`Không được phép chỉnh sửa các trường: ${disallowedFields.join(', ')}`); error.statusCode = 400; throw error;
-    }
-    const flight = await this.repository.findById(flightId);
-    if (!flight) { const error = new Error('Flight not found'); error.statusCode = 404; throw error; }
-    const newDep = data.departure_time !== undefined ? new Date(data.departure_time) : new Date(flight.departure_time);
-    const newArr = data.arrival_time !== undefined ? new Date(data.arrival_time) : new Date(flight.arrival_time);
-    if (Number.isNaN(newDep.getTime()) || Number.isNaN(newArr.getTime())) {
-      const error = new Error('Thời gian bay không hợp lệ'); error.statusCode = 400; throw error;
-    }
-    if (newArr <= newDep) {
-      const error = new Error('Thời gian đến phải sau thời gian khởi hành'); error.statusCode = 400; throw error;
-    }
-    if (data.status !== undefined && !['scheduled', 'cancelled', 'completed'].includes(data.status)) {
-      const error = new Error('Trạng thái chuyến bay không hợp lệ'); error.statusCode = 400; throw error;
-    }
-    const safeUpdate = {};
-    if (data.departure_time !== undefined) safeUpdate.departure_time = data.departure_time;
-    if (data.arrival_time !== undefined) safeUpdate.arrival_time = data.arrival_time;
-    if (data.status !== undefined) safeUpdate.status = data.status;
-    await this.repository.update(flight, safeUpdate);
-    const updated = await this.getFlightById(flightId);
-    this._broadcastFlightUpdate(flightId, {
-      flight_id: updated.id,
-      status: updated.status,
-      available_seats: updated.available_seats,
-      departure_time: updated.departure_time,
-      arrival_time: updated.arrival_time,
-    });
-    return updated;
+    const allowed = ['departure_time', 'arrival_time', 'actual_departure_time', 'actual_arrival_time', 'status', 'reason', 'actorUserId'];
+    const disallowed = Object.keys(data).filter((key) => !allowed.includes(key));
+    if (disallowed.length) throw statusError(`Không được phép cập nhật trường: ${disallowed.join(', ')}`);
+    return this.updateFlightStatus(flightId, data);
   }
 
-  async cancelFlight(flightId) { return this.updateFlight(flightId, { status: 'cancelled' }); }
+  async cancelFlight(flightId, { reason, actorUserId } = {}) {
+    return this.updateFlightStatus(flightId, { status: 'cancelled', reason, actorUserId });
+  }
 
   async deleteFlight(flightId) {
     return this.repository.transaction(async (transaction) => {
@@ -158,8 +262,8 @@ class FlightService {
     });
   }
 
-  async getAllFlights({ page = 1, limit = 20, status }) {
-    const { count, rows } = await this.repository.findAdminPage({ page, limit, status });
+  async getAllFlights({ page = 1, limit = 20, status, date_from, date_to } = {}) {
+    const { count, rows } = await this.repository.findAdminPage({ page, limit, status, date_from, date_to });
     return { total: count, page, limit, data: rows };
   }
 }
