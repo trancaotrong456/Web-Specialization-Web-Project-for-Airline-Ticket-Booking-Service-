@@ -185,6 +185,39 @@ const cancelFlightValidator = [
   body('reason').notEmpty().isString().trim().isLength({ min: 1, max: 500 }).withMessage('Vui lòng nhập lý do hủy chuyến'),
 ];
 
+// #27 Lịch chuyến bay dạng calendar
+const CALENDAR_VIEWS = ['week', 'month'];
+const CALENDAR_STATUS_VALUES = ['scheduled', 'delayed', 'boarding', 'departed', 'arrived', 'cancelled', 'completed'];
+const CALENDAR_QUERY_FIELDS = ['view', 'date', 'status'];
+
+const flightCalendarValidator = [
+  // Chặn query param không được hỗ trợ
+  query('*').custom((_value, { path }) => {
+    const field = String(path).split('.')[0];
+    if (!CALENDAR_QUERY_FIELDS.includes(field)) {
+      throw new Error(`Tham số không được hỗ trợ: ${field}`);
+    }
+    return true;
+  }),
+  query('view')
+    .optional()
+    .isIn(CALENDAR_VIEWS)
+    .withMessage("view phải là 'week' hoặc 'month'"),
+  query('date')
+    .optional()
+    .matches(/^\d{4}-\d{2}-\d{2}$/)
+    .withMessage('date phải đúng định dạng YYYY-MM-DD')
+    .custom((val) => {
+      const d = new Date(val);
+      if (Number.isNaN(d.getTime())) throw new Error('date không phải ngày hợp lệ');
+      return true;
+    }),
+  query('status')
+    .optional()
+    .isIn(CALENDAR_STATUS_VALUES)
+    .withMessage(`status phải là một trong: ${CALENDAR_STATUS_VALUES.join(', ')}`),
+];
+
 module.exports = {
   searchFlightValidator,
   SEARCH_QUERY_FIELDS,
@@ -193,4 +226,5 @@ module.exports = {
   flightStatusValidator,
   updateFlightStatusValidator,
   cancelFlightValidator,
+  flightCalendarValidator,
 };
