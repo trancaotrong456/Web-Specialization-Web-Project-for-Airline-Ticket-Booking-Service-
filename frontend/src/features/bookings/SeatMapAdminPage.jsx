@@ -66,8 +66,8 @@ export function SeatMapAdminPage() {
     catch (e) { setError(e.message); } finally { setBusy(false); }
   };
 
-  return <div className="seat-map-admin-page"><AppHeader /><main className="seat-map-admin-main">
-    <header className="seat-admin-heading"><span className="eyebrow">QUẢN TRỊ CHUYẾN BAY</span><h1>Sơ đồ ghế</h1><p>Tạo mẫu theo loại máy bay, ánh xạ hạng vé thực tế và lưu snapshot riêng cho từng chuyến.</p></header>
+  return <div className="admin-page seat-map-admin-page"><AppHeader /><main className="admin-main seat-map-admin-main">
+    <header className="admin-heading seat-admin-heading"><span className="eyebrow">QUẢN TRỊ CHUYẾN BAY</span><h1>Sơ đồ ghế</h1><p>Tạo mẫu theo loại máy bay, ánh xạ hạng vé thực tế và lưu snapshot riêng cho từng chuyến.</p></header>
     {error ? <Notice type="error">{error}</Notice> : null}{message ? <Notice type="success">{message}</Notice> : null}
     <section className="seat-admin-columns">
       <article className="surface-card seat-admin-card"><div className="seat-admin-card-heading"><h2>Mẫu sơ đồ hiện hành</h2><button className="button button-outline" type="button" onClick={resetDraft}>Mẫu mới</button></div>

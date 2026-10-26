@@ -38,6 +38,10 @@ import { PromotionDetailPage, PromotionFormPage, PromotionsPage } from '../featu
 import { AdminDashboardPage } from '../features/admin/AdminDashboardPage';
 import { SeatMapAdminPage } from '../features/bookings/SeatMapAdminPage';
 import { AncillariesAdminPage } from '../features/admin/AncillariesAdminPage';
+import { DesignSystemShowcasePage } from '../features/showcase/DesignSystemShowcasePage';
+import { NotificationsPage } from '../features/notifications/NotificationsPage';
+import { NotFoundPage } from '../components/NotFoundPage';
+import { ForbiddenPage } from '../components/ForbiddenPage';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -69,6 +73,7 @@ export function AppRoutes() {
       <Route path="/bookings/:id/payment" element={<PaymentInitiatePage />} />
       <Route path="/bookings/:id" element={<BookingDetailPage />} />
       <Route path="/payments/result" element={<PaymentResultPage />} />
+      {import.meta.env.DEV ? <Route path="/design-system" element={<DesignSystemShowcasePage />} /> : null}
       <Route element={<PublicOnlyRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
@@ -78,6 +83,7 @@ export function AppRoutes() {
 
       <Route element={<ProtectedRoute />}>
         <Route path="/bookings/my" element={<MyBookingsPage />} />
+        <Route path="/notifications" element={<NotificationsPage />} />
         <Route path="/profile" element={<ProfilePage />} />
         <Route path="/profile/security" element={<SecurityPage />} />
         <Route element={<AdminRoute />}>
@@ -127,8 +133,8 @@ export function AppRoutes() {
         </Route>
       </Route>
 
-      <Route path="/forbidden" element={<RoutePage title="Không có quyền truy cập" description="Tài khoản của bạn không được phép mở khu vực này." />} />
-      <Route path="*" element={<RoutePage title="Không tìm thấy trang" />} />
+      <Route path="/forbidden" element={<ForbiddenPage />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }

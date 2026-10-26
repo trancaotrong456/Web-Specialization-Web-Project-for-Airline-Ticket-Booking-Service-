@@ -72,4 +72,10 @@ const airports = Object.freeze([
   { iata_code: 'SYD', name: 'Sân bay Sydney Kingsford Smith', city: 'Sydney', country: 'Úc' },
 ].map(Object.freeze));
 
-module.exports = Object.freeze({ roles, airlines, airports });
+module.exports = Object.freeze({
+  roles,
+  airlines,
+  airports,
+  up: async () => {},
+  down: async () => {},
+});

@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AdminPaymentDetailPage, AdminPaymentsPage, AdminRevenuePage, PaymentInitiatePage, PaymentResultPage } from './PaymentPages';
+import { setServerTimeOffset } from '../../lib/apiClient';
 
 const mocks = vi.hoisted(() => ({ request: vi.fn(), user: null, status: 'anonymous' }));
 vi.mock('../../app/AuthProvider', () => ({ useAuth: () => ({ request: mocks.request, user: mocks.user, status: mocks.status }) }));
@@ -52,6 +53,27 @@ describe('payment pages', () => {
     expect(screen.getByText(/3\.750\.000/)).toBeInTheDocument();
   });
 
+  it('accurately calculates remaining hold time when client clock is ahead of server', async () => {
+    // Giả sử đồng hồ server đang là 2026-10-12T10:50:00Z
+    // Client chạy nhanh hơn 15 phút: client Date.now() = 2026-10-12T11:05:00Z (quá hạn hold_expires_at 11:00 nếu không bù trừ)
+    // Server time offset = serverTime - clientTime = 10:50 - 11:05 = -15 phút (-900,000ms)
+    // Thời gian còn lại thực tế theo server: 11:00 - 10:50 = 10 phút (600s) -> "10:00"
+    setServerTimeOffset(-15 * 60 * 1000);
+    const clientNow = new Date('2026-10-12T11:05:00Z').getTime();
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(clientNow);
+
+    sessionStorage.setItem('booking_guest_email_7', 'guest@example.com');
+    mocks.request.mockResolvedValue(booking);
+
+    routes(<PaymentInitiatePage />, '/bookings/:id/payment', '/bookings/7/payment');
+
+    expect(await screen.findByText('10:00')).toBeInTheDocument();
+    expect(screen.queryByText('HẾT HẠN GIỮ CHỖ')).not.toBeInTheDocument();
+
+    nowSpy.mockRestore();
+    setServerTimeOffset(0);
+  });
+
   it('uses the submitted-report booking status label on payment result', async () => {
     mocks.request.mockResolvedValue(booking);
     routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&demo=1');
@@ -59,10 +81,48 @@ describe('payment pages', () => {
     expect(screen.getByText(/Đặt chỗ được xác nhận khi trạng thái hệ thống/)).toHaveTextContent('Hiện tại: Giữ chỗ / Chờ thanh toán');
   });
 
+  it('shows PDF download button on payment result for confirmed bookings and sends guest_email', async () => {
+    sessionStorage.setItem('booking_guest_email_7', 'guest@example.com');
+    const confirmedBooking = { ...booking, status: 'confirmed' };
+    const pdfBlob = new Blob(['%PDF-ticket-data'], { type: 'application/pdf' });
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/bookings/7?')) return confirmedBooking;
+      if (path.startsWith('/bookings/7/ticket')) return pdfBlob;
+      throw new Error(`Unexpected request ${path}`);
+    });
+    const createUrl = vi.fn(() => 'blob:ticket');
+    const revokeUrl = vi.fn();
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: createUrl });
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: revokeUrl });
+
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7');
+    const downloadButton = await screen.findByRole('button', { name: 'Tải vé PDF' });
+    expect(downloadButton).toBeInTheDocument();
+    await userEvent.setup().click(downloadButton);
+    expect(mocks.request).toHaveBeenCalledWith('/bookings/7/ticket?guest_email=guest%40example.com', { responseType: 'blob' });
+  });
+
+  it('displays a clear notice when ticket download is rejected due to authorization (403)', async () => {
+    const confirmedBooking = { ...booking, status: 'confirmed' };
+    const forbiddenError = new Error('Access denied to this booking');
+    forbiddenError.status = 403;
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/bookings/7?')) return confirmedBooking;
+      if (path.startsWith('/bookings/7/ticket')) throw forbiddenError;
+      throw new Error(`Unexpected request ${path}`);
+    });
+
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7');
+    const downloadButton = await screen.findByRole('button', { name: 'Tải vé PDF' });
+    await userEvent.setup().click(downloadButton);
+    expect(await screen.findByText('Bạn không có quyền tải vé này. Khách vãng lai cần email đã dùng khi đặt chỗ để xác thực.')).toBeInTheDocument();
+  });
+
   it('rejects reversed revenue dates before making the request', async () => {
     mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
     const user = userEvent.setup();
     render(<MemoryRouter><AdminRevenuePage /></MemoryRouter>);
+    mocks.request.mockClear();
     fireEvent.change(screen.getByLabelText('Từ ngày'), { target: { value: '2026-10-10' } });
     fireEvent.change(screen.getByLabelText('Đến ngày'), { target: { value: '2026-10-01' } });
     await user.click(screen.getByRole('button', { name: 'Xem doanh thu' }));
@@ -81,6 +141,18 @@ describe('payment pages', () => {
     await user.click(screen.getByRole('button', { name: 'Xem doanh thu' }));
     expect(await screen.findByText('Tổng doanh thu trong kỳ')).toBeInTheDocument();
     expect(mocks.request).toHaveBeenCalledWith('/payments/revenue?from_date=2026-10-01&to_date=2026-10-09&group_by=month');
+  });
+
+  it('provides quick preset buttons (Hôm nay, 7 ngày, Tháng này, Tháng trước) and SVG chart', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({ from_date: '2026-10-01', to_date: '2026-10-25', group_by: 'day', total_revenue: 15000000, data: [{ date: '2026-10-25', revenue: 15000000 }] });
+    render(<MemoryRouter><AdminRevenuePage /></MemoryRouter>);
+    expect(screen.getByRole('button', { name: 'Hôm nay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '7 ngày' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tháng này' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tháng trước' })).toBeInTheDocument();
+    expect(await screen.findByRole('img', { name: /Biểu đồ/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Xuất CSV/i })).toBeInTheDocument();
   });
 
   it('filters the admin payment list using the supported API query fields', async () => {

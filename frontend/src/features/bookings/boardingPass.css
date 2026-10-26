@@ -1,0 +1,440 @@
+/* ==========================================================================
+   Serene Flightways — Electronic Boarding Pass
+   ========================================================================== */
+.boarding-pass-wrapper {
+  margin: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.boarding-pass-card {
+  display: flex;
+  background: #FFFFFF;
+  border: 1px solid #E2E8F0;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.06);
+  position: relative;
+}
+
+/* Phần thân chính (Main Pass) */
+.boarding-pass-main {
+  flex: 1 1 70%;
+  padding: 1.5rem 1.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.bp-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  border-bottom: 1px solid #F1F5F9;
+  padding-bottom: 1rem;
+}
+
+.bp-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bp-brand-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  background: #16382C;
+  color: #D3A745;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.bp-brand strong {
+  display: block;
+  font-size: 1.05rem;
+  color: #0F172A;
+}
+
+.bp-brand small {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748B;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.bp-pnr-box {
+  text-align: right;
+}
+
+.bp-pnr-label {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 0.05em;
+}
+
+.bp-pnr-code {
+  display: block;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #16382C;
+}
+
+/* Tuyến bay & thời gian */
+.bp-route-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #F8FAFC;
+  padding: 1rem 1.25rem;
+  border-radius: 8px;
+  border: 1px solid #EDF2F7;
+}
+
+.bp-airport {
+  display: flex;
+  flex-direction: column;
+}
+
+.bp-origin {
+  text-align: left;
+}
+
+.bp-destination {
+  text-align: right;
+}
+
+.bp-iata {
+  font-size: 1.75rem;
+  font-weight: 800;
+  color: #0F172A;
+  line-height: 1.1;
+}
+
+.bp-city {
+  font-size: 0.85rem;
+  color: #475569;
+  font-weight: 500;
+}
+
+.bp-time {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #16382C;
+  margin-top: 0.25rem;
+}
+
+.bp-date {
+  font-size: 0.75rem;
+  color: #64748B;
+}
+
+.bp-flight-path {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  flex: 0 1 180px;
+}
+
+.bp-flight-duration {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #64748B;
+}
+
+.bp-path-line {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  position: relative;
+}
+
+.bp-path-line::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #CBD5E1;
+  z-index: 1;
+}
+
+.bp-plane-icon {
+  margin: 0 auto;
+  position: relative;
+  z-index: 2;
+  background: #F8FAFC;
+  padding: 0 0.5rem;
+  color: #16382C;
+  font-size: 1rem;
+}
+
+.bp-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #94A3B8;
+  position: relative;
+  z-index: 2;
+}
+
+.bp-class-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #D3A745;
+  background: #FEF9C3;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+/* Hành khách & ghế */
+.bp-passengers-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bp-section-title {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #64748B;
+  letter-spacing: 0.05em;
+}
+
+.bp-passenger-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bp-passenger-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  background: #F8FAFC;
+  border: 1px solid #EDF2F7;
+}
+
+.bp-passenger-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.bp-passenger-name {
+  font-size: 0.92rem;
+  color: #0F172A;
+}
+
+.bp-passenger-sub {
+  font-size: 0.75rem;
+  color: #64748B;
+}
+
+.bp-passenger-seat {
+  text-align: right;
+}
+
+.bp-seat-label {
+  display: block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748B;
+}
+
+.bp-seat-number {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #16382C;
+}
+
+/* Đường cắt đứt nét (Perforation) */
+.bp-perforation {
+  width: 20px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #FFFFFF;
+}
+
+.bp-perforated-line {
+  height: calc(100% - 32px);
+  width: 0;
+  border-left: 2px dashed #CBD5E1;
+}
+
+.bp-notch {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  background: var(--color-background, #F8FAFC);
+  border-radius: 50%;
+  left: 0;
+  z-index: 3;
+}
+
+.bp-notch-top {
+  top: -10px;
+  border-bottom: 1px solid #E2E8F0;
+}
+
+.bp-notch-bottom {
+  bottom: -10px;
+  border-top: 1px solid #E2E8F0;
+}
+
+/* Cuống vé thu nhỏ (Stub) */
+.boarding-pass-stub {
+  flex: 0 0 240px;
+  background: #FDFCF8;
+  padding: 1.5rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  border-left: 1px dashed transparent;
+}
+
+.bp-stub-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: #64748B;
+  font-weight: 700;
+  border-bottom: 1px solid #E2E8F0;
+  padding-bottom: 0.5rem;
+}
+
+.bp-stub-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+  margin: 0.75rem 0;
+}
+
+.bp-stub-row small {
+  display: block;
+  font-size: 0.65rem;
+  color: #64748B;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.bp-stub-row strong {
+  display: block;
+  font-size: 0.85rem;
+  color: #0F172A;
+}
+
+.bp-stub-passenger {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+
+/* Mã vạch mô phỏng */
+.bp-barcode-block {
+  margin-top: auto;
+  padding-top: 0.75rem;
+  text-align: center;
+}
+
+.bp-barcode-lines {
+  height: 38px;
+  width: 100%;
+  background: repeating-linear-gradient(
+    90deg,
+    #0F172A 0px,
+    #0F172A 2px,
+    transparent 2px,
+    transparent 4px,
+    #0F172A 4px,
+    #0F172A 7px,
+    transparent 7px,
+    transparent 8px,
+    #0F172A 8px,
+    #0F172A 9px,
+    transparent 9px,
+    transparent 12px
+  );
+  border-radius: 2px;
+}
+
+.bp-barcode-text {
+  display: block;
+  font-size: 0.75rem;
+  color: #64748B;
+  letter-spacing: 0.15em;
+  margin-top: 0.25rem;
+}
+
+/* Nút hành động */
+.boarding-pass-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.bp-action-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.bp-calendar-btn {
+  background: #FFFFFF;
+  border-color: #CBD5E1;
+  color: #1E293B;
+}
+
+.bp-calendar-btn:hover {
+  background: #F8FAFC;
+  border-color: #94A3B8;
+}
+
+/* Responsive */
+@media (max-width: 48rem) {
+  .boarding-pass-card {
+    flex-direction: column;
+  }
+  .bp-perforation {
+    width: 100%;
+    height: 20px;
+  }
+  .bp-perforated-line {
+    width: calc(100% - 32px);
+    height: 0;
+    border-left: none;
+    border-top: 2px dashed #CBD5E1;
+  }
+  .bp-notch-top {
+    left: -10px;
+    top: 0;
+    border-right: 1px solid #E2E8F0;
+    border-bottom: none;
+  }
+  .bp-notch-bottom {
+    right: -10px;
+    left: auto;
+    bottom: 0;
+    border-left: 1px solid #E2E8F0;
+    border-top: none;
+  }
+  .boarding-pass-stub {
+    flex: auto;
+    border-top: 1px dashed transparent;
+  }
+}

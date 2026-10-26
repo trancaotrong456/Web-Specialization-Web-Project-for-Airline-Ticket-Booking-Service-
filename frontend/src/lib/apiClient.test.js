@@ -52,7 +52,7 @@ describe('createApiClient', () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error).toMatchObject({
-      message: 'Validation failed',
+      message: 'Dữ liệu nhập vào chưa hợp lệ. Vui lòng kiểm tra lại các trường được đánh dấu đỏ hoặc hướng dẫn bên dưới.',
       status: 422,
       errors: [{ path: 'email', msg: 'Email is invalid' }],
     });

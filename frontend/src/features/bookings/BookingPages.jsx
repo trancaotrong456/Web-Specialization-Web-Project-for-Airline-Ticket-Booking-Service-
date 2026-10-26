@@ -10,11 +10,38 @@ import { Pagination } from '../../components/Pagination';
 import { StatusBadge, statusLabel } from '../../components/StatusBadge';
 import { useFlightSocket } from '../../lib/socket';
 import { createBookingsApi, isValidEmail } from './bookingsApi';
+import { money } from '../../lib/formatters';
+import { getServerTimeOffset } from '../../lib/apiClient';
+import { BoardingPassCard } from './BoardingPassCard';
 import './seatSelection.css';
+
+export const bookingStatusSourceLabels = {
+  booking_created: 'Tạo đặt chỗ ban đầu',
+  customer_cancel: 'Khách hàng hủy đặt chỗ',
+  customer_web: 'Đặt chỗ qua website',
+  holding_expired: 'Hết hạn giữ chỗ tự động',
+  payment_reconciliation_expired: 'Hết hạn đối soát thanh toán',
+  payment_initiated: 'Bắt đầu thanh toán',
+  gateway_setup_failed: 'Khởi tạo cổng thanh toán thất bại',
+  payment_failed_retryable: 'Thanh toán thất bại (cho phép thử lại)',
+  payment_failed_expired: 'Thanh toán thất bại (hết hạn giữ chỗ)',
+  payment_vnpay_success: 'Thanh toán VNPay thành công',
+  payment_vnpay_failed_retryable: 'Thanh toán VNPay thất bại (thử lại)',
+  payment_vnpay_failed_expired: 'Thanh toán VNPay thất bại (hết hạn)',
+  payment_payos_success: 'Thanh toán payOS thành công',
+  payment_payos_failed_retryable: 'Thanh toán payOS thất bại (thử lại)',
+  payment_payos_failed_expired: 'Thanh toán payOS thất bại (hết hạn)',
+  payos_webhook: 'Webhook payOS',
+  admin_refund: 'Quản trị viên hoàn tiền nội bộ',
+};
+
+export function getStatusSourceLabel(source) {
+  if (!source) return '—';
+  return bookingStatusSourceLabels[source] || source.replaceAll('_', ' ');
+}
 
 const bookingStatuses = ['holding', 'pending_payment', 'confirmed', 'cancelled', 'expired'];
 const emailKey = (id) => `booking_guest_email_${id}`;
-const money = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
 const dateTime = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const rowsOf = (result) => Array.isArray(result) ? result : result?.data || [];
 const pageOf = (result, page, limit) => result?.pagination || { page, limit, total: result?.total || result?.data?.length || 0, totalPages: 1 };
@@ -316,6 +343,11 @@ export function BookingCreatePage() {
             </div>
             {((itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).some((_leg, index) => seatMaps[index + 1]?.supported)) ? <section className="seat-selection-picker" aria-label="Chọn ghế theo hành khách và chặng">
               <h3>Chọn ghế (không bắt buộc)</h3><p>Ghế được giữ cùng đặt chỗ trong thời gian thanh toán. Giá vé không thay đổi.</p>
+              <div className="seat-legend" aria-hidden="true">
+                <span className="seat-legend-item"><span className="seat-legend-sample available" /> Ghế trống</span>
+                <span className="seat-legend-item"><span className="seat-legend-sample selected" /> Đang chọn</span>
+                <span className="seat-legend-item"><span className="seat-legend-sample occupied" /> Đã giữ / không bán</span>
+              </div>
               {passengers.length > 1 ? <div className="seat-passenger-tabs" role="group" aria-label="Hành khách">{passengers.map((_passenger, index) => <button type="button" key={index} aria-pressed={activeSeatPassenger === index} onClick={() => setActiveSeatPassenger(index)}>Hành khách {index + 1}</button>)}</div> : null}
               {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((leg, index) => {
                 const legOrder = index + 1; const map = seatMaps[legOrder];
@@ -345,15 +377,15 @@ export function BookingCreatePage() {
             </section> : null}
             {passengers.map((passenger, index) => <fieldset className="passenger-fieldset" key={index}><legend>Hành khách {index + 1}</legend><Field id={`passenger-name-${index}`} label="Họ tên" autoComplete="name" required value={passenger.passenger_name} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))} error={formErrors[`passengers.${index}.passenger_name`]} /><Field id={`passenger-passport-${index}`} label="Số hộ chiếu (không bắt buộc)" value={passenger.passport_no} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passport_no: event.target.value } : item))} error={formErrors[`passengers.${index}.passport_no`]} /></fieldset>)}
             {state.fields ? Object.entries(state.fields).map(([field, message]) => <small className="field-error" key={field}>{message}</small>) : null}
-            <div className="booking-total-row"><span>Giá tham khảo trước ưu đãi</span><strong>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong><small>{promotionState.validCode ? 'Mã đã được kiểm tra; hệ thống sẽ tính và xác nhận tổng tiền khi tạo đặt chỗ.' : 'Giá cuối cùng và ưu đãi (nếu có) do hệ thống xác nhận khi tạo đặt chỗ.'}</small></div>
+            <div className="booking-total-row"><span>Giá tham khảo trước ưu đãi</span><strong className="table-mono-cell">{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong><small>{promotionState.validCode ? 'Mã đã được kiểm tra; hệ thống sẽ tính và xác nhận tổng tiền khi tạo đặt chỗ.' : 'Giá cuối cùng và ưu đãi (nếu có) do hệ thống xác nhận khi tạo đặt chỗ.'}</small></div>
             <button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Tạo đặt chỗ và tiếp tục thanh toán'}</button>
           </form>
         </section>
         <aside className="booking-passenger-summary" aria-label="Tóm tắt hành trình">
           <span className="eyebrow">TÓM TẮT HÀNH TRÌNH</span>
           <h3>{itineraryFlights.length > 1 ? 'Các chặng đã chọn' : 'Chuyến bay đã chọn'}</h3>
-          {itineraryFlights.length > 1 ? <ol className="booking-itinerary-summary">{itineraryFlights.map((item, index) => <li key={`${item.flight.id}-${index}`}><div><strong>Chặng {index + 1}: {airportsOf(item.flight)}</strong><span>{dateTime(item.flight.departure_time)}</span><small>{flightCarrier(item.flight)} · {item.fare.class_name}</small></div><b>{money(Number(item.fare.price) * passengers.length)}</b></li>)}</ol> : <><div className="passenger-route-summary"><strong>{flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong>{flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || '—'}</strong></div><p className="passenger-airline-summary">{flightCarrier(flight)}</p><dl><div><dt>Khởi hành</dt><dd>{dateTime(flight?.departure_time)}</dd></div><div><dt>Hạng vé</dt><dd>{fare?.class_name || '—'}</dd></div></dl></>}
-          <dl><div><dt>Số hành khách</dt><dd>{passengers.length}</dd></div><div><dt>Giá tham khảo</dt><dd>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</dd></div></dl>
+          {itineraryFlights.length > 1 ? <ol className="booking-itinerary-summary">{itineraryFlights.map((item, index) => <li key={`${item.flight.id}-${index}`}><div><strong>Chặng {index + 1}: {airportsOf(item.flight)}</strong><span>{dateTime(item.flight.departure_time)}</span><small>{flightCarrier(item.flight)} · {item.fare.class_name}</small></div><b className="table-mono-cell">{money(Number(item.fare.price) * passengers.length)}</b></li>)}</ol> : <><div className="passenger-route-summary"><strong className="table-mono-cell">{flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong className="table-mono-cell">{flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || '—'}</strong></div><p className="passenger-airline-summary">{flightCarrier(flight)}</p><dl><div><dt>Khởi hành</dt><dd>{dateTime(flight?.departure_time)}</dd></div><div><dt>Hạng vé</dt><dd>{fare?.class_name || '—'}</dd></div></dl></>}
+          <dl><div><dt>Số hành khách</dt><dd className="table-mono-cell">{passengers.length}</dd></div><div><dt>Giá tham khảo</dt><dd><strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong></dd></div></dl>
           <p className="passenger-summary-note">Giá cuối cùng và thời gian giữ chỗ do hệ thống xác nhận sau khi gửi yêu cầu.</p>
         </aside>
       </div> : null}
@@ -379,22 +411,281 @@ export function BookingLookupPage() {
   return <BookingShell><PageHeading eyebrow="TRA CỨU ĐẶT CHỖ" title="Tìm đặt chỗ của bạn" description="Nhập mã đặt chỗ và email liên hệ đã dùng khi tạo đặt chỗ." /><section className="surface-card booking-panel lookup-panel"><form className="booking-form-grid" onSubmit={submit} noValidate><Field id="lookup-code" label="Mã đặt chỗ" required autoComplete="off" value={code} onChange={(event) => setCode(event.target.value)} /><Field id="lookup-email" label="Email liên hệ" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /><button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang tra cứu…' : 'Tra cứu đặt chỗ'}</button></form>{state.error ? <Notice type="error">{state.error}</Notice> : null}{state.booking ? <article className="lookup-result"><div><span className="eyebrow">ĐẶT CHỖ ĐÃ TÌM THẤY</span><h2>{state.booking.booking_code}</h2><p>{airportsOf(state.booking.flight)} · {dateTime(state.booking.flight?.departure_time)}</p></div><StatusBadge status={state.booking.status} /><button className="button button-secondary" type="button" onClick={() => navigate(`/bookings/${state.booking.id}`, { state: { guestEmail: email.trim().toLowerCase() } })}>Xem chi tiết</button></article> : null}</section></BookingShell>;
 }
 
-function BookingCard({ booking, to, guestEmail }) {
+function HoldRemainingTimer({ expiresAt, serverNow }) {
+  const [localNow, setLocalNow] = useState(() => Date.now() + (getServerTimeOffset() || 0));
+
+  useEffect(() => {
+    if (serverNow != null || !expiresAt) return undefined;
+    const interval = setInterval(() => {
+      setLocalNow(Date.now() + (getServerTimeOffset() || 0));
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [expiresAt, serverNow]);
+
+  if (!expiresAt) return null;
+  const now = serverNow ?? localNow;
+  const targetMs = new Date(expiresAt).getTime();
+  const diffMs = targetMs - now;
+
+  if (diffMs <= 0) {
+    return <span className="hold-remaining-badge is-expired">Hết hạn</span>;
+  }
+
+  const minutes = Math.floor(diffMs / 60000);
+  const seconds = Math.floor((diffMs % 60000) / 1000);
+  const formatted = `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+  return (
+    <span className="hold-remaining-badge" title={`Hạn giữ chỗ: ${dateTime(expiresAt)}`}>
+      <span className="hold-clock-icon" aria-hidden="true">⏱</span>
+      <span className="table-mono-cell tabular-nums">Còn {formatted}</span>
+    </span>
+  );
+}
+
+function BookingCard({ booking, to, guestEmail, serverNow }) {
   const flight = booking.flight || {};
-  return <article className="booking-card"><div className="booking-card-top"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2>{booking.booking_code || `#${booking.id}`}</h2></div><StatusBadge status={booking.status} /></div><p className="booking-card-route"><strong>{airportsOf(flight)}</strong><span>{dateTime(flight.departure_time)}</span></p><div className="booking-card-bottom"><strong>{money(booking.total_amount)}</strong>{to ? <Link className="button button-outline" to={to} state={{ guestEmail }}>Chi tiết</Link> : null}</div></article>;
+  return (
+    <article className="booking-card">
+      <div className="booking-card-top">
+        <div>
+          <span className="eyebrow">MÃ ĐẶT CHỖ</span>
+          <h2 className="table-mono-cell">{booking.booking_code || `#${booking.id}`}</h2>
+        </div>
+        <div className="booking-status-cell">
+          <StatusBadge status={booking.status} />
+          {booking.status === 'holding' && booking.hold_expires_at ? (
+            <HoldRemainingTimer expiresAt={booking.hold_expires_at} serverNow={serverNow} />
+          ) : null}
+        </div>
+      </div>
+      <p className="booking-card-route">
+        <strong>{airportsOf(flight)}</strong>
+        <span className="table-mono-cell">{dateTime(flight.departure_time)}</span>
+      </p>
+      <div className="booking-card-bottom">
+        <strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(booking.total_amount)}</strong>
+        {to ? <Link className="button button-outline" to={to} state={{ guestEmail }}>Chi tiết</Link> : null}
+      </div>
+    </article>
+  );
 }
 
 export function MyBookingsPage() {
   const api = useBookingsApi();
   const [params, setParams] = useSearchParams();
-  const page = Math.max(1, Number(params.get('page')) || 1); const limit = Math.max(1, Number(params.get('limit')) || 10); const status = params.get('status') || ''; const search = params.get('search') || '';
+  const page = Math.max(1, Number(params.get('page')) || 1);
+  const limit = Math.max(1, Number(params.get('limit')) || 10);
+  const status = params.get('status') || '';
+  const search = params.get('search') || '';
+  const tab = params.get('tab') || '';
+  const activeTab = tab || (status ? 'all' : 'upcoming');
+
   const [draftSearch, setDraftSearch] = useState(search);
   const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
-  const load = useCallback(async () => { setState((current) => ({ ...current, loading: true, error: '' })); try { const result = await api.myBookings({ page, limit, status, search }); setState({ loading: false, rows: rowsOf(result), pagination: pageOf(result, page, limit), error: '' }); } catch (error) { setState((current) => ({ ...current, loading: false, error: errText(error, 'Không thể tải đặt chỗ.') })); } }, [api, page, limit, status, search]);
+  const [serverNow, setServerNow] = useState(() => Date.now() + (getServerTimeOffset() || 0));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServerNow(Date.now() + (getServerTimeOffset() || 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const load = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const result = await api.myBookings({ page, limit, status, search });
+      setState({
+        loading: false,
+        rows: rowsOf(result),
+        pagination: pageOf(result, page, limit),
+        error: '',
+      });
+    } catch (error) {
+      setState((current) => ({
+        ...current,
+        loading: false,
+        error: errText(error, 'Không thể tải đặt chỗ.'),
+      }));
+    }
+  }, [api, page, limit, status, search]);
+
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setDraftSearch(search); }, [search]);
-  const update = (values) => setParams((current) => { const next = new URLSearchParams(current); Object.entries(values).forEach(([key, value]) => value ? next.set(key, String(value)) : next.delete(key)); return next; });
-  return <BookingShell><PageHeading title="Đặt chỗ của tôi" description="Theo dõi trạng thái và thông tin các đặt chỗ của bạn." actions={<Link className="button button-primary" to="/bookings/new">Đặt vé</Link>} />{state.loading ? <LoadingView label="Đang tải đặt chỗ…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><form className="booking-admin-filter" onSubmit={(event) => { event.preventDefault(); update({ search: draftSearch.trim(), page: 1 }); }}><Field id="my-booking-search" label="Tìm mã đặt chỗ" value={draftSearch} onChange={(event) => setDraftSearch(event.target.value)} /><button className="button button-secondary" type="submit">Tìm</button></form><label className="field"><span>Lọc trạng thái</span><select aria-label="Lọc trạng thái" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả trạng thái</option>{bookingStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label><span>{state.pagination?.total ?? state.rows.length} đặt chỗ</span></div>{state.rows.length ? <div className="booking-card-list">{state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} to={`/bookings/${booking.id}`} />)}</div> : <div className="empty-state"><h2>{search ? 'Không tìm thấy đặt chỗ phù hợp' : 'Chưa có đặt chỗ'}</h2><p>{search ? 'Hãy kiểm tra mã đặt chỗ hoặc thử bộ lọc khác.' : 'Khi tạo đặt chỗ, thông tin sẽ xuất hiện tại đây.'}</p><Link className="button button-primary" to="/bookings/new">Tìm chuyến bay</Link></div>}<Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} /></section>}</BookingShell>;
+
+  const update = (values) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    Object.entries(values).forEach(([key, value]) => {
+      if (value) next.set(key, String(value));
+      else next.delete(key);
+    });
+    return next;
+  });
+
+  // Phân loại danh sách đặt chỗ theo tab
+  const displayedRows = useMemo(() => {
+    // Nếu có status trên URL (từ select hoặc test assertion), ưu tiên bộ lọc status
+    if (status) return state.rows;
+    if (activeTab === 'all') return state.rows;
+
+    return state.rows.filter((b) => {
+      const depTime = b.flight?.departure_time ? new Date(b.flight.departure_time).getTime() : null;
+      if (activeTab === 'upcoming') {
+        // Sắp bay: đang giữ chỗ, chờ thanh toán, hoặc đã xác nhận chuyến tương lai (hoặc chưa rõ giờ bay)
+        if (['holding', 'pending_payment'].includes(b.status)) return true;
+        if (b.status === 'confirmed') {
+          return depTime === null || depTime >= serverNow;
+        }
+        return false;
+      }
+      if (activeTab === 'past') {
+        // Đã bay: đơn confirmed đã qua thời gian khởi hành
+        return b.status === 'confirmed' && depTime !== null && depTime < serverNow;
+      }
+      if (activeTab === 'cancelled_expired') {
+        // Đã hủy hoặc hết hạn
+        return ['cancelled', 'expired'].includes(b.status);
+      }
+      return true;
+    });
+  }, [state.rows, status, activeTab, serverNow]);
+
+  return (
+    <BookingShell>
+      <PageHeading
+        eyebrow="VÉ CỦA TÔI"
+        title="Đặt chỗ của tôi"
+        description="Theo dõi trạng thái và thông tin các đặt chỗ của bạn."
+        actions={<Link className="button button-primary" to="/bookings/new">Đặt vé</Link>}
+      />
+
+      {/* Tách 3 tab: Sắp bay / Đã bay / Đã hủy hoặc hết hạn */}
+      <div className="booking-status-chips booking-tabs" role="tablist" aria-label="Phân loại đặt chỗ">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'upcoming'}
+          className={`booking-status-chip ${activeTab === 'upcoming' ? 'is-active' : ''}`}
+          onClick={() => update({ tab: 'upcoming', status: '', page: 1 })}
+        >
+          Sắp bay
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'past'}
+          className={`booking-status-chip ${activeTab === 'past' ? 'is-active' : ''}`}
+          onClick={() => update({ tab: 'past', status: '', page: 1 })}
+        >
+          Đã bay
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'cancelled_expired'}
+          className={`booking-status-chip ${activeTab === 'cancelled_expired' ? 'is-active' : ''}`}
+          onClick={() => update({ tab: 'cancelled_expired', status: '', page: 1 })}
+        >
+          Đã hủy hoặc hết hạn
+        </button>
+        {status ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'all'}
+            className={`booking-status-chip ${activeTab === 'all' ? 'is-active' : ''}`}
+            onClick={() => update({ tab: 'all', page: 1 })}
+          >
+            Lọc theo: {statusLabel(status)}
+          </button>
+        ) : null}
+      </div>
+
+      {state.loading ? (
+        <LoadingView label="Đang tải đặt chỗ…" />
+      ) : state.error ? (
+        <Notice type="error">{state.error}</Notice>
+      ) : (
+        <section className="surface-card booking-panel">
+          <div className="booking-list-toolbar">
+            <form
+              className="booking-admin-filter"
+              onSubmit={(event) => {
+                event.preventDefault();
+                update({ search: draftSearch.trim(), page: 1 });
+              }}
+            >
+              <Field
+                id="my-booking-search"
+                label="Tìm mã đặt chỗ"
+                value={draftSearch}
+                onChange={(event) => setDraftSearch(event.target.value)}
+              />
+              <button className="button button-secondary" type="submit">Tìm</button>
+            </form>
+            <label className="field">
+              <span>Lọc trạng thái</span>
+              <select
+                aria-label="Lọc trạng thái"
+                value={status}
+                onChange={(event) => update({ status: event.target.value, page: 1 })}
+              >
+                <option value="">Tất cả trạng thái</option>
+                {bookingStatuses.map((item) => (
+                  <option key={item} value={item}>{statusLabel(item)}</option>
+                ))}
+              </select>
+            </label>
+            <span className="table-mono-cell">{state.pagination?.total ?? state.rows.length} đặt chỗ</span>
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <small className="booking-pagination-note" style={{ color: 'var(--color-muted, #64748b)', fontSize: '0.85rem' }}>
+              Hiển thị theo phân trang máy chủ (tối đa {limit} đơn/trang) · Tổng {state.pagination?.total ?? state.rows.length} đơn trên hệ thống.
+              {!status && activeTab !== 'all' ? (
+                <span> (Phân loại theo tab “{activeTab === 'upcoming' ? 'Sắp bay' : activeTab === 'past' ? 'Đã bay' : 'Đã hủy hoặc hết hạn'}” được lọc trên {state.rows.length} đơn của trang hiện tại; để lọc toàn bộ hệ thống, vui lòng chọn menu “Lọc trạng thái”).</span>
+              ) : null}
+            </small>
+          </div>
+
+          {displayedRows.length ? (
+            <div className="booking-card-list">
+              {displayedRows.map((booking) => (
+                <BookingCard
+                  key={booking.id}
+                  booking={booking}
+                  to={`/bookings/${booking.id}`}
+                  serverNow={serverNow}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="empty-state">
+              <h2>{search ? 'Không tìm thấy đặt chỗ phù hợp' : 'Chưa có đặt chỗ trong mục này'}</h2>
+              <p>
+                {search
+                  ? 'Hãy kiểm tra mã đặt chỗ hoặc thử bộ lọc khác.'
+                  : activeTab === 'upcoming'
+                  ? 'Bạn không có chuyến bay sắp khởi hành nào.'
+                  : activeTab === 'past'
+                  ? 'Bạn chưa có chuyến bay nào đã hoàn thành.'
+                  : activeTab === 'cancelled_expired'
+                  ? 'Không có đơn đặt chỗ nào bị hủy hoặc hết hạn.'
+                  : 'Khi tạo đặt chỗ, thông tin sẽ xuất hiện tại đây.'}
+              </p>
+              <Link className="button button-primary" to="/bookings/new">Tìm chuyến bay</Link>
+            </div>
+          )}
+          <Pagination
+            page={Number(state.pagination?.page || page)}
+            totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))}
+            onPageChange={(next) => update({ page: next })}
+          />
+        </section>
+      )}
+    </BookingShell>
+  );
 }
 
 export function AdminBookingsPage() {
@@ -404,12 +695,114 @@ export function AdminBookingsPage() {
   const [params, setParams] = useSearchParams();
   const page = Math.max(1, Number(params.get('page')) || 1); const limit = Math.max(1, Number(params.get('limit')) || 10); const status = params.get('status') || ''; const search = params.get('search') || ''; const bookingCode = params.get('booking_code') || ''; const customer = params.get('customer') || ''; const flightId = params.get('flight_id') || '';
   const [draftFilters, setDraftFilters] = useState({ bookingCode, customer, flightId }); const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
+  const [serverNow, setServerNow] = useState(() => Date.now() + (getServerTimeOffset() || 0));
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServerNow(Date.now() + (getServerTimeOffset() || 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
   const load = useCallback(async () => { setState((current) => ({ ...current, loading: true, error: '' })); try { const result = await api.adminBookings({ page, limit, status, search, booking_code: bookingCode, customer, flight_id: flightId }); setState({ loading: false, rows: rowsOf(result), pagination: pageOf(result, page, limit), error: '' }); } catch (error) { setState((current) => ({ ...current, loading: false, error: errText(error, 'Không thể tải danh sách đặt chỗ.') })); } }, [api, page, limit, status, search, bookingCode, customer, flightId]);
   useEffect(() => { void load(); }, [load]);
   useEffect(() => { setDraftFilters({ bookingCode, customer, flightId }); }, [bookingCode, customer, flightId]);
   const update = (values) => setParams((current) => { const next = new URLSearchParams(current); Object.entries(values).forEach(([key, value]) => value ? next.set(key, String(value)) : next.delete(key)); return next; });
   const submitSearch = (event) => { event.preventDefault(); update({ booking_code: draftFilters.bookingCode.trim(), customer: draftFilters.customer.trim(), flight_id: draftFilters.flightId.trim(), page: 1 }); };
-  return <BookingShell admin><PageHeading eyebrow="VẬN HÀNH" title="Quản lý đặt chỗ" description="Tìm kiếm và theo dõi hành trình, khách hàng, thanh toán và hoàn tiền." />{state.loading ? <LoadingView label="Đang tải danh sách…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><form className="booking-admin-filter" onSubmit={submitSearch}><Field id="booking-admin-code" label="Mã đặt chỗ" value={draftFilters.bookingCode} onChange={(event) => setDraftFilters((current) => ({ ...current, bookingCode: event.target.value }))} /><Field id="booking-admin-customer" label="Khách hàng" value={draftFilters.customer} onChange={(event) => setDraftFilters((current) => ({ ...current, customer: event.target.value }))} /><Field id="booking-admin-flight" label="ID chuyến bay" type="number" min="1" value={draftFilters.flightId} onChange={(event) => setDraftFilters((current) => ({ ...current, flightId: event.target.value }))} /><button className="button button-secondary" type="submit">Tìm</button></form><label className="field"><span>Trạng thái</span><select aria-label="Trạng thái đặt chỗ" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}><option value="">Tất cả</option>{bookingStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}</select></label></div>{state.rows.length ? <><div className="table-wrap booking-table-wrap"><table><thead><tr><th>Mã</th><th>Khách</th><th>Chuyến bay</th><th>Tạo lúc</th><th>Tổng tiền</th><th>Trạng thái</th><th /></tr></thead><tbody>{state.rows.map((booking) => <tr key={booking.id}><td>{booking.booking_code}</td><td>{booking.user?.full_name || booking.guest_email || booking.user?.email || '—'}</td><td>{airportsOf(booking.flight)}</td><td>{dateTime(booking.created_at)}</td><td>{money(booking.total_amount)}</td><td><StatusBadge status={booking.status} /></td><td>{canViewDetails ? <Link to={`/admin/bookings/${booking.id}`}>Chi tiết</Link> : <span aria-label="Không có quyền xem chi tiết">—</span>}</td></tr>)}</tbody></table></div><div className="booking-admin-cards">{state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} to={canViewDetails ? `/admin/bookings/${booking.id}` : null} />)}</div><Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} /></> : <div className="empty-state"><h2>Không có kết quả</h2><p>Thử mã đặt chỗ, khách hàng, chuyến bay hoặc trạng thái khác.</p></div>}</section>}</BookingShell>;
+  return (
+    <BookingShell admin>
+      <PageHeading eyebrow="VẬN HÀNH" title="Quản lý đặt chỗ" description="Tìm kiếm và theo dõi hành trình, khách hàng, thanh toán và hoàn tiền." />
+      {state.loading ? <LoadingView label="Đang tải danh sách…" /> : state.error ? <Notice type="error">{state.error}</Notice> : (
+        <section className="surface-card booking-panel">
+          {/* Chip lọc nhanh trạng thái */}
+          <div className="booking-status-chips" role="group" aria-label="Lọc nhanh trạng thái">
+            <button
+              type="button"
+              className={`booking-status-chip ${!status ? 'is-active' : ''}`}
+              onClick={() => update({ status: '', page: 1 })}
+            >
+              Tất cả
+            </button>
+            {bookingStatuses.map((item) => (
+              <button
+                key={item}
+                type="button"
+                className={`booking-status-chip chip-${item} ${status === item ? 'is-active' : ''}`}
+                onClick={() => update({ status: item, page: 1 })}
+              >
+                {statusLabel(item)}
+              </button>
+            ))}
+          </div>
+
+          <div className="booking-list-toolbar">
+            <form className="booking-admin-filter" onSubmit={submitSearch}>
+              <Field id="booking-admin-code" label="Mã đặt chỗ" value={draftFilters.bookingCode} onChange={(event) => setDraftFilters((current) => ({ ...current, bookingCode: event.target.value }))} />
+              <Field id="booking-admin-customer" label="Khách hàng" value={draftFilters.customer} onChange={(event) => setDraftFilters((current) => ({ ...current, customer: event.target.value }))} />
+              <Field id="booking-admin-flight" label="ID chuyến bay" type="number" min="1" value={draftFilters.flightId} onChange={(event) => setDraftFilters((current) => ({ ...current, flightId: event.target.value }))} />
+              <button className="button button-secondary" type="submit">Tìm</button>
+            </form>
+            <label className="field">
+              <span>Trạng thái</span>
+              <select aria-label="Trạng thái đặt chỗ" value={status} onChange={(event) => update({ status: event.target.value, page: 1 })}>
+                <option value="">Tất cả</option>
+                {bookingStatuses.map((item) => <option key={item} value={item}>{statusLabel(item)}</option>)}
+              </select>
+            </label>
+          </div>
+
+          {state.rows.length ? (
+            <>
+              <div className="table-wrap booking-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Mã</th>
+                      <th>Khách</th>
+                      <th>Chuyến bay</th>
+                      <th>Tạo lúc</th>
+                      <th>Tổng tiền</th>
+                      <th>Trạng thái</th>
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {state.rows.map((booking) => (
+                      <tr key={booking.id}>
+                        <td className="table-mono-cell">{booking.booking_code}</td>
+                        <td>{booking.user?.full_name || booking.guest_email || booking.user?.email || '—'}</td>
+                        <td>{airportsOf(booking.flight)}</td>
+                        <td className="table-mono-cell">{dateTime(booking.created_at)}</td>
+                        <td className="table-mono-cell">{money(booking.total_amount)}</td>
+                        <td>
+                          <div className="booking-status-cell">
+                            <StatusBadge status={booking.status} />
+                            {booking.status === 'holding' && booking.hold_expires_at ? (
+                              <HoldRemainingTimer expiresAt={booking.hold_expires_at} serverNow={serverNow} />
+                            ) : null}
+                          </div>
+                        </td>
+                        <td>{canViewDetails ? <Link to={`/admin/bookings/${booking.id}`}>Chi tiết</Link> : <span aria-label="Không có quyền xem chi tiết">—</span>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="booking-admin-cards">
+                {state.rows.map((booking) => <BookingCard key={booking.id} booking={booking} serverNow={serverNow} to={canViewDetails ? `/admin/bookings/${booking.id}` : null} />)}
+              </div>
+              <Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update({ page: next })} />
+            </>
+          ) : (
+            <div className="empty-state">
+              <h2>Không có kết quả</h2>
+              <p>Thử mã đặt chỗ, khách hàng, chuyến bay hoặc trạng thái khác.</p>
+            </div>
+          )}
+        </section>
+      )}
+    </BookingShell>
+  );
 }
 
 export function BookingDetailPage({ admin = false }) {
@@ -440,12 +833,62 @@ export function BookingDetailPage({ admin = false }) {
   const itineraryLegs = [{ id: `primary-${booking.id}`, leg_order: 1, flight, fareClass: booking.fareClass || booking.fare_class }, ...additionalSegments];
   return <BookingShell admin={admin}><PageHeading eyebrow="CHI TIẾT ĐẶT CHỖ" title={booking.booking_code || `Đặt chỗ #${booking.id}`} description={`${flightCarrier(flight)} · ${airportsOf(flight)}`} actions={<Link className="button button-outline" to={admin ? '/admin/bookings' : user ? '/bookings/my' : '/bookings/lookup'}>Danh sách đặt chỗ</Link>} />
     {state.actionError ? <Notice type="error">{state.actionError}</Notice> : null}
-    <div className="booking-detail-grid"><section className="surface-card booking-panel"><div className="booking-detail-title"><h2>Hành trình</h2><StatusBadge status={booking.status} /></div><dl className="booking-facts"><div><dt>Tạo lúc</dt><dd>{dateTime(booking.created_at)}</dd></div><div><dt>Giữ chỗ đến</dt><dd>{dateTime(booking.hold_expires_at)}</dd></div><div><dt>Tổng tiền</dt><dd><strong>{money(booking.total_amount)}</strong></dd></div></dl><ol className="booking-itinerary-summary" aria-label="Chi tiết các chặng">{itineraryLegs.map((segment) => <li key={segment.id}><div><strong>Chặng {segment.leg_order}: {airportsOf(segment.flight)}</strong><span>{dateTime(segment.flight?.departure_time)} — {dateTime(segment.flight?.arrival_time)}</span><small>{flightCarrier(segment.flight)} · {segment.fareClass?.class_name || segment.fare_class?.class_name || 'Hạng vé'}</small>{booking.seatAssignments?.filter((seat) => Number(seat.leg_order) === Number(segment.leg_order)).length ? <small>{passengers.map((passenger) => { const assignment = booking.seatAssignments.find((seat) => Number(seat.leg_order) === Number(segment.leg_order) && Number(seat.booking_passenger_id) === Number(passenger.id)); return assignment ? `${passenger.passenger_name}: ghế ${assignment.seat_no}` : null; }).filter(Boolean).join(' · ')}</small> : null}</div></li>)}</ol><h3>Hành khách</h3><div className="passenger-summary">{passengers.map((item, index) => <div key={item.id || index}><strong>{item.passenger_name}</strong><span>{item.passport_no || 'Không cung cấp số hộ chiếu'}</span></div>)}</div>
+    {booking.status === 'confirmed' ? (
+      <BoardingPassCard
+        booking={booking}
+        onDownloadPdf={() => void download()}
+        downloadingPdf={state.pending}
+      />
+    ) : null}
+    <div className="booking-detail-grid"><section className="surface-card booking-panel"><div className="booking-detail-title"><h2>Hành trình</h2><StatusBadge status={booking.status} /></div><dl className="booking-facts"><div><dt>Tạo lúc</dt><dd className="table-mono-cell">{dateTime(booking.created_at)}</dd></div><div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{dateTime(booking.hold_expires_at)}</dd></div><div><dt>Tổng tiền</dt><dd><strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(booking.total_amount)}</strong></dd></div></dl><ol className="booking-itinerary-summary" aria-label="Chi tiết các chặng">{itineraryLegs.map((segment) => <li key={segment.id}><div><strong>Chặng {segment.leg_order}: {airportsOf(segment.flight)}</strong><span className="table-mono-cell">{dateTime(segment.flight?.departure_time)} — {dateTime(segment.flight?.arrival_time)}</span><small>{flightCarrier(segment.flight)} · {segment.fareClass?.class_name || segment.fare_class?.class_name || 'Hạng vé'}</small>{booking.seatAssignments?.filter((seat) => Number(seat.leg_order) === Number(segment.leg_order)).length ? <small>{passengers.map((passenger) => { const assignment = booking.seatAssignments.find((seat) => Number(seat.leg_order) === Number(segment.leg_order) && Number(seat.booking_passenger_id) === Number(passenger.id)); return assignment ? `${passenger.passenger_name}: ghế ${assignment.seat_no}` : null; }).filter(Boolean).join(' · ')}</small> : null}</div></li>)}</ol><h3>Hành khách</h3><div className="passenger-summary">{passengers.map((item, index) => <div key={item.id || index}><strong>{item.passenger_name}</strong><span className="table-mono-cell">{item.passport_no || 'Không cung cấp số hộ chiếu'}</span></div>)}</div>
       <div className="booking-actions">{booking.status === 'holding' ? <Link className="button button-primary" to={`/bookings/${id}/payment`} state={{ booking, guestEmail }}>Tiếp tục thanh toán</Link> : null}{booking.status === 'confirmed' ? <button className="button button-secondary" type="button" disabled={state.pending} onClick={() => void download()}>{state.pending ? 'Đang chuẩn bị tệp…' : 'Tải vé PDF'}</button> : null}{booking.status === 'holding' && !admin ? <button className="button button-danger" type="button" onClick={() => setConfirmCancel(true)}>Hủy đặt chỗ</button> : null}{admin && isAdmin && booking.status === 'confirmed' ? <Link className="button button-outline" to={`/admin/payments?booking_id=${booking.id}`}>Xem thanh toán</Link> : null}</div>
-      {booking.ancillaries?.length ? <section className="surface-card booking-panel booking-ancillary-summary"><h2>Dịch vụ bổ sung</h2><ul>{booking.ancillaries.map((line) => <li key={line.id}><span><strong>{line.service_name_snapshot} — {line.offer_name_snapshot}</strong><small>{line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · × {line.quantity} · {line.refund_policy_snapshot === 'refundable' ? 'Theo chính sách hoàn vé' : 'Không hoàn tiền'}</small></span><strong>{money(line.line_total_snapshot)}</strong></li>)}</ul></section> : null}
-      {booking.status === 'holding' && !admin && !paymentsList(booking).length && Object.values(ancillaryOptions).some((items) => items.length) ? <section className="surface-card booking-panel booking-ancillary-summary"><h2>Chỉnh dịch vụ bổ sung</h2><p>Dịch vụ chỉ có thể thay đổi trước khi tạo bất kỳ ý định thanh toán nào. Giá được tính lại trên máy chủ.</p>{(booking.passengers || []).map((passenger, passengerIndex) => <fieldset className="passenger-fieldset" key={passenger.id}><legend>{passenger.passenger_name}</legend>{[{ leg_order: 1, label: airportsOf(booking.flight) }, ...(booking.itinerarySegments || []).filter((item) => Number(item.leg_order) > 1).map((item) => ({ leg_order: Number(item.leg_order), label: airportsOf(item.flight) }))].map((leg) => <div key={leg.leg_order}><strong>Chặng {leg.leg_order}: {leg.label}</strong>{(ancillaryOptions[leg.leg_order] || []).map((offer) => { const selected = draftAncillarySelections.find((item) => item.offer_id === Number(offer.id) && item.passenger_index === passengerIndex && item.leg_order === leg.leg_order); const ownedQuantity = (booking.ancillaries || []).filter((line) => Number(line.offer_id) === Number(offer.id) && line.status === 'held').reduce((sum, line) => sum + Number(line.quantity), 0); const maxQuantity = ancillaryMaxQuantity(offer, draftAncillarySelections, leg.leg_order, passengerIndex, ownedQuantity); return <div className="ancillary-choice" key={offer.id}><label className="booking-fare-option"><input type="checkbox" checked={Boolean(selected)} disabled={!selected && maxQuantity < 1} onChange={(event) => setDraftAncillarySelections((current) => event.target.checked ? [...current, { offer_id: Number(offer.id), passenger_index: passengerIndex, leg_order: leg.leg_order, quantity: 1 }] : current.filter((item) => !(item.offer_id === Number(offer.id) && item.passenger_index === passengerIndex && item.leg_order === leg.leg_order)))} /><span><strong>{offer.service?.name || offer.offer_name}</strong><small>{offer.offer_name} · {offer.refund_policy === 'refundable' ? 'Theo chính sách hoàn' : 'Không hoàn tiền'} · còn {Number(offer.capacity) - Number(offer.reserved_quantity)}</small></span><b>{money(offer.unit_price)}</b></label>{selected ? <div className="ancillary-quantity"><span>Số lượng {offer.offer_name} cho hành khách {passengerIndex + 1}, chặng {leg.leg_order}</span><button type="button" aria-label={`Giảm số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${leg.leg_order}`} disabled={selected.quantity <= 1} onClick={() => setDraftAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === leg.leg_order && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity - 1 } : item))}>−</button><output aria-label={`Số lượng đã chọn ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${leg.leg_order}`}>{selected.quantity}</output><button type="button" aria-label={`Tăng số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${leg.leg_order}`} disabled={selected.quantity >= maxQuantity} onClick={() => setDraftAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === leg.leg_order && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity + 1 } : item))}>+</button></div> : null}</div>; })}</div>)}</fieldset>)}<button className="button button-secondary" type="button" disabled={savingAncillaries} onClick={() => void saveAncillaries()}>{savingAncillaries ? 'Đang cập nhật…' : 'Lưu dịch vụ bổ sung'}</button></section> : null}
-    </section>{admin ? <aside className="surface-card booking-panel"><h2>Thông tin khách hàng</h2><p>{booking.user?.full_name || 'Khách vãng lai'}</p><p>{booking.user?.email || booking.guest_email || '—'}</p><h3>Lịch sử trạng thái</h3>{booking.statusHistory?.length ? <ol className="booking-status-history">{booking.statusHistory.map((event) => <li key={event.id}><strong>{event.from_status ? `${statusLabel(event.from_status)} → ` : ''}{statusLabel(event.to_status)}</strong><span>{dateTime(event.created_at)}</span><small>{event.source.replaceAll('_', ' ')}{event.actor?.full_name ? ` · ${event.actor.full_name}` : ''}</small></li>)}</ol> : <p>Chưa có bản ghi lịch sử trạng thái.</p>}</aside> : null}</div>
-    <section className="surface-card booking-panel booking-payment-history"><h2>Thanh toán và hoàn tiền</h2>{paymentsList(booking).length ? paymentsList(booking).map((payment) => <div className="booking-payment-line" key={payment.id}><span><strong>{payment.payment_method}</strong><small>{payment.paid_at ? `Thanh toán lúc ${dateTime(payment.paid_at)}` : `Tạo giao dịch ${dateTime(payment.created_at)}`}</small></span><StatusBadge status={payment.status} /><strong>{money(payment.amount)}</strong>{admin && isAdmin ? <Link to={`/admin/payments/${payment.id}`}>Chi tiết</Link> : null}</div>) : <p>Chưa có giao dịch thanh toán.</p>}{admin && isAdmin && booking.status === 'confirmed' ? <p><Link to={`/admin/payments?booking_id=${booking.id}`}>Mở giao dịch để xử lý refund theo quy trình hiện có</Link></p> : null}</section>
+      {booking.ancillaries?.length ? <section className="surface-card booking-panel booking-ancillary-summary"><h2>Dịch vụ bổ sung</h2><ul>{booking.ancillaries.map((line) => <li key={line.id}><span><strong>{line.service_name_snapshot} — {line.offer_name_snapshot}</strong><small>{line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · × {line.quantity} · {line.refund_policy_snapshot === 'refundable' ? 'Theo chính sách hoàn vé' : 'Không hoàn tiền'}</small></span><strong className="table-mono-cell">{money(line.line_total_snapshot)}</strong></li>)}</ul></section> : null}
+      {booking.status === 'holding' && !admin && !paymentsList(booking).length && Object.values(ancillaryOptions).some((items) => items.length) ? <section className="surface-card booking-panel booking-ancillary-summary"><h2>Chỉnh dịch vụ bổ sung</h2><p>Dịch vụ chỉ có thể thay đổi trước khi tạo bất kỳ ý định thanh toán nào. Giá được tính lại trên máy chủ.</p>{(booking.passengers || []).map((passenger, passengerIndex) => <fieldset className="passenger-fieldset" key={passenger.id}><legend>{passenger.passenger_name}</legend>{[{ leg_order: 1, label: airportsOf(booking.flight) }, ...(booking.itinerarySegments || []).filter((item) => Number(item.leg_order) > 1).map((item) => ({ leg_order: Number(item.leg_order), label: airportsOf(item.flight) }))].map((leg) => <div key={leg.leg_order}><strong>Chặng {leg.leg_order}: {leg.label}</strong>{(ancillaryOptions[leg.leg_order] || []).map((offer) => { const selected = draftAncillarySelections.find((item) => item.offer_id === Number(offer.id) && item.passenger_index === passengerIndex && item.leg_order === leg.leg_order); const ownedQuantity = (booking.ancillaries || []).filter((line) => Number(line.offer_id) === Number(offer.id) && line.status === 'held').reduce((sum, line) => sum + Number(line.quantity), 0); const maxQuantity = ancillaryMaxQuantity(offer, draftAncillarySelections, leg.leg_order, passengerIndex, ownedQuantity); return <div className="ancillary-choice" key={offer.id}><label className="booking-fare-option"><input type="checkbox" checked={Boolean(selected)} disabled={!selected && maxQuantity < 1} onChange={(event) => setDraftAncillarySelections((current) => event.target.checked ? [...current, { offer_id: Number(offer.id), passenger_index: passengerIndex, leg_order: leg.leg_order, quantity: 1 }] : current.filter((item) => !(item.offer_id === Number(offer.id) && item.passenger_index === passengerIndex && item.leg_order === leg.leg_order)))} /><span><strong>{offer.service?.name || offer.offer_name}</strong><small>{offer.offer_name} · {offer.refund_policy === 'refundable' ? 'Theo chính sách hoàn' : 'Không hoàn tiền'} · còn {Number(offer.capacity) - Number(offer.reserved_quantity)}</small></span><b className="table-mono-cell">{money(offer.unit_price)}</b></label>{selected ? <div className="ancillary-quantity"><span>Số lượng {offer.offer_name} cho hành khách {passengerIndex + 1}, chặng {leg.leg_order}</span><button type="button" aria-label={`Giảm số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${leg.leg_order}`} disabled={selected.quantity <= 1} onClick={() => setDraftAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === leg.leg_order && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity - 1 } : item))}>−</button><output aria-label={`Số lượng đã chọn ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${leg.leg_order}`}>{selected.quantity}</output><button type="button" aria-label={`Tăng số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${leg.leg_order}`} disabled={selected.quantity >= maxQuantity} onClick={() => setDraftAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === leg.leg_order && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity + 1 } : item))}>+</button></div> : null}</div>; })}</div>)}</fieldset>)}<button className="button button-secondary" type="button" disabled={savingAncillaries} onClick={() => void saveAncillaries()}>{savingAncillaries ? 'Đang cập nhật…' : 'Lưu dịch vụ bổ sung'}</button></section> : null}
+    </section>
+    {admin ? (
+      <aside className="surface-card booking-panel booking-admin-sidebar">
+        <h2>Thông tin khách hàng</h2>
+        <p><strong>{booking.user?.full_name || 'Khách vãng lai'}</strong></p>
+        <p className="table-mono-cell">{booking.user?.email || booking.guest_email || '—'}</p>
+        
+        <div className="booking-timeline-header">
+          <h3>Lịch sử trạng thái</h3>
+          {booking.statusHistory?.length ? <span className="timeline-count">({booking.statusHistory.length} mốc)</span> : null}
+        </div>
+        
+        {booking.statusHistory?.length ? (
+          <ol className="booking-status-history timeline-flow">
+            {booking.statusHistory.map((event) => (
+              <li key={event.id} className={`timeline-step to-${event.to_status}`}>
+                <div className="timeline-marker" aria-hidden="true" />
+                <div className="timeline-body">
+                  <div className="timeline-status-badge">
+                    {event.from_status ? (
+                      <>
+                        <span className="status-from">{statusLabel(event.from_status)}</span>
+                        <span className="timeline-arrow" aria-hidden="true"> → </span>
+                      </>
+                    ) : null}
+                    <span className="status-to">{statusLabel(event.to_status)}</span>
+                  </div>
+                  <span className="timeline-time table-mono-cell tabular-nums">{dateTime(event.created_at)}</span>
+                  <small className="timeline-meta">
+                    <span title={event.source} className="timeline-source-label">
+                      {getStatusSourceLabel(event.source)}
+                    </span>
+                    {event.actor?.full_name ? ` · ${event.actor.full_name}` : ''}
+                  </small>
+                </div>
+              </li>
+            ))}
+          </ol>
+        ) : (
+          <p className="empty-history-text">Chưa có bản ghi lịch sử trạng thái.</p>
+        )}
+      </aside>
+    ) : null}
+  </div>
+    <section className="surface-card booking-panel booking-payment-history"><h2>Thanh toán và hoàn tiền</h2>{paymentsList(booking).length ? paymentsList(booking).map((payment) => <div className="booking-payment-line" key={payment.id}><span><strong>{payment.payment_method}</strong><small className="table-mono-cell">{payment.paid_at ? `Thanh toán lúc ${dateTime(payment.paid_at)}` : `Tạo giao dịch ${dateTime(payment.created_at)}`}</small></span><StatusBadge status={payment.status} /><strong className="table-mono-cell">{money(payment.amount)}</strong>{admin && isAdmin ? <Link to={`/admin/payments/${payment.id}`}>Chi tiết</Link> : null}</div>) : <p>Chưa có giao dịch thanh toán.</p>}{admin && isAdmin && booking.status === 'confirmed' ? <p><Link to={`/admin/payments?booking_id=${booking.id}`}>Mở giao dịch để xử lý refund theo quy trình hiện có</Link></p> : null}</section>
     <ConfirmDialog open={confirmCancel} title="Hủy đặt chỗ này?" description="Chỉ đặt chỗ đang được giữ chỗ mới có thể hủy. Ghế và ưu đãi liên quan sẽ được xử lý theo nghiệp vụ của hệ thống." confirmLabel="Xác nhận hủy" danger pending={state.pending} onConfirm={() => void cancel()} onCancel={() => setConfirmCancel(false)} />
   </BookingShell>;
 }

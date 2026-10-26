@@ -70,7 +70,7 @@ describe('Airline and Airport administration', () => {
     await waitFor(() => expect(fetch.mock.calls.some(([url, options]) => url.endsWith('/airlines') && options.method === 'POST')).toBe(true));
     const [, options] = fetch.mock.calls.find(([url, candidate]) => url.endsWith('/airlines') && candidate.method === 'POST');
     expect(JSON.parse(options.body)).toEqual({ name: 'Pacific Air', iata_code: 'PA', logo_url: 'https://airline.test/pa.png' });
-  });
+  }, 15000); // Timeout 15s: luồng render và điền form tạo hãng hàng không qua userEvent khi chạy full suite
 
   it('updates Airline fields through the documented PUT endpoint', async () => {
     const user = userEvent.setup();

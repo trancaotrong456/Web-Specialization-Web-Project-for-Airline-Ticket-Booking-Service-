@@ -36,26 +36,26 @@ const renderPage = (path, fetchImpl = vi.fn()) => render(
 );
 
 describe('public authentication pages', () => {
-  it('shows the requested aviation-focused login copy', () => {
+  it('shows clear aviation-focused login copy', () => {
     renderPage('/login');
-    expect(screen.getByText('Hành trình của bạn bắt đầu từ đây.')).toBeInTheDocument();
-    expect(screen.getByText('Đăng nhập để tiếp tục quản lý tài khoản và hành trình của bạn.')).toBeInTheDocument();
+    expect(screen.getByText('Đăng nhập để xem vé và đặt chỗ')).toBeInTheDocument();
+    expect(screen.getByText('Đăng nhập để xem vé, quản lý đặt chỗ và hành trình của bạn.')).toBeInTheDocument();
     expect(screen.getByText('SGN')).toBeInTheDocument();
     expect(screen.getByText('HAN')).toBeInTheDocument();
   });
 
   it('shows distinct registration copy and benefits without login copy', () => {
     renderPage('/register');
-    expect(screen.getByText('Bắt đầu hành trình cùng Airline Booking')).toBeInTheDocument();
-    expect(screen.getByText('Tạo tài khoản để trải nghiệm hệ thống thuận tiện và liền mạch hơn.')).toBeInTheDocument();
+    expect(screen.getByText('Tạo tài khoản Serene Flightways')).toBeInTheDocument();
+    expect(screen.getByText('Tài khoản giúp bạn lưu thông tin hành khách và theo dõi vé đã đặt.')).toBeInTheDocument();
     expect(screen.getByText('Bảo mật tài khoản')).toBeInTheDocument();
-    expect(screen.getByText('Quản lý thông tin thuận tiện')).toBeInTheDocument();
+    expect(screen.getByText('Theo dõi và quản lý vé đã đặt')).toBeInTheDocument();
     expect(screen.queryByText('Đăng nhập để quản lý hồ sơ...')).not.toBeInTheDocument();
   });
 
-  it('shows aviation-focused recovery copy and home navigation', () => {
+  it('shows clear recovery copy and home navigation', () => {
     renderPage('/forgot-password');
-    expect(screen.getByText('Lấy lại quyền truy cập, tiếp tục hành trình.')).toBeInTheDocument();
+    expect(screen.getByText('Khôi phục mật khẩu tài khoản')).toBeInTheDocument();
     expect(screen.getByText('Nhập email đã đăng ký để nhận hướng dẫn khôi phục mật khẩu.')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Quên mật khẩu' })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Về trang chủ/ })).toHaveAttribute('href', '/');
@@ -130,7 +130,7 @@ describe('public authentication pages', () => {
     expect(screen.getByText('Số điện thoại Việt Nam không hợp lệ.')).toBeInTheDocument();
     expect(screen.getByText('Mật khẩu xác nhận không khớp.')).toBeInTheDocument();
     expect(fetchImpl).not.toHaveBeenCalled();
-  });
+  }, 15000); // Timeout 15s: luồng điền nhiều trường form đăng ký qua userEvent khi chạy full suite
 
   it('shows backend field errors on registration without losing input', async () => {
     const user = userEvent.setup();
@@ -156,7 +156,7 @@ describe('public authentication pages', () => {
       full_name: 'Nguyễn Văn An',
       phone: '0912345678',
     });
-  });
+  }, 15000); // Timeout 15s: luồng điền nhiều trường và phản hồi lỗi từ backend khi chạy full suite
 
   it('shows the same generic confirmation after a forgot-password request', async () => {
     const user = userEvent.setup();

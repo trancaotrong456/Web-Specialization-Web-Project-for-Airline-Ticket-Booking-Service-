@@ -1,24 +1,485 @@
-.advanced-flight-filters { margin: 0 0 1.2rem; padding: 1.15rem; border: 1px solid #d9e3f4; border-top: 3px solid #f8a33d; border-radius: .7rem; background: #fff; }
-.advanced-filter-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: .9rem; }
-.advanced-filter-heading h2 { margin: .2rem 0 0; color: #123e45; font-size: 1.15rem; }
-.advanced-filter-heading > span, .advanced-filter-note { color: #5e7078; font-size: .78rem; }
-.advanced-filter-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: .8rem; }
-.advanced-filter-grid label { display: grid; gap: .35rem; color: #26444c; font-size: .78rem; font-weight: 700; }
-.advanced-filter-grid input, .advanced-filter-grid select { width: 100%; min-width: 0; min-height: 2.65rem; padding: .55rem .7rem; border: 1px solid #d4e0e7; border-radius: .5rem; color: #1c3037; background: #f8fafc; font: inherit; }
-.advanced-filter-grid input:focus, .advanced-filter-grid select:focus { outline: 3px solid rgb(15 107 102 / 18%); border-color: #0f6b66; }
-.advanced-filter-sort, .advanced-filter-actions { grid-column: span 2; }
-.advanced-filter-actions { display: flex; align-items: end; justify-content: flex-end; gap: .6rem; }
-.advanced-filter-actions .button { min-height: 2.65rem; }
-.advanced-filter-note { margin: .8rem 0 0; line-height: 1.5; }
-.advanced-filter-chips { display: flex; flex-wrap: wrap; gap: .45rem; margin-top: .7rem; }
-.advanced-filter-chips button { padding: .35rem .55rem; border: 1px solid #c9dfdc; border-radius: 99px; color: #0b5e58; background: #eff8f6; font-size: .72rem; cursor: pointer; }
-.advanced-filter-chips button span { margin-left: .25rem; font-weight: 800; }
-@media (max-width: 58rem) { .advanced-filter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.advanced-flight-filters {
+  margin: 0 0 1.5rem;
+  padding: 1.25rem 1.5rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: var(--surface-radius, 4px);
+  background: var(--color-surface, #FFFFFF);
+  box-shadow: 0 2px 8px rgba(26, 26, 23, 0.04);
+}
+
+.advanced-filter-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.advanced-filter-heading h2 {
+  margin: 0.2rem 0 0;
+  color: var(--color-text, #1A1A17);
+  font-size: 1.15rem;
+  font-family: var(--font-heading);
+  font-weight: 600;
+}
+
+.advanced-filter-heading > span,
+.advanced-filter-note {
+  color: var(--color-text-muted, #595750);
+  font-size: 0.8rem;
+}
+
+.advanced-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem;
+}
+
+.advanced-filter-grid label {
+  display: grid;
+  gap: 0.35rem;
+  color: var(--color-text, #1A1A17);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.advanced-filter-grid input,
+.advanced-filter-grid select {
+  width: 100%;
+  min-width: 0;
+  min-height: 2.65rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: var(--control-radius, 4px);
+  color: var(--color-text, #1A1A17);
+  background: #FFFFFF;
+  font: inherit;
+  font-size: 0.875rem;
+  transition: border-color var(--transition-fast);
+}
+
+.advanced-filter-grid input:focus,
+.advanced-filter-grid select:focus {
+  outline: none;
+  border-color: var(--color-primary, #16382C);
+  box-shadow: 0 0 0 2px rgba(22, 56, 44, 0.15);
+}
+
+.advanced-filter-sort,
+.advanced-filter-actions {
+  grid-column: span 2;
+}
+
+.advanced-filter-actions {
+  display: flex;
+  align-items: end;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.advanced-filter-actions .button {
+  min-height: 2.65rem;
+}
+
+.advanced-filter-note {
+  margin: 0.85rem 0 0;
+  line-height: 1.5;
+}
+
+.advanced-filter-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.85rem;
+}
+
+.advanced-filter-chips button {
+  padding: 0.35rem 0.65rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: var(--radius-xs, 2px);
+  color: var(--color-primary, #16382C);
+  background: var(--color-surface-be, #EFEBE2);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: background var(--transition-fast);
+}
+
+.advanced-filter-chips button:hover {
+  background: var(--color-surface-be-hover, #EAE5DC);
+}
+
+.advanced-filter-chips button span {
+  font-weight: 700;
+}
+
+@media (max-width: 58rem) {
+  .advanced-filter-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 36rem) {
-  .advanced-filter-heading { align-items: flex-start; flex-direction: column; gap: .25rem; }
-  .advanced-filter-grid { gap: .65rem; }
-  .advanced-filter-sort, .advanced-filter-actions { grid-column: 1 / -1; }
-  .advanced-filter-actions { align-items: stretch; flex-direction: column-reverse; }
-  .advanced-filter-actions .button { width: 100%; }
-  .advanced-flight-filters { padding: .85rem; }
+  .advanced-filter-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.25rem;
+  }
+  .advanced-filter-grid {
+    gap: 0.65rem;
+  }
+  .advanced-filter-sort,
+  .advanced-filter-actions {
+    grid-column: 1 / -1;
+  }
+  .advanced-filter-actions {
+    align-items: stretch;
+    flex-direction: column-reverse;
+  }
+  .advanced-filter-actions .button {
+    width: 100%;
+  }
+  .advanced-flight-filters {
+    padding: 1rem;
+  }
+}
+
+/* ==========================================================================
+   Nearby Dates Strip (±3 Days)
+   ========================================================================== */
+.nearby-dates-section {
+  margin: 0 0 1.25rem;
+  padding: 0.85rem 1rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: var(--surface-radius, 4px);
+  background: var(--color-surface, #FFFFFF);
+  box-shadow: 0 2px 6px rgba(26, 26, 23, 0.03);
+}
+
+.nearby-dates-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+  font-size: 0.85rem;
+}
+
+.nearby-dates-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--color-primary, #16382C);
+}
+
+.nearby-dates-header span {
+  color: var(--color-text-muted, #595750);
+  font-size: 0.78rem;
+}
+
+.nearby-dates-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.nearby-date-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+  padding: 0.6rem 0.4rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: 4px;
+  background: #FAFAF8;
+  color: var(--color-text, #1A1A17);
+  font: inherit;
+  cursor: pointer;
+  text-align: center;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.nearby-date-card:hover:not(:disabled) {
+  border-color: var(--color-accent, #B8860B);
+  background: #FFF9ED;
+}
+
+.nearby-date-card.is-active {
+  border-color: var(--color-primary, #16382C);
+  background: var(--color-primary, #16382C);
+  color: #FFFFFF;
+  box-shadow: 0 3px 8px rgba(22, 56, 44, 0.18);
+}
+
+.nearby-date-card.is-active .nearby-date-day,
+.nearby-date-card.is-active .nearby-date-num,
+.nearby-date-card.is-active .nearby-date-price {
+  color: #FFFFFF;
+}
+
+.nearby-date-day {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-text-muted, #595750);
+  text-transform: uppercase;
+}
+
+.nearby-date-num {
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+
+.nearby-date-price {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-primary, #16382C);
+  margin-top: 0.15rem;
+}
+
+.nearby-date-card.is-sold-out {
+  opacity: 0.65;
+  cursor: pointer;
+}
+
+.nearby-date-card.is-sold-out .nearby-date-price {
+  color: var(--color-text-muted, #8C8980);
+}
+
+.nearby-date-skeleton {
+  width: 3.5rem;
+  height: 0.85rem;
+  background: linear-gradient(90deg, #f0ede6 25%, #e4dfd5 50%, #f0ede6 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: 3px;
+  margin-top: 0.2rem;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+@media (max-width: 50rem) {
+  .nearby-dates-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+@media (max-width: 30rem) {
+  .nearby-dates-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+/* ==========================================================================
+   Quick Sort Toolbar
+   ========================================================================== */
+.flight-sort-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: var(--surface-radius, 4px);
+  background: var(--color-surface, #FFFFFF);
+  box-shadow: 0 1px 4px rgba(26, 26, 23, 0.03);
+}
+
+.flight-sort-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-text, #1A1A17);
+}
+
+.flight-sort-options {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.flight-sort-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.85rem;
+  border: 1px solid var(--color-border, #D8D2C6);
+  border-radius: 4px;
+  background: #FFFFFF;
+  color: var(--color-text, #1A1A17);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--transition-fast, 0.15s ease);
+}
+
+.flight-sort-btn:hover {
+  border-color: var(--color-primary, #16382C);
+  background: #F4F7F5;
+}
+
+.flight-sort-btn.is-active {
+  border-color: var(--color-primary, #16382C);
+  background: var(--color-primary, #16382C);
+  color: #FFFFFF;
+  font-weight: 600;
+}
+
+/* ==========================================================================
+   Fare Compare Section in FlightCard
+   ========================================================================== */
+.flight-fare-compare-wrap {
+  grid-column: 1 / -1;
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--color-border, #E0E7E8);
+}
+
+.flight-compare-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.75rem;
+  border: 1px solid #C8D6D8;
+  border-radius: 4px;
+  background: #F8FBFB;
+  color: #0F6B66;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.flight-compare-toggle:hover {
+  background: #EAF4F3;
+  border-color: #0F6B66;
+}
+
+.flight-compare-drawer {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.85rem;
+  border: 1px solid #DCE7E8;
+  border-radius: 6px;
+  background: #F8FBFB;
+}
+
+.fare-compare-card {
+  padding: 0.75rem;
+  border: 1px solid #E2E8F0;
+  border-radius: 4px;
+  background: #FFFFFF;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.fare-compare-card.is-business {
+  border-color: #D3A745;
+  background: #FDFCF8;
+}
+
+.fare-compare-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  color: #0F6B66;
+}
+
+.fare-compare-card.is-business .fare-compare-badge {
+  color: #92690B;
+}
+
+.fare-compare-price {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #1A1A17;
+}
+
+.fare-compare-features {
+  margin: 0.35rem 0;
+  padding-left: 1.1rem;
+  font-size: 0.75rem;
+  color: #475569;
+}
+
+.fare-compare-features li {
+  margin-bottom: 0.2rem;
+}
+
+.fare-compare-empty {
+  color: #94A3B8;
+  font-style: italic;
+  font-size: 0.8rem;
+}
+
+/* ==========================================================================
+   Holding Reminder Banner (Header)
+   ========================================================================== */
+.holding-reminder-banner {
+  background: linear-gradient(90deg, #FFFBEB 0%, #FEF3C7 100%);
+  border-bottom: 1px solid #FDE68A;
+  color: #92400E;
+  padding: 0.55rem 1.25rem;
+  font-size: 0.875rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.holding-reminder-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.holding-reminder-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.holding-reminder-icon {
+  font-size: 1.15rem;
+}
+
+.holding-reminder-action {
+  background: #D97706;
+  color: #FFFFFF !important;
+  font-size: 0.825rem;
+  font-weight: 600;
+  padding: 0.35rem 0.85rem;
+  border-radius: 4px;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.holding-reminder-action:hover {
+  background: #B45309;
+}
+
+/* ==========================================================================
+   Booking Tabs & Limit Note
+   ========================================================================== */
+.booking-tabs {
+  margin-bottom: 1rem;
+}
+
+.booking-pagination-note {
+  display: inline-block;
+  color: #64748B;
+  font-size: 0.825rem;
 }

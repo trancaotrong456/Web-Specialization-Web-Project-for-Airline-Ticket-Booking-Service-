@@ -52,9 +52,9 @@ export function RegisterPage() {
       eyebrow="Thành viên mới"
       title="Tạo tài khoản"
       description="Điền thông tin bên dưới để bắt đầu."
-      visualHeadline="Bắt đầu hành trình cùng Airline Booking"
-      visualDescription="Tạo tài khoản để trải nghiệm hệ thống thuận tiện và liền mạch hơn."
-      benefits={['Bảo mật tài khoản', 'Quản lý thông tin thuận tiện']}
+      visualHeadline="Tạo tài khoản Serene Flightways"
+      visualDescription="Tài khoản giúp bạn lưu thông tin hành khách và theo dõi vé đã đặt."
+      benefits={['Bảo mật tài khoản', 'Theo dõi và quản lý vé đã đặt']}
     >
       <Notice type="error">{message}</Notice>
       <form className="form-stack" onSubmit={submit} noValidate>
