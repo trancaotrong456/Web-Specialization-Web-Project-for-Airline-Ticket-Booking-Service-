@@ -2,8 +2,8 @@ const express = require('express');
 const AirportService = require('./airport.service');
 const AirportController = require('./airport.controller');
 
-function createAirportModule({ expressModule = express, repository, service, controller, guards } = {}) {
-  const resolvedService = service || (repository ? new AirportService({ repository }) : undefined);
+function createAirportModule({ expressModule = express, repository, service, controller, guards, searchEngine } = {}) {
+  const resolvedService = service || (repository ? new AirportService({ repository, searchEngine }) : undefined);
   const resolvedController = controller || (
     resolvedService ? new AirportController({ service: resolvedService }) : undefined
   );

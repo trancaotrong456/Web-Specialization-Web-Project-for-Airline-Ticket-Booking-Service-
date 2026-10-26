@@ -28,6 +28,8 @@
     "express-validator": "^7.2.1",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^1.61.0",
+    "minisearch": "^7.2.0",
     "morgan": "^1.10.0",
     "mysql2": "^3.24.4",
     "node-cron": "^3.0.3",
