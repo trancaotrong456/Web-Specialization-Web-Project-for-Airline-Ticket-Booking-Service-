@@ -205,19 +205,22 @@ test('Flight module constructs one injected graph and preserves exact route orde
   assert.equal(module.service.repository, repository);
   assert.equal(module.controller.service, module.service);
   assert.deepEqual(routes.map((route) => [route.path, Object.keys(route.methods)[0]]), [
-    ['/search', 'get'], ['/status/:id', 'get'], ['/status/:id', 'patch'], ['/:id', 'get'], ['/', 'get'], ['/', 'post'],
+    ['/search', 'get'], ['/calendar', 'get'], ['/status/:id', 'get'], ['/status/:id', 'patch'], ['/:id', 'get'], ['/', 'get'], ['/', 'post'],
     ['/:id', 'put'], ['/:id/cancel', 'put'], ['/:id', 'delete'],
   ]);
-  assert.deepEqual(roles, [['admin'], ['admin', 'staff'], ['admin'], ['admin', 'staff'], ['admin', 'staff'], ['admin']]);
+  assert.deepEqual(roles, [['admin', 'staff'], ['admin'], ['admin', 'staff'], ['admin'], ['admin', 'staff'], ['admin', 'staff'], ['admin']]);
   assert.equal(routes[0].stack[0].handle, validators.searchFlightValidator[0]);
   assert.equal(routes[0].stack.at(-2).handle, validate);
+  assert.equal(routes[1].stack[0].handle, authenticate);
+  assert.equal(routes[1].stack[1].handle, authorizers[0]);
   assert.equal(routes[1].stack.at(-2).handle, validate);
-  assert.equal(routes[2].stack[0].handle, authenticate);
-  assert.equal(routes[2].stack[1].handle, authorizers[0]);
   assert.equal(routes[2].stack.at(-2).handle, validate);
-  assert.equal(routes[4].stack[0].handle, authenticate);
-  assert.equal(routes[4].stack[1].handle, authorizers[1]);
+  assert.equal(routes[3].stack[0].handle, authenticate);
+  assert.equal(routes[3].stack[1].handle, authorizers[1]);
+  assert.equal(routes[3].stack.at(-2).handle, validate);
   assert.equal(routes[5].stack[0].handle, authenticate);
   assert.equal(routes[5].stack[1].handle, authorizers[2]);
-  assert.equal(routes[5].stack.at(-2).handle, validate);
+  assert.equal(routes[6].stack[0].handle, authenticate);
+  assert.equal(routes[6].stack[1].handle, authorizers[3]);
+  assert.equal(routes[6].stack.at(-2).handle, validate);
 });

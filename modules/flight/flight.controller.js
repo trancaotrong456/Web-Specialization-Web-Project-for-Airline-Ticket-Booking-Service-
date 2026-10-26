@@ -42,6 +42,16 @@ class FlightController {
     try { return this.apiResponse.success(res, await this.service.deleteFlight(req.params.id), 'Flight deleted successfully'); }
     catch (error) { next(error); }
   }
+  // #27 Lịch chuyến bay dạng calendar (xem theo tuần/tháng)
+  async getFlightCalendar(req, res, next) {
+    try {
+      return this.apiResponse.success(
+        res,
+        await this.service.getFlightCalendar(req.query),
+        'Flight calendar retrieved successfully',
+      );
+    } catch (error) { next(error); }
+  }
 }
 
 module.exports = FlightController;
