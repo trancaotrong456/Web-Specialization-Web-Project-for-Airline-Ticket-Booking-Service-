@@ -5,6 +5,7 @@ const SEARCH_QUERY_FIELDS = [
   'departure_airport_id', 'arrival_airport_id', 'airline_id', 'departure_date', 'min_seats', 'page', 'limit',
   'min_price', 'max_price', 'fare_class', 'departure_time_from', 'departure_time_to',
   'arrival_time_from', 'arrival_time_to', 'min_duration_minutes', 'max_duration_minutes', 'sort_by',
+  'search', 'q',
 ];
 
 const searchFlightValidator = [
@@ -14,6 +15,11 @@ const searchFlightValidator = [
     }
     return true;
   }),
+  query(['search', 'q'])
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage('Search keyword must not exceed 200 characters'),
   query('departure_airport_id')
     .optional()
     .isInt({ min: 1 })

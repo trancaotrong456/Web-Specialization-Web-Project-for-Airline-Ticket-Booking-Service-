@@ -5,9 +5,16 @@ class SequelizeAirportRepository {
     this.Op = Op;
   }
 
-  findPage({ page, limit, search }) {
+  findPage({ page, limit, search, matchingIds }) {
     const where = {};
-    if (search) {
+    if (matchingIds && matchingIds.length > 0) {
+      where[this.Op.or] = [
+        { id: { [this.Op.in]: matchingIds } },
+        { name: { [this.Op.like]: `%${search}%` } },
+        { iata_code: { [this.Op.like]: `%${search}%` } },
+        { city: { [this.Op.like]: `%${search}%` } },
+      ];
+    } else if (search) {
       where[this.Op.or] = [
         { name: { [this.Op.like]: `%${search}%` } },
         { iata_code: { [this.Op.like]: `%${search}%` } },

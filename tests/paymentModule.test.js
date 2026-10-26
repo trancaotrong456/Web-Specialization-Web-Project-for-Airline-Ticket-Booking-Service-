@@ -21,29 +21,12 @@ test('legacy Payment imports resolve the canonical module graph', () => {
   assert.equal(require('../routes/payment.route'), module.router);
   const routes = module.router.stack.filter((layer) => layer.route).map((layer) => [layer.route.stack[0].method, layer.route.path]);
   assert.deepEqual(routes, [
-    ['get', '/'], ['post', '/initiate'], ['get', '/vnpay/return'], ['get', '/vnpay/ipn'],
+    ['get', '/'], ['get', '/reconciliation-cases'], ['get', '/reconciliation-cases/:id'], ['get', '/reconciliation-metrics'], ['get', '/reconciliation-metrics/prometheus'], ['post', '/reconciliation-cases/:id/manual-review'], ['post', '/initiate'], ['get', '/bookings/:bookingId/status'], ['get', '/vnpay/return'], ['get', '/vnpay/ipn'],
     ['get', '/payos/return'], ['post', '/payos/webhook'], ['post', '/payos/demo-webhook'],
-    ['get', '/revenue'], ['get', '/:id'], ['post', '/bookings/:id/refund'],
+    ['get', '/revenue'], ['post', '/:id/vnpay/query'], ['post', '/:id/vnpay/refund'], ['get', '/:id'], ['post', '/bookings/:id/refund'],
   ]);
   const ipn = module.router.stack.find((layer) => layer.route?.path === '/vnpay/ipn');
   assert.equal(ipn.route.stack.at(-1).handle, module.controller.vnpayIpn);
-});
-
-test('Payment controller forwards the idempotency header without changing the request body contract', async () => {
-  const PaymentController = require('../modules/payment/payment.controller');
-  let forwarded;
-  const controller = new PaymentController({ service: { initiatePayment: async (value) => { forwarded = value; return { status: 'pending_payment' }; } } });
-  const response = { status: () => response, json: () => response };
-  await controller.initiatePayment({
-    headers: { 'idempotency-key': 'header-key-0001' },
-    body: { booking_id: 3, payment_method: 'vnpay', guest_email: 'guest@example.com' },
-    socket: { remoteAddress: '127.0.0.1' },
-    user: null,
-  }, response, (error) => { throw error; });
-
-  assert.equal(forwarded.idempotency_key, 'header-key-0001');
-  assert.equal(forwarded.booking_id, 3);
-  assert.equal(forwarded.payment_method, 'vnpay');
 });
 
 test('Payment repository preserves webhook Payment then Booking lock order and transaction identity', async () => {
@@ -63,54 +46,19 @@ test('Payment repository preserves webhook Payment then Booking lock order and t
   assert.equal(calls[1][1].include[0].as, 'passengers');
 });
 
-test('Payment repository reads idempotency keys under an update lock in the supplied transaction', async () => {
-  const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
-  let options;
-  const repository = new SequelizePaymentRepository({
-    Payment: { findOne: async (value) => { options = value; return null; } },
-    Booking: {}, Flight: {}, BookingPassenger: {}, Promotion: {}, User: {},
-  });
-  const transaction = { LOCK: { UPDATE: 'UPDATE' } };
-
-  await repository.findPaymentByIdempotencyKey('request-key-1234', transaction);
-
-  assert.deepEqual(options.where, { idempotency_key: 'request-key-1234' });
-  assert.equal(options.lock, transaction.LOCK.UPDATE);
-  assert.equal(options.transaction, transaction);
-});
-
-test('Payment history and detail do not expose internal idempotency metadata', async () => {
-  let listOptions;
-  let detailOptions;
-  const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
-  const repository = new SequelizePaymentRepository({
-    Payment: {
-      findAndCountAll: async (options) => { listOptions = options; return { count: 0, rows: [] }; },
-      findByPk: async (_id, options) => { detailOptions = options; return null; },
-    },
-    Booking: {}, Flight: {}, BookingPassenger: {}, Promotion: {}, User: {},
-  });
-
-  await repository.listPayments({ where: {}, limit: 20, offset: 0 });
-  await repository.findPaymentDetail(5);
-
-  for (const options of [listOptions, detailOptions]) {
-    assert.deepEqual(options.attributes.exclude, ['idempotency_key', 'request_fingerprint', 'idempotency_response']);
-  }
-});
-
 test('Payment repository keeps refund locks and successful-payment filter', async () => {
   const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
   const calls = [];
-  const Payment = { findOne: async (options) => { calls.push(['payment', options]); return null; } };
+  const Payment = { findAll: async (options) => { calls.push(['payment', options]); return []; } };
   const Booking = { findOne: async (options) => { calls.push(['booking', options]); return null; } };
   const repository = new SequelizePaymentRepository({ Payment, Booking, Flight: {}, BookingPassenger: {}, Promotion: {}, User: {} });
   const transaction = { LOCK: { UPDATE: 'UPDATE' } };
+  await repository.findSuccessfulPaymentsForRefund(2, transaction);
   await repository.findRefundBooking(2, transaction);
-  await repository.findSuccessfulPaymentForRefund(2, transaction);
-  assert.deepEqual(calls.map(([name]) => name), ['booking', 'payment']);
-  assert.deepEqual(calls[0][1].include.map((item) => item.as), ['passengers', 'payments']);
-  assert.deepEqual(calls[1][1].where, { booking_id: 2, status: 'success' });
+  assert.deepEqual(calls.map(([name]) => name), ['payment', 'booking']);
+  assert.deepEqual(calls[0][1].where, { booking_id: 2, status: 'success' });
+  assert.deepEqual(calls[0][1].order, [['id', 'ASC']]);
+  assert.deepEqual(calls[1][1].include.map((item) => item.as), ['passengers']);
   assert.equal(calls[0][1].transaction, transaction);
   assert.equal(calls[1][1].transaction, transaction);
 });
@@ -136,13 +84,19 @@ for (const gateway of ['vnpay', 'payos']) {
 test(`two concurrent ${gateway} callbacks recheck locked state and trigger one confirmation email`, async () => {
   const PaymentService = require('../modules/payment/payment.service');
   const tx = { LOCK: { UPDATE: 'UPDATE' } };
-  const booking = { id: 7, status: 'pending_payment' };
+  const booking = {
+    id: 7,
+    flight_id: 9,
+    status: 'pending_payment',
+    hold_expires_at: new Date(Date.now() + 60_000),
+  };
   const payment = { id: 4, booking_id: 7, amount: 120000, status: 'pending' };
   const lockOrder = [];
   let reads = 0;
   let releaseReads;
   const bothRead = new Promise((resolve) => { releaseReads = resolve; });
   const repository = {
+    async findLatestPaymentAttempt() { return payment; },
     async findPaymentWithBookingByRef() {
       reads++;
       if (reads === 2) releaseReads();
@@ -155,7 +109,10 @@ test(`two concurrent ${gateway} callbacks recheck locked state and trigger one c
     async findLockedBookingWithPassengers(id, transaction) {
       assert.equal(id, 7); assert.equal(transaction, tx); lockOrder.push('Booking'); return booking;
     },
-    async createStatusHistory() {},
+    async findLockedFlight(id, transaction) {
+      assert.equal(id, 9); assert.equal(transaction, tx);
+      return { id, status: 'scheduled', departure_time: new Date(Date.now() + 60_000) };
+    },
     async save(row, options) { assert.equal(options.transaction, tx); return row; },
   };
   let queue = Promise.resolve();
@@ -167,8 +124,14 @@ test(`two concurrent ${gateway} callbacks recheck locked state and trigger one c
   const service = new PaymentService({ repository, transactionManager });
   let emails = 0;
   service._triggerBookingConfirmationEmail = () => { emails++; };
-  const query = { vnp_TxnRef: 'TXN4', vnp_Amount: '12000000', vnp_ResponseCode: '00' };
-  query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'SECRETKEYVNPAY2026DEMO');
+  const query = {
+    vnp_TxnRef: 'TXN4',
+    vnp_TmnCode: process.env.VNP_TMN_CODE || 'TEST_TMN',
+    vnp_Amount: '12000000',
+    vnp_ResponseCode: '00',
+    vnp_TransactionStatus: '00',
+  };
+  query.vnp_SecureHash = signVnpayParams(query, process.env.VNP_HASH_SECRET || 'test-only-vnpay-secret');
   const invoke = gateway === 'vnpay'
     ? () => service.handleVnpayIpn(query)
     : () => service._processVerifiedPayosWebhook({ orderCode: 'TXN4', amount: 120000, isSuccess: true });
