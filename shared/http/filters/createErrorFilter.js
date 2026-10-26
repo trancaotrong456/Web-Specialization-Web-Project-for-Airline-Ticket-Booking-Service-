@@ -1,3 +1,5 @@
+const { redactString } = require('../../security/redactSensitive');
+
 function createErrorFilter({ getEnvironment = () => process.env.NODE_ENV } = {}) {
   return (error) => {
     if (error.name === 'SequelizeValidationError') {
@@ -7,7 +9,7 @@ function createErrorFilter({ getEnvironment = () => process.env.NODE_ENV } = {})
         errors: error.errors.map((item) => ({
           field: item.path,
           message: item.message,
-          value: item.value,
+          value: redactString(item.value),
         })),
       };
     }
@@ -19,7 +21,7 @@ function createErrorFilter({ getEnvironment = () => process.env.NODE_ENV } = {})
         errors: error.errors.map((item) => ({
           field: item.path,
           message: `${item.path} already exists`,
-          value: item.value,
+          value: redactString(item.value),
         })),
       };
     }
@@ -30,14 +32,15 @@ function createErrorFilter({ getEnvironment = () => process.env.NODE_ENV } = {})
 
     if (error.statusCode) {
       return {
-        message: error.message,
+        message: getEnvironment() === 'production' && Number(error.statusCode) >= 500
+          ? 'Internal server error' : redactString(error.message),
         statusCode: error.statusCode,
-        errors: error.errors || null,
+        errors: error.errors ? error.errors.map((item) => ({ ...item, value: redactString(item.value), message: redactString(item.message) })) : null,
       };
     }
 
     return {
-      message: getEnvironment() === 'production' ? 'Internal server error' : error.message,
+      message: getEnvironment() === 'production' ? 'Internal server error' : redactString(error.message),
       statusCode: 500,
     };
   };

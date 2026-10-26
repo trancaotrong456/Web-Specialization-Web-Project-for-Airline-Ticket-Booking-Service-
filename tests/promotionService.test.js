@@ -37,17 +37,41 @@ test('Promotion code validation preserves inclusive time boundaries and usage li
 
 test('Promotion service keeps 404, raw payload and instance update/delete behavior', async () => {
   const calls = [];
-  const promo = { id: 4 };
-  const data = { code: ' raw ' };
+  const promo = {
+    id: 4,
+    code: 'OLD',
+    discount_type: 'percent',
+    discount_value: 10,
+    valid_from: '2026-10-13T00:00:00.000Z',
+    valid_to: '2026-10-14T00:00:00.000Z',
+    max_uses: 5,
+  };
+  const data = {
+    code: ' raw ',
+    discount_type: 'percent',
+    discount_value: '20',
+    valid_from: '2026-10-13T00:00:00.000Z',
+    valid_to: '2026-10-15T00:00:00.000Z',
+    max_uses: '6',
+    used_count: 999,
+  };
   const service = new PromotionService({ repository: {
     findById: async (id) => { calls.push(['findById', id]); return id === 'missing' ? null : promo; },
     create: async (value) => { calls.push(['create', value]); return value; },
     update: async (instance, value) => { calls.push(['update', instance, value]); return instance; },
     delete: async (instance) => { calls.push(['delete', instance]); },
   } });
-  assert.equal(await service.create(data), data);
+  assert.deepEqual(await service.create(data), {
+    code: 'raw', discount_type: 'percent', discount_value: 20,
+    valid_from: data.valid_from, valid_to: data.valid_to, max_uses: 6,
+  });
   assert.equal(await service.update('4', data), promo);
   assert.deepEqual(await service.delete('4'), { message: 'Promotion deleted' });
   await assert.rejects(service.getById('missing'), (error) => error.statusCode === 404 && error.message === 'Promotion not found');
-  assert.deepEqual(calls, [['create', data], ['findById', '4'], ['update', promo, data], ['findById', '4'], ['delete', promo], ['findById', 'missing']]);
+  assert.deepEqual(calls, [
+    ['create', { code: 'raw', discount_type: 'percent', discount_value: 20, valid_from: data.valid_from, valid_to: data.valid_to, max_uses: 6 }],
+    ['findById', '4'],
+    ['update', promo, { code: 'raw', discount_type: 'percent', discount_value: 20, valid_from: data.valid_from, valid_to: data.valid_to, max_uses: 6 }],
+    ['findById', '4'], ['delete', promo], ['findById', 'missing'],
+  ]);
 });
