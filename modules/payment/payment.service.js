@@ -1446,34 +1446,49 @@ class PaymentService {
 
   /**
    * payOS sends the customer to cancelUrl when they cancel a payment link.
-   * Query parameters are not trusted: the payment-link status is re-read from
-   * payOS before returning the booking from pending_payment to holding/expired.
+   * Browser returns are informational only. State transitions belong to the
+   * signed webhook or reconciliation workflow, never to navigation.
    */
   async handlePayosReturn(queryParams) {
-    const orderCode = queryParams.orderCode;
-    const isCancellation = queryParams.cancel === 'true' || queryParams.status === 'CANCELLED';
+    const orderCode = queryParams?.orderCode;
+    const isCancellation = queryParams?.cancel === 'true' || queryParams?.status === 'CANCELLED';
 
     if (!orderCode || !isCancellation) {
-      return { orderCode: orderCode || null, status: queryParams.status || null, processed: false };
+      return { orderCode: orderCode || null, status: queryParams?.status || null, processed: false };
     }
 
     if (this._getPayOSMode() === 'demo') {
       return { orderCode, status: 'DEMO', processed: false };
     }
 
-    const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(orderCode));
-    if (paymentLink.status !== 'CANCELLED') {
-      return { orderCode, status: paymentLink.status, processed: false };
+    let paymentLink;
+    try {
+      paymentLink = await this._getPayOSClient().paymentRequests.get(Number(orderCode));
+    } catch (error) {
+      this.logger.warn?.('[payOS return] Gateway status unavailable; browser return remains read-only.');
+      return { orderCode, status: 'UNKNOWN', processed: false, verification: 'unavailable' };
     }
 
-    const payment = await this.repository.findPaymentWithBookingByRef(String(orderCode));
-
-    if (!payment || !payment.booking) {
-      return { orderCode, status: 'CANCELLED', processed: false };
+    const gatewayOrderCode = paymentLink?.orderCode ?? paymentLink?.order_code;
+    if (gatewayOrderCode != null && String(gatewayOrderCode) !== String(orderCode)) {
+      return { orderCode, status: 'UNKNOWN', processed: false, verification: 'mismatch' };
     }
 
-    await this._markPayosPaymentFailed(payment.id, payment.booking_id);
-    return { orderCode, status: 'CANCELLED', processed: true };
+    let payment = null;
+    try {
+      // Read-only lookup is used only to restore display context after a
+      // gateway redirect. It deliberately cannot change local state.
+      payment = await this.repository.findPaymentWithBookingByRef(String(orderCode), 'payos');
+    } catch (error) {
+      this.logger.warn?.('[payOS return] Local status lookup unavailable; browser return remains read-only.');
+    }
+
+    return {
+      orderCode,
+      status: paymentLink?.status || 'UNKNOWN',
+      processed: false,
+      ...(payment?.booking_id || payment?.booking?.id ? { bookingId: payment.booking_id || payment.booking.id } : {}),
+    };
   }
 
   async _createGatewayOperation(payment, operationType, operationKey, amount, transaction) {

@@ -10,6 +10,13 @@ const { createFlightFixture, createPromotionFixture, trackBooking, trackPayment,
 const { signVnpayParams, signPayosDemoPayload } = require('../../utils/checksum.util');
 
 process.env.PAYOS_MODE = 'demo';
+// Test-only VNPay configuration: initiation builds a signed local redirect
+// URL, while callbacks are exercised directly below. No VNPay HTTP request is
+// made and production disabled-mode behavior is unchanged.
+process.env.VNPAY_MODE ||= 'sandbox';
+process.env.VNP_TMN_CODE ||= 'TEST_TMN';
+process.env.VNP_HASH_SECRET ||= 'integration-test-vnpay-secret';
+process.env.VNP_RETURN_URL ||= 'http://127.0.0.1:3000/payments/result';
 paymentService._triggerBookingConfirmationEmail = async () => {};
 
 function deferred() {

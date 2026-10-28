@@ -58,8 +58,8 @@ test('accepts live payOS only with public HTTPS URLs and trusted hosts', () => {
     PAYOS_API_KEY: 'api-key-from-secret-manager',
     PAYOS_CHECKSUM_KEY: 'checksum-from-secret-manager',
     PAYOS_BASE_URL: 'https://api-merchant.payos.vn',
-    PAYOS_RETURN_URL: 'https://app.example.com/payment/payos-return',
-    PAYOS_CANCEL_URL: 'https://app.example.com/payment/payos-cancel',
+    PAYOS_RETURN_URL: 'https://app.example.com/payments/result',
+    PAYOS_CANCEL_URL: 'https://app.example.com/payments/result',
     PAYOS_WEBHOOK_URL: 'https://api.example.com/api/v1/payments/payos/webhook',
     PAYOS_TRUSTED_HOSTS: 'app.example.com,api.example.com',
   })));
@@ -68,14 +68,52 @@ test('accepts live payOS only with public HTTPS URLs and trusted hosts', () => {
 test('rejects insecure, private and untrusted payOS callback configuration', () => {
   const base = {
     PAYOS_MODE: 'live', PAYOS_CLIENT_ID: 'client', PAYOS_API_KEY: 'key', PAYOS_CHECKSUM_KEY: 'checksum',
-    PAYOS_BASE_URL: 'https://api-merchant.payos.vn', PAYOS_RETURN_URL: 'https://app.example.com/return',
-    PAYOS_CANCEL_URL: 'https://app.example.com/cancel', PAYOS_WEBHOOK_URL: 'https://api.example.com/webhook',
+    PAYOS_BASE_URL: 'https://api-merchant.payos.vn', PAYOS_RETURN_URL: 'https://app.example.com/payments/result',
+    PAYOS_CANCEL_URL: 'https://app.example.com/payments/result', PAYOS_WEBHOOK_URL: 'https://api.example.com/api/v1/payments/payos/webhook',
     PAYOS_TRUSTED_HOSTS: 'app.example.com,api.example.com',
   };
   assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_RETURN_URL: 'http://app.example.com/return' })), /HTTPS/i);
   assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_RETURN_URL: 'https://127.0.0.1/return' })), /localhost or a private network/i);
   assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_WEBHOOK_URL: 'https://other.example.com/webhook' })), /not in PAYOS_TRUSTED_HOSTS/i);
   assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_BASE_URL: 'http://api-merchant.payos.vn' })), /PAYOS_BASE_URL.*HTTPS/i);
+});
+
+test('requires the exact payOS callback path contract', () => {
+  const base = {
+    PAYOS_MODE: 'live', PAYOS_CLIENT_ID: 'client', PAYOS_API_KEY: 'key', PAYOS_CHECKSUM_KEY: 'checksum',
+    PAYOS_BASE_URL: 'https://api-merchant.payos.vn', PAYOS_RETURN_URL: 'https://app.example.com/payments/result',
+    PAYOS_CANCEL_URL: 'https://app.example.com/payments/result', PAYOS_WEBHOOK_URL: 'https://api.example.com/api/v1/payments/payos/webhook',
+    PAYOS_TRUSTED_HOSTS: 'app.example.com,api.example.com',
+  };
+  assert.doesNotThrow(() => validateRuntimeConfiguration(validProductionEnvironment({
+    ...base,
+    PAYOS_RETURN_URL: 'https://app.example.com/customer/payments/result?source=payos#complete',
+  })));
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({
+    ...base,
+    PAYOS_RETURN_URL: 'https://app.example.com/invalid?next=/payments/result',
+  })), /PAYOS_RETURN_URL must end with \/payments\/result/i);
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({
+    ...base,
+    PAYOS_CANCEL_URL: 'https://app.example.com/payments/result/ignored',
+  })), /PAYOS_CANCEL_URL must end with \/payments\/result/i);
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({
+    ...base,
+    PAYOS_WEBHOOK_URL: 'https://api.example.com/not-webhook?path=/api/v1/payments/payos/webhook',
+  })), /PAYOS_WEBHOOK_URL must end with \/api\/v1\/payments\/payos\/webhook/i);
+});
+
+test('rejects embedded credentials in live callback URLs', () => {
+  const base = {
+    PAYOS_MODE: 'live', PAYOS_CLIENT_ID: 'client', PAYOS_API_KEY: 'key', PAYOS_CHECKSUM_KEY: 'checksum',
+    PAYOS_BASE_URL: 'https://api-merchant.payos.vn', PAYOS_RETURN_URL: 'https://app.example.com/payments/result',
+    PAYOS_CANCEL_URL: 'https://app.example.com/payments/result', PAYOS_WEBHOOK_URL: 'https://api.example.com/api/v1/payments/payos/webhook',
+    PAYOS_TRUSTED_HOSTS: 'app.example.com,api.example.com',
+  };
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({
+    ...base,
+    PAYOS_WEBHOOK_URL: 'https://user:password@api.example.com/api/v1/payments/payos/webhook',
+  })), /HTTPS and must not contain credentials/i);
 });
 
 test('requires production Resend credentials and a valid sender when email is live', () => {

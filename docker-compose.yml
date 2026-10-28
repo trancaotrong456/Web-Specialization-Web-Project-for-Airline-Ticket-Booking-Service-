@@ -56,8 +56,9 @@ services:
       PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}
       PAYOS_API_KEY: ${PAYOS_API_KEY:-}
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
-      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:5000/api/v1/payments/payos/return}
-      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5000/api/v1/payments/payos/return}
+      # Browser return/cancel URLs target the frontend SPA result route.
+      PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:3000/payments/result}
+      PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:3000/payments/result}
       DISABLE_CRON: ${DISABLE_CRON:-false}
       RESEND_API_KEY: ""
       EMAIL_FROM: "Airline Booking <onboarding@resend.dev>"
