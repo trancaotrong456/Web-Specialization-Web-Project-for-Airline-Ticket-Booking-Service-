@@ -8,13 +8,14 @@ const { toMinorUnits, fromMinorUnits, wholeVndAmount } = require('../ancillaries
 const { recordBookingStatusTransition } = require('./bookingStatusHistory.util');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup, payosReconciliationAvailable, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
     this.socket = socket;
     this.flightSeatService = flightSeatService;
     this.payosStatusLookup = payosStatusLookup;
+    this.payosReconciliationAvailable = payosReconciliationAvailable;
     this.seatSelectionService = seatSelectionService;
     this.ancillaryService = ancillaryService;
     this.notificationPublisher = notificationPublisher;
@@ -489,6 +490,8 @@ class BookingService {
               status: 'PAID', orderCode: paymentSnapshot.transaction_ref, amount: paymentSnapshot.amount,
             };
           } else {
+            if (typeof this.payosReconciliationAvailable === 'function'
+              && !this.payosReconciliationAvailable()) continue;
             try {
               payosStatus = await this._lookupPayosStatus(paymentSnapshot.transaction_ref);
             } catch (error) {

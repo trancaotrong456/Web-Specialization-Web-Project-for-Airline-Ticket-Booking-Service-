@@ -308,6 +308,12 @@ class PaymentService {
     return mode;
   }
 
+  isPayosReconciliationAvailable() {
+    if (this._getPayOSMode() !== 'live') return false;
+    return ['PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY']
+      .every((key) => Boolean(String(process.env[key] || '').trim()));
+  }
+
   _getPayOSDemoSecret() {
     return process.env.PAYOS_DEMO_SECRET || 'local-academic-demo-only';
   }

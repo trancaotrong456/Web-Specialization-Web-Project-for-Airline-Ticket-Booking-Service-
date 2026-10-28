@@ -47,3 +47,17 @@ test('an unknown payOS mode is treated as a server configuration error', async (
     },
   );
 });
+
+for (const mode of ['disabled', 'demo']) {
+  test(`payOS reconciliation capability is unavailable in ${mode} mode`, async () => {
+    await withEnvironment({ PAYOS_MODE: mode }, async () => {
+      assert.equal(paymentService.isPayosReconciliationAvailable(), false);
+    });
+  });
+}
+
+test('payOS reconciliation capability is available in live mode for the configured gateway', async () => {
+  await withEnvironment({ PAYOS_MODE: 'live', PAYOS_CLIENT_ID: 'client', PAYOS_API_KEY: 'key', PAYOS_CHECKSUM_KEY: 'checksum' }, async () => {
+    assert.equal(paymentService.isPayosReconciliationAvailable(), true);
+  });
+});

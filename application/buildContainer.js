@@ -223,6 +223,7 @@ function getDefaultBookingModule() {
     ticketController: getDefaultTicketModule().controller,
     socket: getSocket,
     payosStatusLookup: async (transactionRef) => getDefaultPaymentModule().service.getPayosPaymentStatus(transactionRef),
+    payosReconciliationAvailable: () => getDefaultPaymentModule().service.isPayosReconciliationAvailable(),
     seatSelectionService: getDefaultSeatSelectionModule().service,
     ancillaryService: getDefaultAncillariesModule().service,
     notificationPublisher: getDefaultNotificationPublisher(),
