@@ -185,6 +185,34 @@ class SequelizeFlightRepository {
       ],
     });
   }
+
+  /**
+   * Lấy danh sách chuyến bay trong khoảng thời gian để hiển thị dạng lịch (calendar).
+   * Không phân trang — frontend cần toàn bộ dữ liệu trong tuần/tháng để render.
+   *
+   * @param {Date} dateStart - Đầu khoảng thời gian (inclusive)
+   * @param {Date} dateEnd   - Cuối khoảng thời gian (exclusive)
+   * @param {string|null} status - Lọc theo trạng thái (tuỳ chọn)
+   * @param {number} limit   - Giới hạn tối đa bản ghi trả về (bảo vệ tải hệ thống)
+   * @returns {Promise<import('sequelize').Model[]>}
+   */
+  findCalendar({ dateStart, dateEnd, status, limit = 500 }) {
+    const where = {
+      departure_time: { [this.Op.gte]: dateStart, [this.Op.lt]: dateEnd },
+    };
+    if (status) where.status = status;
+    return this.Flight.findAll({
+      where,
+      limit: Number(limit),
+      order: [['departure_time', 'ASC']],
+      include: [
+        { model: this.Airline, as: 'airline', attributes: ['id', 'name', 'iata_code', 'logo_url'] },
+        { model: this.Airport, as: 'departureAirport', attributes: ['id', 'name', 'iata_code', 'city'] },
+        { model: this.Airport, as: 'arrivalAirport', attributes: ['id', 'name', 'iata_code', 'city'] },
+        { model: this.FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price'] },
+      ],
+    });
+  }
 }
 
 module.exports = { SequelizeFlightRepository };

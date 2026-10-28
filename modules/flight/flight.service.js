@@ -289,6 +289,91 @@ class FlightService {
     const { count, rows } = await this.repository.findAdminPage({ page, limit, status, date_from, date_to });
     return { total: count, page, limit, data: rows };
   }
+
+  /**
+   * Chức năng #27: Lịch chuyến bay dạng calendar (xem theo tuần/tháng).
+   *
+   * Query params:
+   *   view  - 'week' | 'month' (default: 'week')
+   *   date  - YYYY-MM-DD làm mốc điểm trong tuần/tháng cần xem (default: today)
+   *   status - lọc trạng thái (tùy chọn)
+   *
+   * Giới hạn: tối đa 500 chuyến/tháng (bảo vệ tải).
+   * Timezone: UTC+7 (Việt Nam) — ngày bắt đầu/kết thúc tính theo giờ địa phương.
+   */
+  async getFlightCalendar({ view = 'week', date, status } = {}) {
+    const VN_OFFSET_MS = 7 * 60 * 60 * 1000; // UTC+7
+    const MAX_FLIGHTS = 500;
+
+    // Tính ngày gốc theo VN time
+    const refDate = date ? new Date(date) : new Date();
+    if (Number.isNaN(refDate.getTime())) {
+      const error = new Error('date không hợp lệ, phải đúng định dạng YYYY-MM-DD');
+      error.statusCode = 400;
+      throw error;
+    }
+
+    let dateStart;
+    let dateEnd;
+
+    if (view === 'week') {
+      // Tính thứ Hai đầu tuần (VN time)
+      const vnNow = new Date(refDate.getTime() + VN_OFFSET_MS);
+      const dayOfWeek = vnNow.getUTCDay(); // 0=CN, 1=T2, ..., 6=T7
+      const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+      const monday = new Date(vnNow);
+      monday.setUTCDate(vnNow.getUTCDate() + diffToMonday);
+      // 00:00 VN = midnight VN = dateStart UTC
+      dateStart = new Date(Date.UTC(
+        monday.getUTCFullYear(),
+        monday.getUTCMonth(),
+        monday.getUTCDate(),
+        0, 0, 0, 0,
+      ) - VN_OFFSET_MS);
+      dateEnd = new Date(dateStart.getTime() + 7 * 24 * 60 * 60 * 1000);
+    } else if (view === 'month') {
+      // Đầu và cuối tháng (VN time)
+      const vnNow = new Date(refDate.getTime() + VN_OFFSET_MS);
+      const year = vnNow.getUTCFullYear();
+      const month = vnNow.getUTCMonth(); // 0-indexed
+      dateStart = new Date(Date.UTC(year, month, 1, 0, 0, 0, 0) - VN_OFFSET_MS);
+      dateEnd = new Date(Date.UTC(year, month + 1, 1, 0, 0, 0, 0) - VN_OFFSET_MS);
+    } else {
+      const error = new Error("view phải là 'week' hoặc 'month'");
+      error.statusCode = 400;
+      throw error;
+    }
+
+    const flights = await this.repository.findCalendar({
+      dateStart,
+      dateEnd,
+      status: status || null,
+      limit: MAX_FLIGHTS,
+    });
+
+    // Nhóm chuyến bay theo ngày (VN date string YYYY-MM-DD) để frontend dễ dùng
+    const byDate = {};
+    for (const flight of flights) {
+      // Lấy ngày khởi hành theo giờ Việt Nam
+      const vnDep = new Date(new Date(flight.departure_time).getTime() + VN_OFFSET_MS);
+      const dateKey = [
+        vnDep.getUTCFullYear(),
+        String(vnDep.getUTCMonth() + 1).padStart(2, '0'),
+        String(vnDep.getUTCDate()).padStart(2, '0'),
+      ].join('-');
+      if (!byDate[dateKey]) byDate[dateKey] = [];
+      byDate[dateKey].push(flight);
+    }
+
+    return {
+      view,
+      date_from: dateStart.toISOString(),
+      date_to: dateEnd.toISOString(),
+      total: flights.length,
+      by_date: byDate,
+      data: flights,
+    };
+  }
 }
 
 module.exports = FlightService;
