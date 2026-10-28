@@ -126,3 +126,33 @@ test('worker keeps the outbox failed when another channel eventually succeeds af
   assert.equal(queued.realtime_status, 'sent');
   assert.equal(queued.status, 'failed');
 });
+
+test('worker records safe diagnostics and rejects a claimed outbox event without an id', async () => {
+  const logs = [];
+  const worker = new NotificationDeliveryWorker({
+    repository: { claimNext: async () => ({ event: { event_type: 'BOOKING_CONFIRMED', status: 'processing' }, leaseToken: 'lease' }) },
+    logger: { error: (...args) => logs.push(args) },
+  });
+  await assert.rejects(worker.runOne(), (error) => error.code === 'OUTBOX_ID_MISSING');
+  assert.equal(logs.length, 1);
+  assert.deepEqual(logs[0][1], { eventType: 'BOOKING_CONFIRMED', status: 'processing', hasLeaseToken: true });
+});
+
+test('worker preserves the id from a Sequelize-like instance through repository save', async () => {
+  const event = {
+    dataValues: { id: 88 },
+    get: (key) => key === 'id' ? 88 : { id: 88 },
+    payload: {}, status: 'processing', realtime_status: 'skipped', email_status: 'skipped',
+    realtime_attempts: 0, email_attempts: 0,
+  };
+  let saved;
+  const worker = new NotificationDeliveryWorker({
+    repository: {
+      claimNext: async () => ({ event, leaseToken: 'lease' }),
+      saveClaimed: async (claimed, leaseToken) => { saved = { claimed, leaseToken }; },
+    },
+  });
+  assert.equal(await worker.runOne(), true);
+  assert.equal(saved.claimed, event);
+  assert.equal(saved.leaseToken, 'lease');
+});

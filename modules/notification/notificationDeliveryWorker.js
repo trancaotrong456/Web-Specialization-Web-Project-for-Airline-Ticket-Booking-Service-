@@ -1,5 +1,7 @@
 'use strict';
 
+const { getNotificationOutboxId } = require('./notificationOutbox.repository');
+
 const MAX_ATTEMPTS = 5;
 const BASE_BACKOFF_MS = 1000;
 const MAX_BACKOFF_MS = 15 * 60 * 1000;
@@ -31,6 +33,17 @@ class NotificationDeliveryWorker {
     const claim = await this.repository.claimNext();
     if (!claim) return false;
     const { event, leaseToken } = claim;
+    const eventId = getNotificationOutboxId(event);
+    if (eventId === undefined || eventId === null) {
+      this.logger.error?.('[Notifications] Claimed outbox event missing id', {
+        eventType: event?.event_type || null,
+        status: event?.status || null,
+        hasLeaseToken: Boolean(leaseToken),
+      });
+      const error = new Error('Notification outbox event is missing primary key id');
+      error.code = 'OUTBOX_ID_MISSING';
+      throw error;
+    }
     const payload = event.payload || {};
     const failures = [];
 
