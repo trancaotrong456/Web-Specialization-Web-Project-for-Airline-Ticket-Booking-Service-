@@ -20,12 +20,18 @@ function createRuntime({ app, createServer = http.createServer, initSocket, auth
         await verifyReadiness(environment);
         startupPhase = 'runtime';
         logger.log('✅ Database connected successfully via Sequelize.');
-        if (environment.DISABLE_CRON !== 'true') initJob();
+        let jobControl = null;
+        if (environment.DISABLE_CRON !== 'true') jobControl = initJob();
         else logger.log('[Cron] Disabled by DISABLE_CRON=true');
         server.listen(port, () => {
           logger.log(`🚀 Server is running on port ${port} in ${environment.NODE_ENV || 'development'} mode.`);
           logger.log(`🔗 API Base URL: http://localhost:${port}/api/v1`);
         });
+        const shutdown = async (timeoutMs = Number(environment.SHUTDOWN_TIMEOUT_MS || 30000)) => {
+          if (jobControl && typeof jobControl.stop === 'function') await jobControl.stop(timeoutMs);
+          await new Promise((resolve) => server.close(() => resolve()));
+        };
+        server.shutdown = shutdown;
         return server;
       } catch (error) {
         if (startupPhase === 'bootstrap') {

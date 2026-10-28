@@ -12,9 +12,12 @@ class SequelizeFlightRepository {
     departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd,
     min_price, max_price, fare_class, departure_time_from, departure_time_to,
     arrival_time_from, arrival_time_to, min_duration_minutes, max_duration_minutes,
-    sort_by = 'departure_earliest', page, limit,
+    sort_by = 'departure_earliest', page, limit, matchingFlightIds,
   }) {
     const where = { status: 'scheduled' };
+    if (matchingFlightIds && matchingFlightIds.length > 0) {
+      where.id = { [this.Op.in]: matchingFlightIds };
+    }
     const fareWhere = {};
     const and = [];
     if (departure_airport_id) where.departure_airport_id = departure_airport_id;
@@ -163,9 +166,14 @@ class SequelizeFlightRepository {
   deleteFareClasses(flightId, transaction) { return this.FareClass.destroy({ where: { flight_id: flightId }, transaction }); }
   deleteFlight(flight, transaction) { return flight.destroy({ transaction }); }
 
-  findAdminPage({ page, limit, status }) {
+  findAdminPage({ page, limit, status, date_from, date_to }) {
     const where = {};
     if (status) where.status = status;
+    if (date_from || date_to) {
+      where.departure_time = {};
+      if (date_from) where.departure_time[this.Op.gte] = new Date(date_from);
+      if (date_to) where.departure_time[this.Op.lte] = new Date(date_to);
+    }
     return this.Flight.findAndCountAll({
       where, distinct: true, limit: Number(limit), offset: Number((page - 1) * limit),
       order: [['departure_time', 'ASC']],

@@ -27,6 +27,7 @@ describe('booking and payment API adapter', () => {
     await api.payments({ status: 'success', payment_method: 'vnpay' });
     await api.paymentDetail(9);
     await api.refundBooking(3, 'Requested');
+    await api.refundVnpay(9, 'Gateway refund');
     await api.revenue({ from_date: '2026-10-01', to_date: '2026-10-31', group_by: 'day' });
     expect(request.mock.calls.map(([path]) => path)).toEqual([
       '/bookings/my-bookings?page=2&limit=10&status=holding',
@@ -35,6 +36,7 @@ describe('booking and payment API adapter', () => {
       '/payments?page=1&limit=20&status=success&payment_method=vnpay',
       '/payments/9',
       '/payments/bookings/3/refund',
+      '/payments/9/vnpay/refund',
       '/payments/revenue?from_date=2026-10-01&to_date=2026-10-31&group_by=day',
     ]);
   });
@@ -48,6 +50,13 @@ describe('booking and payment API adapter', () => {
       body: { booking_id: 3, payment_method: 'vnpay' },
       headers: { 'Idempotency-Key': 'payment-attempt-0001' },
     });
+  });
+
+  it('reads customer payment status with optional guest authorization', async () => {
+    const request = vi.fn(async () => ({}));
+    const api = createBookingsApi(request);
+    await api.paymentStatus(7, 'guest@example.com');
+    expect(request).toHaveBeenCalledWith('/payments/bookings/7/status?guest_email=guest%40example.com');
   });
 
   it('validates a promotion through the public code-validation route', async () => {

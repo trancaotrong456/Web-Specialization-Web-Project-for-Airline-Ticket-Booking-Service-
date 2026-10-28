@@ -30,11 +30,12 @@ function sameDate(left, right) {
 }
 
 class FlightService {
-  constructor({ repository, getIO = defaultGetIO, flightStatusNotifier } = {}) {
+  constructor({ repository, getIO = defaultGetIO, flightStatusNotifier, searchEngine } = {}) {
     if (!repository) throw new TypeError('A Flight repository is required');
     this.repository = repository;
     this.getIO = getIO;
     this.flightStatusNotifier = flightStatusNotifier;
+    this.searchEngine = searchEngine;
   }
 
   _broadcastFlightUpdate(flightId, data) {
@@ -69,6 +70,7 @@ class FlightService {
     min_price, max_price, fare_class, departure_time_from, departure_time_to,
     arrival_time_from, arrival_time_to, min_duration_minutes, max_duration_minutes,
     sort_by = 'departure_earliest',
+    search, q,
   }) {
     let dateStart;
     let dateEnd;
@@ -77,9 +79,16 @@ class FlightService {
       dateStart = new Date(new Date(departure_date).getTime() - VN_OFFSET_MS);
       dateEnd = new Date(dateStart.getTime() + 24 * 60 * 60 * 1000);
     }
-    const { count, rows } = await this.repository.searchPage({
+    const keyword = (search || q)?.trim?.();
+    let matchingFlightIds;
+    if (keyword && this.searchEngine) {
+      const results = this.searchEngine.searchFlights(keyword);
+      if (results && results.length > 0) {
+        matchingFlightIds = results.map((r) => r.id);
+      }
+    }
+    const query = {
       departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd,
-      // Giữ chuỗi thập phân để MySQL so sánh đúng với cột DECIMAL(12,2).
       min_price,
       max_price,
       fare_class: fare_class?.trim(), departure_time_from, departure_time_to,
@@ -87,7 +96,11 @@ class FlightService {
       min_duration_minutes: min_duration_minutes === undefined ? undefined : Number(min_duration_minutes),
       max_duration_minutes: max_duration_minutes === undefined ? undefined : Number(max_duration_minutes),
       sort_by, page, limit,
-    });
+    };
+    if (matchingFlightIds) {
+      query.matchingFlightIds = matchingFlightIds;
+    }
+    const { count, rows } = await this.repository.searchPage(query);
     return { total: count, page, limit, data: rows };
   }
 
@@ -175,6 +188,9 @@ class FlightService {
     });
 
     const result = await this.getFlightById(flightId);
+    if (this.searchEngine && result) {
+      this.searchEngine.addFlight(result);
+    }
     this._broadcastFlightUpdate(flightId, {
       flight_id: result.id,
       status: result.status,
@@ -229,7 +245,11 @@ class FlightService {
       status: data.status || 'scheduled',
       available_seats: data.total_seats,
     });
-    return this.getFlightById(flight.id);
+    const createdFlight = await this.getFlightById(flight.id);
+    if (this.searchEngine && createdFlight) {
+      this.searchEngine.addFlight(createdFlight);
+    }
+    return createdFlight;
   }
 
   async updateFlight(flightId, data) {
@@ -258,12 +278,15 @@ class FlightService {
       }
       await this.repository.deleteFareClasses(flightId, transaction);
       await this.repository.deleteFlight(flight, transaction);
+      if (this.searchEngine) {
+        this.searchEngine.removeFlight(flightId);
+      }
       return { message: 'Flight deleted successfully' };
     });
   }
 
-  async getAllFlights({ page = 1, limit = 20, status }) {
-    const { count, rows } = await this.repository.findAdminPage({ page, limit, status });
+  async getAllFlights({ page = 1, limit = 20, status, date_from, date_to } = {}) {
+    const { count, rows } = await this.repository.findAdminPage({ page, limit, status, date_from, date_to });
     return { total: count, page, limit, data: rows };
   }
 }
