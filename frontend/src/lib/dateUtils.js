@@ -187,3 +187,51 @@ export function formatFlightPickerLabel(flight) {
   return `${airline} · ${origin}→${dest} · ${timeStr} ${dateStr}`;
 }
 
+/**
+ * Chuyển đổi chuỗi datetime-local (định dạng YYYY-MM-DDTHH:mm theo giờ Việt Nam UTC+7)
+ * sang chuỗi ISO 8601 chuẩn UTC (kết thúc bằng Z).
+ * Hoàn toàn độc lập với múi giờ của máy trạm người dùng hay môi trường kiểm thử CI.
+ */
+export function vnDateTimeInputToIso(value) {
+  if (!value || typeof value !== 'string') return '';
+  const trimmed = value.trim();
+  if (!trimmed) return '';
+  if (trimmed.endsWith('Z') || /[+-]\d{2}:?\d{2}$/.test(trimmed)) {
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/);
+  if (!match) {
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? '' : d.toISOString();
+  }
+  const [, y, m, d, h, min, s] = match;
+  const utcMillis = Date.UTC(
+    Number(y),
+    Number(m) - 1,
+    Number(d),
+    Number(h),
+    Number(min),
+    s ? Number(s) : 0
+  ) - 7 * 60 * 60 * 1000;
+  return new Date(utcMillis).toISOString();
+}
+
+/**
+ * Chuyển đổi chuỗi ISO từ API (hoặc Date object) sang định dạng YYYY-MM-DDTHH:mm theo giờ Việt Nam (UTC+7).
+ * Dùng để hiển thị trong ô input type="datetime-local" khi mở biểu mẫu chỉnh sửa chuyến bay.
+ * Hoàn toàn độc lập với múi giờ của máy trạm người dùng hay môi trường kiểm thử CI.
+ */
+export function isoToVnDateTimeInput(value) {
+  if (!value) return '';
+  const d = value instanceof Date ? value : new Date(value);
+  if (isNaN(d.getTime())) return '';
+  const vnTime = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const year = vnTime.getUTCFullYear();
+  const month = String(vnTime.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(vnTime.getUTCDate()).padStart(2, '0');
+  const hour = String(vnTime.getUTCHours()).padStart(2, '0');
+  const minute = String(vnTime.getUTCMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hour}:${minute}`;
+}
+

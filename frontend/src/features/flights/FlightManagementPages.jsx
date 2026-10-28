@@ -8,7 +8,7 @@ import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
 import { StatusBadge } from '../../components/StatusBadge';
-import { isTodayVn } from '../../lib/dateUtils';
+import { isTodayVn, isoToVnDateTimeInput, vnDateTimeInputToIso } from '../../lib/dateUtils';
 import { maskPassport, escapeCsvCell } from '../../lib/formatters';
 import { createFlightManagementApi } from './flightManagementApi';
 import './passengerManifest.css';
@@ -30,14 +30,8 @@ const getErrorFields = (error) => {
   return source;
 };
 const errorMessage = (error, fallback) => error?.message || fallback;
-const localDateTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-};
-const isoDateTime = (value) => new Date(value).toISOString();
+const localDateTime = (value) => isoToVnDateTimeInput(value);
+const isoDateTime = (value) => vnDateTimeInputToIso(value);
 
 function ManagementShell({ children }) {
   return <div className="admin-page flight-management-page"><AppHeader />{children}</div>;
@@ -805,7 +799,7 @@ function FlightStatusPanel({ flight, api, onUpdated }) {
   const setValue = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const submit = async (event) => {
     event.preventDefault(); setSaving(true); setError(''); setSaved(false);
-    const toIso = (value) => value ? new Date(value).toISOString() : null;
+    const toIso = (value) => value ? vnDateTimeInputToIso(value) : null;
     try {
       const result = await api.updateFlightStatus(flight.id, {
         status: form.status,
