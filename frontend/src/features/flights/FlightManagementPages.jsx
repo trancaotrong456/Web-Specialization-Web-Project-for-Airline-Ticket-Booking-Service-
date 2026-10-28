@@ -735,8 +735,6 @@ export function FlightListPage() {
         ) : null}
       </PageFrame>
     </ManagementShell>
-      </PageFrame>
-    </ManagementShell>
   );
 }
 

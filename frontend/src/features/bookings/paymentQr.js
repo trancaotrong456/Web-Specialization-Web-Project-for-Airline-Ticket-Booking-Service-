@@ -57,3 +57,5 @@ export const isSafeCheckoutUrl = (value) => {
 export async function renderQrDataUrl(payload) {
   return QRCode.toDataURL(payload, { errorCorrectionLevel: 'M', margin: 1, type: 'image/png' });
 }
+
+export { PaymentQr } from './PaymentQr.jsx';
