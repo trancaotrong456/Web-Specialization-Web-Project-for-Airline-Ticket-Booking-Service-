@@ -13,6 +13,7 @@ import { createBookingsApi, isValidEmail } from './bookingsApi';
 import { money } from '../../lib/formatters';
 import { getServerTimeOffset } from '../../lib/apiClient';
 import { BoardingPassCard } from './BoardingPassCard';
+import { FlightPicker } from '../../components/FlightPicker';
 import './seatSelection.css';
 
 export const bookingStatusSourceLabels = {
@@ -739,7 +740,7 @@ export function AdminBookingsPage() {
             <form className="booking-admin-filter" onSubmit={submitSearch}>
               <Field id="booking-admin-code" label="Mã đặt chỗ" value={draftFilters.bookingCode} onChange={(event) => setDraftFilters((current) => ({ ...current, bookingCode: event.target.value }))} />
               <Field id="booking-admin-customer" label="Khách hàng" value={draftFilters.customer} onChange={(event) => setDraftFilters((current) => ({ ...current, customer: event.target.value }))} />
-              <Field id="booking-admin-flight" label="ID chuyến bay" type="number" min="1" value={draftFilters.flightId} onChange={(event) => setDraftFilters((current) => ({ ...current, flightId: event.target.value }))} />
+              <FlightPicker id="booking-admin-flight" label="ID chuyến bay" value={draftFilters.flightId} onChange={(event) => setDraftFilters((current) => ({ ...current, flightId: event.target.value }))} />
               <button className="button button-secondary" type="submit">Tìm</button>
             </form>
             <label className="field">

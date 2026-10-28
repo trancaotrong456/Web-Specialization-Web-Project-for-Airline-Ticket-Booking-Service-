@@ -198,11 +198,225 @@ export function PaymentResultPage() {
 export function AdminPaymentsPage() {
   const api = usePaymentApi(); const [params, setParams] = useSearchParams();
   const page = Math.max(1, Number(params.get('page')) || 1); const limit = Math.max(1, Number(params.get('limit')) || 20); const status = params.get('status') || ''; const payment_method = params.get('payment_method') || ''; const booking_id = params.get('booking_id') || '';
+  const [activeTab, setActiveTab] = useState('all');
+  const [serverNow, setServerNow] = useState(() => Date.now() + (getServerTimeOffset() || 0));
   const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
-  const load = useCallback(async () => { setState((current) => ({ ...current, loading: true, error: '' })); try { const result = await api.payments({ page, limit, status, payment_method, booking_id }); setState({ loading: false, rows: rowsOf(result), pagination: result?.pagination || { page, totalPages: 1, total: result?.total || 0 }, error: '' }); } catch (error) { setState((current) => ({ ...current, loading: false, error: errorText(error, 'Không thể tải thanh toán.') })); } }, [api, page, limit, status, payment_method, booking_id]);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServerNow(Date.now() + (getServerTimeOffset() || 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const load = useCallback(async () => {
+    setState((current) => ({ ...current, loading: true, error: '' }));
+    try {
+      const result = await api.payments({ page, limit, status, payment_method, booking_id });
+      setState({ loading: false, rows: rowsOf(result), pagination: result?.pagination || { page, totalPages: 1, total: result?.total || 0 }, error: '' });
+    } catch (error) {
+      setState((current) => ({ ...current, loading: false, error: errorText(error, 'Không thể tải thanh toán.') }));
+    }
+  }, [api, page, limit, status, payment_method, booking_id]);
+
   useEffect(() => { void load(); }, [load]);
-  const update = (key, value) => setParams((current) => { const next = new URLSearchParams(current); if (value) next.set(key, String(value)); else next.delete(key); if (key !== 'page') next.set('page', '1'); return next; });
-  return <PaymentShell><Heading eyebrow="QUẢN TRỊ" title="Lịch sử thanh toán" description="Danh sách giao dịch, trạng thái và phương thức thanh toán." actions={<Link className="button button-secondary" to="/admin/payments/revenue">Báo cáo doanh thu</Link>} />{state.loading ? <LoadingView label="Đang tải thanh toán…" /> : state.error ? <Notice type="error">{state.error}</Notice> : <section className="surface-card booking-panel"><div className="booking-list-toolbar"><label className="field"><span>Trạng thái</span><select aria-label="Lọc trạng thái thanh toán" value={status} onChange={(event) => update('status', event.target.value)}><option value="">Tất cả trạng thái</option>{['pending', 'success', 'failed', 'refunded'].map((value) => <option key={value} value={value}>{statusLabel(value)}</option>)}</select></label><label className="field"><span>Phương thức</span><select aria-label="Lọc phương thức" value={payment_method} onChange={(event) => update('payment_method', event.target.value)}><option value="">Tất cả phương thức</option><option value="vnpay">VNPay</option><option value="payos">payOS</option></select></label><Field id="payment-booking-filter" label="Mã booking ID" inputMode="numeric" value={booking_id} onChange={(event) => update('booking_id', event.target.value)} /></div>{state.rows.length ? <><div className="table-wrap booking-table-wrap"><table><thead><tr><th>Giao dịch</th><th>Booking</th><th>Phương thức</th><th>Số tiền</th><th>Ngày thanh toán</th><th>Trạng thái</th><th /></tr></thead><tbody>{state.rows.map((payment) => <tr key={payment.id}><td>{payment.transaction_ref || `#${payment.id}`}</td><td>{payment.booking?.booking_code || `#${payment.booking_id}`}</td><td>{payment.payment_method}</td><td>{money(payment.amount)}</td><td>{time(payment.paid_at)}</td><td><StatusBadge status={payment.status} /></td><td><Link to={`/admin/payments/${payment.id}`}>Chi tiết</Link></td></tr>)}</tbody></table></div><div className="payment-card-list">{state.rows.map((payment) => <article className="booking-card" key={payment.id}><div className="booking-card-top"><div><span className="eyebrow">{payment.payment_method}</span><h2>{payment.booking?.booking_code || `Booking #${payment.booking_id}`}</h2></div><StatusBadge status={payment.status} /></div><div className="booking-card-bottom"><strong>{money(payment.amount)}</strong><Link className="button button-outline" to={`/admin/payments/${payment.id}`}>Chi tiết</Link></div></article>)}</div><Pagination page={Number(state.pagination?.page || page)} totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))} onPageChange={(next) => update('page', next)} /></> : <div className="empty-state"><h2>Chưa có giao dịch phù hợp</h2><p>Thử thay đổi bộ lọc.</p></div>}</section>}</PaymentShell>;
+
+  const update = (key, value) => setParams((current) => {
+    const next = new URLSearchParams(current);
+    if (value) next.set(key, String(value)); else next.delete(key);
+    if (key !== 'page') next.set('page', '1');
+    return next;
+  });
+
+  // Quy tắc lọc đối soát:
+  // 1. Giao dịch pending quá hạn giữ chỗ (hold_expires_at < serverNow hoặc quá 15 phút)
+  // 2. Booking đã hết hạn hoặc bị hủy nhưng giao dịch thanh toán lại là success
+  const isReconciliationNeeded = (payment) => {
+    const b = payment.booking;
+    const isPendingExpired = payment.status === 'pending' && (
+      (b?.hold_expires_at && new Date(b.hold_expires_at).getTime() < serverNow) ||
+      (payment.created_at && (serverNow - new Date(payment.created_at).getTime()) > 15 * 60 * 1000)
+    );
+    const isSuccessOnExpired = payment.status === 'success' && (
+      b?.status === 'expired' || b?.status === 'cancelled'
+    );
+    return isPendingExpired || isSuccessOnExpired;
+  };
+
+  const getReconciliationReason = (payment) => {
+    const b = payment.booking;
+    if (payment.status === 'pending') return 'Chờ thanh toán nhưng đã quá hạn giữ chỗ';
+    if (payment.status === 'success' && (b?.status === 'expired' || b?.status === 'cancelled')) {
+      return `Thanh toán thành công nhưng đặt chỗ đã ${b.status === 'expired' ? 'hết hạn' : 'bị hủy'}`;
+    }
+    return 'Cần rà soát';
+  };
+
+  const displayedRows = activeTab === 'reconciliation'
+    ? state.rows.filter(isReconciliationNeeded)
+    : state.rows;
+
+  return (
+    <PaymentShell>
+      <Heading
+        eyebrow="QUẢN TRỊ"
+        title="Lịch sử thanh toán"
+        description="Danh sách giao dịch, trạng thái và phương thức thanh toán."
+        actions={<Link className="button button-secondary" to="/admin/payments/revenue">Báo cáo doanh thu</Link>}
+      />
+
+      {/* Tabs chuyển đổi giữa Tất cả và Cần đối soát */}
+      <div className="booking-status-chips booking-tabs" role="tablist" aria-label="Phân loại giao dịch thanh toán">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'all'}
+          className={`booking-status-chip ${activeTab === 'all' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('all')}
+        >
+          Tất cả giao dịch ({state.rows.length})
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'reconciliation'}
+          className={`booking-status-chip ${activeTab === 'reconciliation' ? 'is-active' : ''}`}
+          onClick={() => setActiveTab('reconciliation')}
+        >
+          Cần đối soát ({state.rows.filter(isReconciliationNeeded).length})
+        </button>
+      </div>
+
+      {state.loading ? (
+        <LoadingView label="Đang tải thanh toán…" />
+      ) : state.error ? (
+        <Notice type="error">{state.error}</Notice>
+      ) : (
+        <section className="surface-card booking-panel">
+          <div className="booking-list-toolbar">
+            <label className="field">
+              <span>Trạng thái</span>
+              <select
+                aria-label="Lọc trạng thái thanh toán"
+                value={status}
+                onChange={(event) => update('status', event.target.value)}
+              >
+                <option value="">Tất cả trạng thái</option>
+                {['pending', 'success', 'failed', 'refunded'].map((value) => (
+                  <option key={value} value={value}>{statusLabel(value)}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              <span>Phương thức</span>
+              <select
+                aria-label="Lọc phương thức"
+                value={payment_method}
+                onChange={(event) => update('payment_method', event.target.value)}
+              >
+                <option value="">Tất cả phương thức</option>
+                <option value="vnpay">VNPay</option>
+                <option value="payos">payOS</option>
+              </select>
+            </label>
+            <Field
+              id="payment-booking-filter"
+              label="Mã booking ID"
+              type="number"
+              min="1"
+              placeholder="Nhập ID số của đơn đặt chỗ (ví dụ: 7)…"
+              value={booking_id}
+              onChange={(event) => update('booking_id', event.target.value)}
+            />
+          </div>
+
+          <div style={{ marginBottom: '12px' }}>
+            <small style={{ color: 'var(--color-muted, #64748b)', fontSize: '0.85rem' }}>
+              Hiển thị theo phân trang máy chủ: tối đa {limit} giao dịch/trang · Tổng {state.pagination?.total ?? state.rows.length} giao dịch.
+              {activeTab === 'reconciliation' ? (
+                <span> <strong>(Tab Cần đối soát: Đang lọc trên {state.rows.length} giao dịch của trang hiện tại; chỉ phục vụ tra cứu đối soát, không thêm thao tác mới).</strong></span>
+              ) : null}
+            </small>
+          </div>
+
+          {displayedRows.length ? (
+            <>
+              <div className="table-wrap booking-table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Giao dịch</th>
+                      <th>Booking</th>
+                      <th>Phương thức</th>
+                      <th>Số tiền</th>
+                      <th>Ngày thanh toán</th>
+                      <th>Trạng thái</th>
+                      {activeTab === 'reconciliation' ? <th>Lý do đối soát</th> : null}
+                      <th />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayedRows.map((payment) => (
+                      <tr key={payment.id}>
+                        <td>{payment.transaction_ref || `#${payment.id}`}</td>
+                        <td>{payment.booking?.booking_code || `#${payment.booking_id}`}</td>
+                        <td>{payment.payment_method}</td>
+                        <td>{money(payment.amount)}</td>
+                        <td>{time(payment.paid_at)}</td>
+                        <td><StatusBadge status={payment.status} /></td>
+                        {activeTab === 'reconciliation' ? (
+                          <td>
+                            <span className="badge badge-warning" style={{ fontSize: '0.8rem', color: '#b45309', fontWeight: 500 }}>
+                              Cảnh báo: {getReconciliationReason(payment)}
+                            </span>
+                          </td>
+                        ) : null}
+                        <td><Link to={`/admin/payments/${payment.id}`}>Chi tiết</Link></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="payment-card-list">
+                {displayedRows.map((payment) => (
+                  <article className="booking-card" key={payment.id}>
+                    <div className="booking-card-top">
+                      <div>
+                        <span className="eyebrow">{payment.payment_method}</span>
+                        <h2>{payment.booking?.booking_code || `Booking #${payment.booking_id}`}</h2>
+                      </div>
+                      <StatusBadge status={payment.status} />
+                    </div>
+                    {activeTab === 'reconciliation' ? (
+                      <p style={{ margin: '0.5rem 0', color: '#b45309', fontSize: '0.85rem', fontWeight: 500 }}>
+                        Cảnh báo: {getReconciliationReason(payment)}
+                      </p>
+                    ) : null}
+                    <div className="booking-card-bottom">
+                      <strong>{money(payment.amount)}</strong>
+                      <Link className="button button-outline" to={`/admin/payments/${payment.id}`}>Chi tiết</Link>
+                    </div>
+                  </article>
+                ))}
+              </div>
+
+              <Pagination
+                page={Number(state.pagination?.page || page)}
+                totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))}
+                onPageChange={(next) => update('page', next)}
+              />
+            </>
+          ) : (
+            <div className="empty-state">
+              <h2>{activeTab === 'reconciliation' ? 'Không có giao dịch nào cần đối soát trên trang này' : 'Chưa có giao dịch phù hợp'}</h2>
+              <p>{activeTab === 'reconciliation' ? 'Tất cả các giao dịch trên trang hiện tại đều khớp trạng thái bình thường.' : 'Thử thay đổi bộ lọc.'}</p>
+            </div>
+          )}
+        </section>
+      )}
+    </PaymentShell>
+  );
 }
 
 export function AdminPaymentDetailPage() {

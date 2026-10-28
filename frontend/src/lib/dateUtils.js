@@ -153,3 +153,37 @@ export function formatDay(date) {
   }).format(d);
 }
 
+export function isTodayVn(date) {
+  if (!date) return false;
+  const targetStr = toVnDateString(date);
+  const todayStr = toVnDateString(new Date());
+  return targetStr === todayStr;
+}
+
+export function formatFlightPickerLabel(flight) {
+  if (!flight) return '';
+  const airline = flight.airline?.name || flight.airline?.iata_code || `Chuyến #${flight.id}`;
+  const origin = flight.departureAirport?.iata_code || '???';
+  const dest = flight.arrivalAirport?.iata_code || '???';
+  if (!flight.departure_time) {
+    return `${airline} · ${origin}→${dest} · #${flight.id}`;
+  }
+  const d = flight.departure_time instanceof Date ? flight.departure_time : new Date(flight.departure_time);
+  if (isNaN(d.getTime())) {
+    return `${airline} · ${origin}→${dest} · #${flight.id}`;
+  }
+  const timeFormatter = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Ho_Chi_Minh',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+  });
+  const timeParts = timeFormatter.formatToParts(d);
+  const hour = timeParts.find((p) => p.type === 'hour')?.value || '00';
+  const minute = timeParts.find((p) => p.type === 'minute')?.value || '00';
+  const { month, day } = getVnDateParts(d);
+  const timeStr = `${hour}:${minute}`;
+  const dateStr = `${String(day).padStart(2, '0')}/${String(month).padStart(2, '0')}`;
+  return `${airline} · ${origin}→${dest} · ${timeStr} ${dateStr}`;
+}
+

@@ -36,6 +36,20 @@ jobs:
       - name: Run automated tests
         run: npm test
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Run frontend tests (serial, TZ Việt Nam)
+        working-directory: frontend
+        env:
+          TZ: Asia/Ho_Chi_Minh
+        run: npm test -- --run --maxWorkers=1 --minWorkers=1
+
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
+
       - name: Build Docker image
         run: docker build --tag airline-booking-api:${{ github.sha }} .
 

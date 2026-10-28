@@ -35,8 +35,8 @@ describe('Ancillaries Admin configuration', () => {
     await screen.findByRole('option', { name: 'Hành lý' });
     await user.selectOptions(screen.getByLabelText('Dịch vụ'), '5');
     await user.type(screen.getByLabelText('Tên gói'), '20 kg');
-    await user.type(screen.getByLabelText('Flight ID'), '17');
-    await user.type(screen.getByLabelText('FareClass ID'), '3');
+    await user.type(screen.getByLabelText('Chuyến bay'), '17');
+    await user.type(screen.getByLabelText('Hạng vé'), '3');
     await user.type(screen.getByLabelText('Giá VND'), '250000');
     await user.type(screen.getByLabelText('Sức chứa xác nhận'), '22');
     await user.selectOptions(screen.getByLabelText('Chính sách hoàn tiền'), 'refundable');
