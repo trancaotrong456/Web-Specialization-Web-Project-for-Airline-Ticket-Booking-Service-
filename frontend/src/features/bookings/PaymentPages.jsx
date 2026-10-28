@@ -10,7 +10,7 @@ import { Pagination } from '../../components/Pagination';
 import { StatusBadge, statusLabel } from '../../components/StatusBadge';
 import { createBookingsApi } from './bookingsApi';
 import { isSafeCheckoutUrl } from './paymentQr';
-import { PaymentQr } from './PaymentQr';
+import { PaymentQr } from './PaymentQr.jsx';
 
 const money = (value) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(Number(value || 0));
 const time = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
