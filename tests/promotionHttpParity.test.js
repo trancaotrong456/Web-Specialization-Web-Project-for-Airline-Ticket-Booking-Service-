@@ -8,7 +8,16 @@ const createErrorHandlerAdapter = require('../shared/http/filters/errorHandlerAd
 const ApiResponse = require('../utils/apiResponse');
 
 test('Promotion HTTP routes preserve public reads, validation precedence, Admin writes and errors', async () => {
-  const existing = { id: 9, code: 'SAVE', valid_from: '2026-10-13T00:00:00.000Z', valid_to: '2026-10-15T00:00:00.000Z', max_uses: null, used_count: 0 };
+  const existing = {
+    id: 9,
+    code: 'SAVE',
+    discount_type: 'percent',
+    discount_value: 10,
+    valid_from: '2026-10-13T00:00:00.000Z',
+    valid_to: '2026-10-15T00:00:00.000Z',
+    max_uses: null,
+    used_count: 0,
+  };
   const calls = [];
   const repository = {
     async findPage() { return { count: 1, rows: [existing] }; },
@@ -48,7 +57,15 @@ test('Promotion HTTP routes preserve public reads, validation precedence, Admin 
     const staff = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-test-role': 'staff' }, body: '{}' });
     assert.equal(staff.status, 403);
     const adminHeaders = { 'Content-Type': 'application/json', 'x-test-role': 'admin' };
-    const created = await fetch(url, { method: 'POST', headers: adminHeaders, body: JSON.stringify({ code: 'NEW' }) });
+    const newPromotion = {
+      code: 'NEW',
+      discount_type: 'amount',
+      discount_value: 50000,
+      valid_from: '2026-10-13T00:00:00.000Z',
+      valid_to: '2026-10-20T00:00:00.000Z',
+      max_uses: 20,
+    };
+    const created = await fetch(url, { method: 'POST', headers: adminHeaders, body: JSON.stringify(newPromotion) });
     assert.equal(created.status, 201);
     assert.equal((await created.json()).message, 'Promotion created');
     const updated = await fetch(`${url}/9`, { method: 'PUT', headers: adminHeaders, body: JSON.stringify({ code: 'UPDATED' }) });
@@ -57,7 +74,7 @@ test('Promotion HTTP routes preserve public reads, validation precedence, Admin 
     const deleted = await fetch(`${url}/9`, { method: 'DELETE', headers: adminHeaders });
     assert.equal(deleted.status, 200);
     assert.equal((await deleted.json()).message, 'Promotion deleted');
-    assert.deepEqual(calls.slice(2), [['create', { code: 'NEW' }], ['update', { code: 'UPDATED' }], ['delete']]);
+    assert.deepEqual(calls.slice(2), [['create', newPromotion], ['update', { code: 'UPDATED' }], ['delete']]);
   } finally {
     await new Promise((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
   }

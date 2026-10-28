@@ -43,7 +43,7 @@ function getAllowedReturnOrigins(configuredReturnUrl, fallbackUrl) {
   return origins;
 }
 
-function resolvePaymentReturnUrl(requestedUrl, configuredReturnUrl, fallbackUrl = null) {
+function resolvePaymentReturnUrl(requestedUrl, configuredReturnUrl, fallbackUrl = null, expectedPath = null) {
   const selectedUrl = requestedUrl || configuredReturnUrl || fallbackUrl;
   if (!selectedUrl) return null;
 
@@ -58,6 +58,10 @@ function resolvePaymentReturnUrl(requestedUrl, configuredReturnUrl, fallbackUrl 
     if (!allowedOrigins.has(parsed.origin)) {
       throw createHttpError('return_url origin is not allowed');
     }
+  }
+
+  if (expectedPath && parsed.pathname !== expectedPath) {
+    throw createHttpError(`return_url path must be ${expectedPath}`);
   }
 
   if (

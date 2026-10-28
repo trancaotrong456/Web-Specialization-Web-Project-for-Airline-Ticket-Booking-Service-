@@ -8,6 +8,8 @@ function createFixture() {
     id: 81,
     booking_code: 'BK-IDEMPOTENT',
     status: 'holding',
+    flight_id: 1,
+    fare_class_id: 1,
     total_amount: 240000,
     hold_expires_at: new Date(Date.now() + 60_000),
     user_id: null,
@@ -24,6 +26,10 @@ function createFixture() {
       assert.equal(id, booking.id);
       assert.equal(tx, transaction);
       return booking;
+    },
+    async findLockedFlight(id) {
+      assert.equal(id, 1);
+      return { id: 1, status: 'scheduled', departure_time: new Date(Date.now() + 3600000) };
     },
     async findPaymentByIdempotencyKey(key, tx) {
       assert.equal(tx, transaction);

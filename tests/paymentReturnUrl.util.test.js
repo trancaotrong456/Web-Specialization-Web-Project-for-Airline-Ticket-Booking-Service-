@@ -57,3 +57,12 @@ test('rejects insecure and localhost return URLs in production', () => {
     /must not point to localhost in production/
   );
 });
+
+test('rejects a trusted-origin return URL outside the payment result route when constrained', () => {
+  process.env.NODE_ENV = 'development';
+  process.env.CLIENT_URL = 'http://localhost:5173';
+  assert.throws(
+    () => resolvePaymentReturnUrl('http://localhost:5173/phishing', 'http://localhost:5173/payments/result', null, '/payments/result'),
+    (error) => error.statusCode === 400 && error.message === 'return_url path must be /payments/result'
+  );
+});

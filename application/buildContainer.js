@@ -23,7 +23,9 @@ const { SequelizeTicketRepository } = require('../modules/ticket/ticket.reposito
 const { createBookingModule } = require('../modules/booking');
 const { SequelizeBookingRepository } = require('../modules/booking/booking.repository');
 const { createPaymentModule } = require('../modules/payment');
+const { getSearchEngine } = require('../modules/flight/services/flightSearchEngine.service');
 const { SequelizePaymentRepository } = require('../modules/payment/payment.repository');
+const { VnpayGateway } = require('../modules/payment/vnpay.gateway');
 const { createSeatSelectionModule } = require('../modules/seat-selection');
 const SequelizeSeatSelectionRepository = require('../modules/seat-selection/seatSelection.repository');
 const { createAncillariesModule } = require('../modules/ancillaries');
@@ -73,9 +75,12 @@ function getDefaultAirportModule() {
     authorize: require('../middlewares/rbac.middleware'),
   });
 
+  const searchEngine = getSearchEngine();
+  searchEngine.syncFromDatabase({ Airport }).catch(() => {});
   defaultAirportModule = createAirportModule({
     repository: new SequelizeAirportRepository({ Airport, Op }),
     guards,
+    searchEngine,
   });
   return defaultAirportModule;
 }
@@ -124,11 +129,14 @@ function getDefaultFlightModule() {
     authorize: require('../middlewares/rbac.middleware'),
   });
   const validation = { validate: createValidationAdapter(require('../middlewares/validate.middleware')) };
+  const searchEngine = getSearchEngine();
+  searchEngine.syncFromDatabase({ Airport, Airline, Flight, FareClass }).catch(() => {});
   defaultFlightModule = createFlightModule({
     repository: new SequelizeFlightRepository({ sequelize, Flight, Airline, Airport, FareClass, Booking, BookingSegment, FlightStatusHistory, User, Op }),
     guards, validation, validators: require('../validators/flight.validator'), getIO: getSocket,
     flightStatusNotifier: require('../modules/notification/flightStatusNotificationAdapter')
       .createFlightStatusNotificationAdapter({ publisher: getDefaultNotificationPublisher() }),
+    searchEngine,
   });
   return defaultFlightModule;
 }
@@ -221,6 +229,7 @@ function getDefaultBookingModule() {
     transactionManager: models.sequelize,
     ticketController: getDefaultTicketModule().controller,
     socket: getSocket,
+    payosStatusLookup: async (transactionRef) => getDefaultPaymentModule().service.getPayosPaymentStatus(transactionRef),
     seatSelectionService: getDefaultSeatSelectionModule().service,
     ancillaryService: getDefaultAncillariesModule().service,
     notificationPublisher: getDefaultNotificationPublisher(),
@@ -234,6 +243,7 @@ function getDefaultPaymentModule() {
   const models = require('../models');
   defaultPaymentModule = createPaymentModule({
     repository: new SequelizePaymentRepository(models),
+    vnpayGateway: new VnpayGateway(),
     transactionManager: models.sequelize,
     socket: getSocket,
     emailProvider: getEmailProvider(),

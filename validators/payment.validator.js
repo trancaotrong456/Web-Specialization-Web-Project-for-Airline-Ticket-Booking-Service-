@@ -41,7 +41,14 @@ const initiatePaymentValidator = [
     .withMessage('payment_method must be either vnpay or payos'),
   body('return_url')
     .optional()
-    .isURL()
+    // Local Vite/React development uses hosts such as localhost and 127.0.0.1,
+    // which do not have a public DNS TLD. Origin allowlisting and production
+    // HTTPS enforcement remain in resolvePaymentReturnUrl() before mutation.
+    .isURL({
+      require_protocol: true,
+      require_tld: false,
+      protocols: ['http', 'https'],
+    })
     .withMessage('return_url must be a valid URL'),
   ...paymentGuestEmailValidator,
 ];
@@ -75,6 +82,46 @@ const paymentListValidator = [
 
 const paymentIdValidator = [
   param('id').isInt({ min: 1 }).withMessage('Payment ID must be a positive integer'),
+];
+
+const paymentStatusValidator = [
+  param('bookingId').isInt({ min: 1 }).withMessage('Booking ID must be a positive integer'),
+  query('guest_email')
+    .optional({ nullable: true })
+    .isString()
+    .withMessage('guest_email must be a valid email if provided')
+    .bail()
+    .trim()
+    .isEmail()
+    .withMessage('guest_email must be a valid email if provided')
+    .bail()
+    .isLength({ max: 191 })
+    .withMessage('guest_email must not exceed 191 characters')
+    .customSanitizer(normalizeGuestEmail),
+];
+
+const reconciliationCaseListValidator = [
+  query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+  query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be between 1 and 100'),
+  query('provider').optional().isIn(['payos', 'vnpay']).withMessage('provider filter is invalid'),
+  query('state').optional().isIn(['active', 'manual_review', 'resolved', 'closed']).withMessage('state filter is invalid'),
+  query('payment_id').optional().isInt({ min: 1 }).withMessage('payment_id must be a valid ID'),
+  query('booking_id').optional().isInt({ min: 1 }).withMessage('booking_id must be a valid ID'),
+  query('booking_code').optional().isString().trim().isLength({ min: 1, max: 64 }).withMessage('booking_code is invalid'),
+  query('manual_review_reason').optional().isString().trim().isLength({ min: 1, max: 500 }).withMessage('manual_review_reason is invalid'),
+  query('sort').optional().isIn(['created_at', 'updated_at', 'next_attempt_at']).withMessage('sort field is invalid'),
+  query('order').optional().isIn(['asc', 'desc']).withMessage('order must be asc or desc'),
+];
+
+const reconciliationCaseIdValidator = [
+  param('id').isInt({ min: 1 }).withMessage('Reconciliation case ID must be a positive integer'),
+];
+
+const reconciliationReviewActionValidator = [
+  param('id').isInt({ min: 1 }).withMessage('Reconciliation case ID must be a positive integer'),
+  body('action').isIn(['acknowledge', 'financial_reconciled', 'escalate']).withMessage('Unsupported manual-review action'),
+  body('reason').isString().trim().isLength({ min: 3, max: 500 }).withMessage('A manual-review reason between 3 and 500 characters is required'),
+  body('outcome_reference').optional({ nullable: true }).isString().trim().isLength({ max: 191 }).withMessage('outcome_reference is invalid'),
 ];
 
 const revenueValidator = [
@@ -114,5 +161,9 @@ module.exports = {
   refundValidator,
   paymentListValidator,
   paymentIdValidator,
+  paymentStatusValidator,
   revenueValidator,
+  reconciliationCaseListValidator,
+  reconciliationCaseIdValidator,
+  reconciliationReviewActionValidator,
 };

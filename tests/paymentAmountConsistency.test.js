@@ -7,11 +7,12 @@ const { AncillariesService } = require('../modules/ancillaries/ancillaries.servi
 const FareClassService = require('../modules/fare-class/fareClass.service');
 
 test('a fractional-VND booking cannot create a payment intent or change booking status', async () => {
-  const booking = { id: 7, booking_code: 'VND7', total_amount: '250000.49', status: 'holding', user_id: null, guest_email: 'guest@example.test' };
+  const booking = { id: 7, booking_code: 'VND7', flight_id: 1, fare_class_id: 1, total_amount: '250000.49', status: 'holding', user_id: null, guest_email: 'guest@example.test' };
   let created = 0;
   const service = new PaymentService({
     repository: {
       findLockedBooking: async () => booking,
+      findLockedFlight: async () => ({ id: 1, status: 'scheduled', departure_time: new Date(Date.now() + 3600000) }),
       createStatusHistory: async () => ({}),
       save: async () => booking,
       createPayment: async (values) => { created += 1; return values; },

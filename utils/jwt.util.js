@@ -1,9 +1,19 @@
 const jwt = require('jsonwebtoken');
 
-const JWT_SECRET = process.env.JWT_SECRET || 'super_secret_jwt_key_airline_booking_system_2026';
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || '7d';
-const JWT_REFRESH_SECRET = process.env.JWT_REFRESH_SECRET || 'super_secret_jwt_refresh_key_airline_booking_system_2026';
-const JWT_REFRESH_EXPIRES_IN = process.env.JWT_REFRESH_EXPIRES_IN || '7d';
+const LOCAL_ACCESS_SECRET = 'local-only-access-secret-for-tests-and-development';
+const LOCAL_REFRESH_SECRET = 'local-only-refresh-secret-for-tests-and-development';
+
+function getSecret(name, localFallback) {
+  const configured = String(process.env[name] || '').trim();
+  if (configured) return configured;
+  if (process.env.NODE_ENV === 'production') {
+    throw new Error(`${name} is required in production.`);
+  }
+  return localFallback;
+}
+
+function getJwtSecret() { return getSecret('JWT_SECRET', LOCAL_ACCESS_SECRET); }
+function getJwtRefreshSecret() { return getSecret('JWT_REFRESH_SECRET', LOCAL_REFRESH_SECRET); }
 
 const TOKEN_TYPES = Object.freeze({
   ACCESS: 'access',
@@ -23,8 +33,8 @@ const verifyTypedToken = (token, secret, expectedType) => {
  * @param {object} payload - { id, email, role }
  * @param {string} expiresIn
  */
-const generateToken = (payload, expiresIn = JWT_EXPIRES_IN) => {
-  return jwt.sign({ ...payload, token_type: TOKEN_TYPES.ACCESS }, JWT_SECRET, { expiresIn });
+const generateToken = (payload, expiresIn = process.env.JWT_EXPIRES_IN || '7d') => {
+  return jwt.sign({ ...payload, token_type: TOKEN_TYPES.ACCESS }, getJwtSecret(), { expiresIn });
 };
 
 /**
@@ -34,7 +44,7 @@ const generateToken = (payload, expiresIn = JWT_EXPIRES_IN) => {
 const generateAccessToken = (payload) => {
   return jwt.sign(
     { ...payload, token_type: TOKEN_TYPES.ACCESS },
-    JWT_SECRET,
+    getJwtSecret(),
     { expiresIn: process.env.JWT_EXPIRES_IN || '15m' }
   );
 };
@@ -46,8 +56,8 @@ const generateAccessToken = (payload) => {
 const generateRefreshToken = (payload) => {
   return jwt.sign(
     { ...payload, token_type: TOKEN_TYPES.REFRESH },
-    JWT_REFRESH_SECRET,
-    { expiresIn: JWT_REFRESH_EXPIRES_IN }
+    getJwtRefreshSecret(),
+    { expiresIn: process.env.JWT_REFRESH_EXPIRES_IN || '7d' }
   );
 };
 
@@ -56,15 +66,15 @@ const generateRefreshToken = (payload) => {
  * @param {string} token
  */
 const verifyToken = (token) => {
-  return verifyTypedToken(token, JWT_SECRET, TOKEN_TYPES.ACCESS);
+  return verifyTypedToken(token, getJwtSecret(), TOKEN_TYPES.ACCESS);
 };
 
 const verifyAccessToken = (token) => {
-  return verifyTypedToken(token, JWT_SECRET, TOKEN_TYPES.ACCESS);
+  return verifyTypedToken(token, getJwtSecret(), TOKEN_TYPES.ACCESS);
 };
 
 const verifyRefreshToken = (token) => {
-  return verifyTypedToken(token, JWT_REFRESH_SECRET, TOKEN_TYPES.REFRESH);
+  return verifyTypedToken(token, getJwtRefreshSecret(), TOKEN_TYPES.REFRESH);
 };
 
 module.exports = {

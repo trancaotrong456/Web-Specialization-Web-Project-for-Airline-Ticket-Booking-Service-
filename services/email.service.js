@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const path = require('path');
 const ejs = require('ejs');
 const { Booking, BookingSegment, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment, BookingAncillary } = require('../models');
+const { redactString } = require('../shared/security/redactSensitive');
 
 let resendClient = null;
 
@@ -14,7 +15,35 @@ const getResendClient = () => {
   return resendClient;
 };
 
+const noopEmailAdapter = {
+  async send() { return { id: 'test-email-noop', skipped: true }; },
+};
+
+const createResendAdapter = () => ({
+  async send(email) {
+    const { data, error } = await getResendClient().emails.send(email);
+    if (error) throw new Error(error.message || 'Resend rejected the email request.');
+    return data;
+  },
+});
+
 class EmailService {
+  setAdapter(adapter) {
+    if (!adapter || typeof adapter.send !== 'function') throw new TypeError('Email adapter must expose send()');
+    this._adapterOverride = adapter;
+  }
+
+  resetAdapter() { this._adapterOverride = null; }
+
+  _getAdapter() {
+    if (this._adapterOverride) return this._adapterOverride;
+    // Tests are always isolated from Resend, even when live delivery is set.
+    if (process.env.NODE_ENV === 'test') return noopEmailAdapter;
+    const mode = (process.env.EMAIL_DELIVERY_MODE || (process.env.RESEND_API_KEY ? 'live' : 'disabled')).toLowerCase();
+    if (mode !== 'live') return noopEmailAdapter;
+    return createResendAdapter();
+  }
+
   /**
    * Send booking confirmation email after payment success
    */
@@ -98,7 +127,7 @@ class EmailService {
       `;
     }
 
-    console.log(`[EMAIL] Attempting to send confirmation to ${recipientEmail} for booking ${bookingId}...`);
+    console.log(`[EMAIL] Attempting to send confirmation for booking ${bookingId}...`);
     try {
       const email = {
         from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
@@ -111,11 +140,10 @@ class EmailService {
         content: pdfBuffer.toString('base64'),
       }];
 
-      const { data, error } = await getResendClient().emails.send(email);
-      if (error) throw new Error(error.message || 'Resend rejected the email request.');
+      const data = await this._getAdapter().send(email);
       console.log(`[EMAIL] SUCCESS - messageId: ${data && data.id}`);
     } catch (error) {
-      console.error(`[EMAIL] FAILED: ${error.message}`);
+      console.error(`[EMAIL] FAILED: ${redactString(error.message)}`);
       throw error;
     }
   }
@@ -124,14 +152,12 @@ class EmailService {
    * Send general email
    */
   async sendMail({ to, subject, html }) {
-    const { data, error } = await getResendClient().emails.send({
+    return this._getAdapter().send({
       from: process.env.EMAIL_FROM || '"Airline Booking" <noreply@airlinebooking.com>',
       to,
       subject,
       html,
     });
-    if (error) throw new Error(error.message || 'Resend rejected the email request.');
-    return data;
   }
 }
 

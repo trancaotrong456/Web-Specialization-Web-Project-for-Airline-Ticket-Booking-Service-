@@ -1,12 +1,13 @@
 const ApiResponse = require('../../utils/apiResponse');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
+const { redactError } = require('../../shared/security/redactSensitive');
 
 class PaymentController {
   constructor({ service, apiResponse = ApiResponse } = {}) {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'initiatePayment', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'initiatePayment', 'getCustomerPaymentStatus', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -27,6 +28,26 @@ class PaymentController {
       next(error);
     }
   }
+  async getReconciliationCases(req, res, next) {
+    try { return this.apiResponse.paginated(res, await this.service.getReconciliationCases(req.query), 'Reconciliation cases retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationCaseById(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getReconciliationCaseById(req.params.id), 'Reconciliation case retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationMetrics(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.getReconciliationMetrics(), 'Reconciliation metrics retrieved successfully'); }
+    catch (error) { next(error); }
+  }
+  async getReconciliationMetricsPrometheus(req, res, next) {
+    try { return res.type('text/plain').send(await this.service.getReconciliationMetricsPrometheus()); }
+    catch (error) { next(error); }
+  }
+  async recordManualReviewAction(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.recordManualReviewAction(req.params.id, req.body, req.user), 'Manual-review action recorded successfully'); }
+    catch (error) { next(error); }
+  }
 
   async initiatePayment(req, res, next) {
     try {
@@ -39,6 +60,19 @@ class PaymentController {
         idempotency_key: req.headers['idempotency-key'] || null,
       });
       return this.apiResponse.success(res, result, 'Payment initiated successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  async getCustomerPaymentStatus(req, res, next) {
+    try {
+      const result = await this.service.getCustomerPaymentStatus(
+        req.params.bookingId,
+        req.user || null,
+        normalizeGuestEmail(req.query.guest_email)
+      );
+      return this.apiResponse.success(res, result, 'Payment status retrieved successfully');
     } catch (error) {
       next(error);
     }
@@ -61,7 +95,7 @@ class PaymentController {
       // VNPay expects HTTP 200 with JSON { RspCode: '...', Message: '...' }
       return res.status(200).json(result);
     } catch (error) {
-      console.error('[VNPay IPN Error]', error);
+      console.error('[VNPay IPN Error]', redactError(error));
       return res.status(200).json({ RspCode: '99', Message: 'Unknown error' });
     }
   }
@@ -111,6 +145,16 @@ class PaymentController {
       next(error);
     }
   }
+
+  async queryVnpay(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.queryVnpayPayment(req.params.id), 'VNPay QueryDR processed'); }
+    catch (error) { next(error); }
+  }
+  async refundVnpay(req, res, next) {
+    try { return this.apiResponse.success(res, await this.service.refundVnpayPayment(req.params.id, req.body.reason, req.user), 'VNPay refund processed'); }
+    catch (error) { next(error); }
+  }
+
   // Refund Endpoint (Admin / Staff)
   async refund(req, res, next) {
     try {

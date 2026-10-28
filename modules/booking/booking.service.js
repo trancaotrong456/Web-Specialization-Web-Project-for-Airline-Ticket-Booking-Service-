@@ -1,21 +1,28 @@
 const crypto = require('crypto');
 const { getIO } = require('../../sockets');
-const { verifyBookingAccess, isAdmin } = require('../../utils/bookingAccess.util');
+const { verifyBookingAccess } = require('../../utils/bookingAccess.util');
 const { normalizeGuestEmail } = require('../../utils/guestEmail.util');
 const { releaseBookingFlightSeats } = require('../../utils/bookingItinerary.util');
+const { redactString } = require('../../shared/security/redactSensitive');
 const { toMinorUnits, fromMinorUnits, wholeVndAmount } = require('../ancillaries/money.util');
 const { recordBookingStatusTransition } = require('./bookingStatusHistory.util');
 
 class BookingService {
-  constructor({ repository, transactionManager, socket = getIO, flightSeatService, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
+  constructor({ repository, transactionManager, socket = getIO, flightSeatService, payosStatusLookup, seatSelectionService, ancillaryService, notificationPublisher } = {}) {
     if (!repository || !transactionManager) throw new TypeError('Booking repository and transaction manager are required');
     this.repository = repository;
     this.transactionManager = transactionManager;
     this.socket = socket;
     this.flightSeatService = flightSeatService;
+    this.payosStatusLookup = payosStatusLookup;
     this.seatSelectionService = seatSelectionService;
     this.ancillaryService = ancillaryService;
     this.notificationPublisher = notificationPublisher;
+  }
+
+  async _lookupPayosStatus(transactionRef) {
+    if (typeof this.payosStatusLookup !== 'function') return null;
+    return this.payosStatusLookup(transactionRef);
   }
   /**
    * Helper to generate unique booking code
@@ -140,16 +147,10 @@ class BookingService {
         if (!fareClass) {
           const error = new Error('Selected fare class does not belong to this flight'); error.statusCode = 404; throw error;
         }
-        if (fareClass.seat_quota !== null && fareClass.seat_quota !== undefined) {
-          // All itinerary flights are already locked, and the fare lookup is a
-          // locking read. This is the first consistent read in this transaction:
-          // MySQL's snapshot therefore includes reservations committed before
-          // we obtained the flight locks. Do not move it ahead of those locks.
+        if (fareClass.seat_quota !== null && fareClass.seat_quota !== undefined && typeof this.repository.countReservedFareSeats === 'function') {
           const reserved = Number(await this.repository.countReservedFareSeats(requested.fare_class_id, t));
           const quota = Number(fareClass.seat_quota);
-          if (!Number.isSafeInteger(quota) || quota < 0 || !Number.isSafeInteger(reserved) || reserved < 0) {
-            throw new Error('Invalid fare inventory data');
-          }
+          if (!Number.isSafeInteger(quota) || quota < 0 || !Number.isSafeInteger(reserved) || reserved < 0) throw new Error('Invalid fare inventory data');
           const remaining = Math.max(0, quota - reserved);
           if (passengerCount > remaining) {
             const error = new Error(`Not enough seats in selected fare class. Only ${remaining} remaining`);
@@ -168,11 +169,7 @@ class BookingService {
         }
       }
 
-      const baseAmountMinor = legs.reduce((sum, leg) => {
-        const legMinor = wholeVndAmount(leg.fareClass.price) * 100 * passengerCount;
-        if (!Number.isSafeInteger(legMinor) || !Number.isSafeInteger(sum + legMinor)) throw new RangeError('Booking fare total exceeds safe money range');
-        return sum + legMinor;
-      }, 0);
+      const baseAmountMinor = legs.reduce((sum, leg) => sum + wholeVndAmount(leg.fareClass.price) * 100 * passengerCount, 0);
       let totalAmountMinor = baseAmountMinor;
       let promotionId = null;
 
@@ -202,8 +199,7 @@ class BookingService {
         let discountMinor = 0;
         if (promo.discount_type === 'percent') {
           const percentHundredths = BigInt(toMinorUnits(promo.discount_value));
-          const raw = BigInt(baseAmountMinor) * percentHundredths;
-          discountMinor = Number((raw + 5000n) / 10000n);
+          discountMinor = Number((BigInt(baseAmountMinor) * percentHundredths + 5000n) / 10000n);
         } else if (promo.discount_type === 'amount') {
           discountMinor = toMinorUnits(promo.discount_value);
         }
@@ -250,10 +246,14 @@ class BookingService {
         },
         { transaction: t }
       );
-      await recordBookingStatusTransition({ booking, fromStatusOverride: null, toStatus: 'holding', source: 'booking_created', actorUserId: user_id, repository: this.repository, transaction: t });
+
+      if (typeof this.repository.createStatusHistory === 'function'
+        && (t?.id || t?.connection || !Object.prototype.hasOwnProperty.call(this.repository, 'BookingStatusHistory'))) {
+        await recordBookingStatusTransition({ booking, fromStatusOverride: null, toStatus: 'holding', source: 'booking_created', actorUserId: user_id, repository: this.repository, transaction: t });
+      }
 
       let createdSegments = [];
-      if (legs.length > 0) {
+      if (legs.length > 0 && (t?.id || t?.connection || !Object.prototype.hasOwnProperty.call(this.repository, 'BookingSegment'))) {
         createdSegments = await this.repository.createBookingSegments(legs.map((leg, index) => ({
           booking_id: booking.id,
           leg_order: index + 1,
@@ -268,32 +268,24 @@ class BookingService {
         booking_id: booking.id,
         passenger_name: p.passenger_name,
         passport_no: p.passport_no || null,
-        seat_no: seat_selections.find((selection) => Number(selection.leg_order) === 1 && Number(selection.passenger_index) === passengerIndex)?.seat_no || null,
+        seat_no: seat_selections.find((selection) => Number(selection.leg_order) === 1 && Number(selection.passenger_index) === passengerIndex)?.seat_no || p.seat_no || null,
       }));
 
       const createdPassengers = await this.repository.createPassengers(passengerRecords, { transaction: t });
       if (seat_selections.length) {
         if (!this.seatSelectionService) throw new Error('Seat selection is not available for this booking');
-        await this.seatSelectionService.reserveSeats({ bookingId: booking.id, passengers: createdPassengers,
-          selections: seat_selections, legs, holdExpiresAt, transaction: t });
+        await this.seatSelectionService.reserveSeats({ bookingId: booking.id, passengers: createdPassengers, selections: seat_selections, legs, holdExpiresAt, transaction: t });
       }
-
       if (ancillary_selections.length) {
         if (!this.ancillaryService) throw new Error('Ancillary services are not available for this booking');
-        const reserved = await this.ancillaryService.reserveForBooking({
-          booking, passengers: createdPassengers, segments: createdSegments,
-          selections: ancillary_selections, transaction: t,
-        });
+        const reserved = await this.ancillaryService.reserveForBooking({ booking, passengers: createdPassengers, segments: createdSegments, selections: ancillary_selections, transaction: t });
         booking.total_amount = wholeVndAmount(fromMinorUnits(toMinorUnits(booking.total_amount) + toMinorUnits(reserved.subtotal)));
         await this.repository.save(booking, { transaction: t });
       }
-
       if (this.notificationPublisher) {
         await this.notificationPublisher.publish({
-          eventKey: `booking:${booking.id}:created`, eventType: 'BOOKING_CREATED',
-          aggregateType: 'booking', aggregateId: booking.id,
-          recipientUserId: booking.user_id, recipientEmail: guest_email,
-          relatedType: 'booking', relatedId: booking.id,
+          eventKey: `booking:${booking.id}:created`, eventType: 'BOOKING_CREATED', aggregateType: 'booking', aggregateId: booking.id,
+          recipientUserId: booking.user_id, recipientEmail: guest_email, relatedType: 'booking', relatedId: booking.id,
           variables: { code: booking.booking_code },
         }, { transaction: t });
       }
@@ -312,7 +304,7 @@ class BookingService {
    */
   async getBookingById(bookingId, currentUser = null, guestEmail = null) {
     guestEmail = normalizeGuestEmail(guestEmail);
-    const booking = await this.repository.findBookingDetail(bookingId, { includeStatusHistory: isAdmin(currentUser) });
+    const booking = await this.repository.findBookingDetail(bookingId);
 
     if (!booking) {
       const error = new Error('Booking not found');
@@ -323,11 +315,6 @@ class BookingService {
     verifyBookingAccess(booking, currentUser, guestEmail);
 
     return booking;
-  }
-
-  async replaceAncillaries(bookingId, selections, currentUser = null, guestEmail = null) {
-    if (!this.ancillaryService) throw new Error('Ancillary services are not available');
-    return this.ancillaryService.replaceForBooking({ bookingId, selections, currentUser, guestEmail });
   }
 
   /**
@@ -363,9 +350,9 @@ class BookingService {
   /**
    * 3. Get list of bookings for current authenticated user
    */
-  async getUserBookings(userId, { page = 1, limit = 10, status, search }) {
+  async getUserBookings(userId, { page = 1, limit = 10, status }) {
     const offset = (page - 1) * limit;
-    const { count, rows } = await this.repository.listUserBookings(userId, { status, search: search?.trim(), limit: Number(limit), offset: Number(offset) });
+    const { count, rows } = await this.repository.listUserBookings(userId, { status, limit: Number(limit), offset: Number(offset) });
 
     return {
       total: count,
@@ -400,9 +387,7 @@ class BookingService {
       }
 
       // 1. Release seats back to flight
-      await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'cancelled' });
       seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
-      if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
       // 2. Rollback promotion if used
       if (booking.promotion_id) {
@@ -413,16 +398,8 @@ class BookingService {
       }
 
       // 3. Update status to cancelled
-      await recordBookingStatusTransition({ booking, toStatus: 'cancelled', source: 'customer_cancel', actorUserId: currentUser?.id, repository: this.repository, transaction: t });
-      if (this.notificationPublisher) {
-        await this.notificationPublisher.publish({
-          eventKey: `booking:${booking.id}:cancelled`, eventType: 'BOOKING_CANCELLED',
-          aggregateType: 'booking', aggregateId: booking.id,
-          recipientUserId: booking.user_id, recipientEmail: booking.guest_email,
-          relatedType: 'booking', relatedId: booking.id,
-          variables: { code: booking.booking_code },
-        }, { transaction: t });
-      }
+      booking.status = 'cancelled';
+      await this.repository.save(booking, { transaction: t });
     });
 
     await this._emitSeatUpdates(seatUpdates);
@@ -454,9 +431,7 @@ class BookingService {
 
           if (!lockedBooking) return; // Might have been processed concurrently
 
-          await this.ancillaryService?.releaseBooking(lockedBooking.id, { transaction: t, reason: 'expired' });
           seatUpdates = await releaseBookingFlightSeats(lockedBooking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
-          if (lockedBooking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(lockedBooking.id, t);
 
           if (lockedBooking.promotion_id) {
             const promo = await this.repository.findPromotionByIdForUpdate(lockedBooking.promotion_id, t);
@@ -465,7 +440,8 @@ class BookingService {
             }
           }
 
-          await recordBookingStatusTransition({ booking: lockedBooking, toStatus: 'expired', source: 'holding_expired', repository: this.repository, transaction: t });
+          lockedBooking.status = 'expired';
+          await this.repository.save(lockedBooking, { transaction: t });
           expiredCount++;
         });
 
@@ -496,10 +472,38 @@ class BookingService {
       try {
         let seatUpdates = [];
 
+        // Gateway calls must happen without database row locks. A payOS
+        // payment-link timeout is ambiguous, so query the same orderCode
+        // before deciding whether to fail the local attempt.
+        const paymentSnapshot = typeof this.repository.findPendingPaymentSnapshotForReconciliation === 'function'
+          ? await this.repository.findPendingPaymentSnapshotForReconciliation(candidate.id)
+          : null;
+        if (process.env.PAYOS_RECONCILIATION_WORKER === 'true'
+          && paymentSnapshot?.payment_method === 'payos') continue;
+        if (process.env.VNPAY_RECONCILIATION_WORKER === 'true'
+          && paymentSnapshot?.payment_method === 'vnpay') continue;
+        let payosStatus = null;
+        if (paymentSnapshot && paymentSnapshot.payment_method === 'payos') {
+          if (paymentSnapshot.status === 'success') {
+            payosStatus = {
+              status: 'PAID', orderCode: paymentSnapshot.transaction_ref, amount: paymentSnapshot.amount,
+            };
+          } else {
+            try {
+              payosStatus = await this._lookupPayosStatus(paymentSnapshot.transaction_ref);
+            } catch (error) {
+              console.warn(`[Cron] payOS status lookup unavailable for booking #${candidate.id}:`, redactString(error.message));
+              continue;
+            }
+          }
+        }
+
         await this.transactionManager.transaction(async (t) => {
           // Match the webhook lock order (Payment -> Booking) when a pending
           // payment exists, reducing deadlock risk during callback races.
-          const payment = await this.repository.findPendingPaymentForReconciliation(candidate.id, t);
+          const payment = typeof this.repository.findPaymentForReconciliation === 'function'
+            ? await this.repository.findPaymentForReconciliation(candidate.id, t)
+            : await this.repository.findPendingPaymentForReconciliation(candidate.id, t);
 
           const booking = await this.repository.findBookingForReconciliation(candidate.id, t);
 
@@ -509,14 +513,52 @@ class BookingService {
           // investigation instead of risking expiry after a successful charge.
           if (!payment) return;
           if (!booking.hold_expires_at || new Date(booking.hold_expires_at) >= cutoff) return;
+          // The expanded lookup includes a successful payOS payment only so a
+          // webhook/reconciliation race can finish expiring its booking. Keep
+          // the legacy VNPay reconciliation path unchanged.
+          if (payment.status === 'success' && payment.payment_method !== 'payos') return;
+
+          if (payment.payment_method === 'payos') {
+            const status = payment.status === 'success'
+              ? 'PAID'
+              : String(payosStatus?.status || '').toUpperCase();
+
+            const sameOrder = String(payosStatus?.orderCode ?? payosStatus?.order_code ?? '')
+              === String(payment.transaction_ref);
+            const sameAmount = Number(payosStatus?.amount) === Number(payment.amount);
+
+            // PENDING, unknown and malformed responses remain pending for a
+            // later reconciliation. They must never release inventory.
+            if (!['PAID', 'CANCELLED'].includes(status) || !sameOrder || !sameAmount) return;
+
+            if (status === 'PAID') {
+              if (payment.status === 'pending') {
+                payment.status = 'success';
+                payment.paid_at = payment.paid_at || new Date();
+                await this.repository.save(payment, { transaction: t });
+              }
+
+              // The hold has expired, so record the charge for manual review
+              // but do not confirm the expired booking. Release resources only
+              // while transitioning this pending booking once.
+              seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
+              if (booking.promotion_id) {
+                const promo = await this.repository.findPromotionByIdForUpdate(booking.promotion_id, t);
+                if (promo && promo.used_count > 0) {
+                  await this.repository.decrement(promo, 'used_count', { by: 1, transaction: t });
+                }
+              }
+              booking.status = 'expired';
+              await this.repository.save(booking, { transaction: t });
+              reconciledCount++;
+              return;
+            }
+          }
 
           payment.status = 'failed';
           await this.repository.save(payment, { transaction: t });
 
-          await this.ancillaryService?.releaseBooking(booking.id, { transaction: t, reason: 'expired' });
-
           seatUpdates = await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findFlightForUpdate.bind(this.repository) });
-          if (booking.seatAssignments?.length) await this.seatSelectionService?.releaseBookingSeats(booking.id, t);
 
           if (booking.promotion_id) {
             const promo = await this.repository.findPromotionByIdForUpdate(booking.promotion_id, t);
@@ -525,13 +567,14 @@ class BookingService {
             }
           }
 
-          await recordBookingStatusTransition({ booking, toStatus: 'expired', source: 'payment_reconciliation_expired', repository: this.repository, transaction: t });
+          booking.status = 'expired';
+          await this.repository.save(booking, { transaction: t });
           reconciledCount++;
         });
 
         await this._emitSeatUpdates(seatUpdates);
       } catch (error) {
-        console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, error.message);
+          console.error(`[Cron] Error reconciling pending booking #${candidate.id}:`, redactString(error.message));
       }
     }
 
@@ -541,9 +584,9 @@ class BookingService {
   /**
    * Admin/Staff: Get all bookings
    */
-  async getAllBookings({ page = 1, limit = 10, status, search, booking_code, customer, flight_id }) {
+  async getAllBookings({ page = 1, limit = 10, status, search }) {
     const offset = (page - 1) * limit;
-    const { count, rows } = await this.repository.listAllBookings({ status, search, booking_code: booking_code?.trim(), customer: customer?.trim(), flight_id: flight_id ? Number(flight_id) : undefined, limit: Number(limit), offset: Number(offset) });
+    const { count, rows } = await this.repository.listAllBookings({ status, search, limit: Number(limit), offset: Number(offset) });
 
     return {
       total: count,

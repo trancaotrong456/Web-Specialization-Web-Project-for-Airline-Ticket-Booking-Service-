@@ -192,6 +192,12 @@ class SequelizeBookingRepository {
   findPendingPaymentForReconciliation(bookingId, transaction) {
     return this.Payment.findOne({ where: { booking_id: bookingId, status: 'pending' }, order: [['created_at', 'DESC']], lock: transaction.LOCK.UPDATE, transaction });
   }
+  findPendingPaymentSnapshotForReconciliation(bookingId) {
+    return this.Payment.findOne({ where: { booking_id: bookingId, status: { [Op.in]: ['pending', 'success'] } }, order: [['created_at', 'DESC']] });
+  }
+  findPaymentForReconciliation(bookingId, transaction) {
+    return this.Payment.findOne({ where: { booking_id: bookingId, status: { [Op.in]: ['pending', 'success'] } }, order: [['created_at', 'DESC']], lock: transaction.LOCK.UPDATE, transaction });
+  }
   createBooking(values, options) { return this.Booking.create(values, options); }
   createPassengers(values, options) { return this.BookingPassenger.bulkCreate(values, options); }
   save(instance, options) { return instance.save(options); }

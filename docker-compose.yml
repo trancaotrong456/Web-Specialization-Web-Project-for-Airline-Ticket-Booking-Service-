@@ -46,7 +46,11 @@ services:
       HOLDING_TIME_MINUTES: ${HOLDING_TIME_MINUTES:-15}
       PAYMENT_PENDING_GRACE_MINUTES: ${PAYMENT_PENDING_GRACE_MINUTES:-5}
       ENABLE_PENDING_RECONCILIATION: ${ENABLE_PENDING_RECONCILIATION:-true}
-      VNP_HASH_SECRET: docker_demo_vnpay_secret
+      # VNPay remains disabled until real sandbox/production credentials are injected.
+      VNPAY_MODE: ${VNPAY_MODE:-disabled}
+      VNP_TMN_CODE: ${VNP_TMN_CODE:-}
+      VNP_HASH_SECRET: ${VNP_HASH_SECRET:-}
+      VNP_URL: ${VNP_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       PAYOS_MODE: ${PAYOS_MODE:-demo}
       PAYOS_DEMO_SECRET: ${PAYOS_DEMO_SECRET:-docker_demo_payos_secret}
       PAYOS_CLIENT_ID: ${PAYOS_CLIENT_ID:-}

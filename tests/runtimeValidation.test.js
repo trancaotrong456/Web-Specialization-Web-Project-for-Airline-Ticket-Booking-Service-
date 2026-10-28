@@ -4,9 +4,15 @@ const { validateRuntimeConfiguration } = require('../config/runtimeValidation');
 
 const validProductionEnvironment = (overrides = {}) => ({
   NODE_ENV: 'production',
+  CLIENT_URL: 'https://app.example.com',
   PAYOS_MODE: 'disabled',
-  JWT_SECRET: 'access-secret-for-production',
-  JWT_REFRESH_SECRET: 'refresh-secret-for-production',
+  DB_HOST: 'db.internal.example',
+  DB_PORT: '3306',
+  DB_NAME: 'airline_booking',
+  DB_USER: 'airline_app',
+  DB_PASS: 'database-password-from-secret-manager',
+  JWT_SECRET: 'access-secret-for-production-with-at-least-32-chars',
+  JWT_REFRESH_SECRET: 'refresh-secret-for-production-with-at-least-32-chars',
   VNP_HASH_SECRET: 'vnpay-secret-for-production',
   ...overrides,
 });
@@ -20,8 +26,8 @@ test('accepts separate access and refresh secrets in production', () => {
 test('rejects identical access and refresh secrets in production', () => {
   assert.throws(
     () => validateRuntimeConfiguration(validProductionEnvironment({
-      JWT_SECRET: 'shared-secret',
-      JWT_REFRESH_SECRET: 'shared-secret',
+      JWT_SECRET: 'shared-secret-for-production-with-at-least-32-chars',
+      JWT_REFRESH_SECRET: 'shared-secret-for-production-with-at-least-32-chars',
     })),
     /must be different/i,
   );
@@ -43,4 +49,38 @@ test('requires live payOS credentials in production', () => {
     () => validateRuntimeConfiguration(validProductionEnvironment({ PAYOS_MODE: 'live' })),
     /PAYOS_CLIENT_ID.*PAYOS_API_KEY.*PAYOS_CHECKSUM_KEY/,
   );
+});
+
+test('accepts live payOS only with public HTTPS URLs and trusted hosts', () => {
+  assert.doesNotThrow(() => validateRuntimeConfiguration(validProductionEnvironment({
+    PAYOS_MODE: 'live',
+    PAYOS_CLIENT_ID: 'client-from-secret-manager',
+    PAYOS_API_KEY: 'api-key-from-secret-manager',
+    PAYOS_CHECKSUM_KEY: 'checksum-from-secret-manager',
+    PAYOS_BASE_URL: 'https://api-merchant.payos.vn',
+    PAYOS_RETURN_URL: 'https://app.example.com/payment/payos-return',
+    PAYOS_CANCEL_URL: 'https://app.example.com/payment/payos-cancel',
+    PAYOS_WEBHOOK_URL: 'https://api.example.com/api/v1/payments/payos/webhook',
+    PAYOS_TRUSTED_HOSTS: 'app.example.com,api.example.com',
+  })));
+});
+
+test('rejects insecure, private and untrusted payOS callback configuration', () => {
+  const base = {
+    PAYOS_MODE: 'live', PAYOS_CLIENT_ID: 'client', PAYOS_API_KEY: 'key', PAYOS_CHECKSUM_KEY: 'checksum',
+    PAYOS_BASE_URL: 'https://api-merchant.payos.vn', PAYOS_RETURN_URL: 'https://app.example.com/return',
+    PAYOS_CANCEL_URL: 'https://app.example.com/cancel', PAYOS_WEBHOOK_URL: 'https://api.example.com/webhook',
+    PAYOS_TRUSTED_HOSTS: 'app.example.com,api.example.com',
+  };
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_RETURN_URL: 'http://app.example.com/return' })), /HTTPS/i);
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_RETURN_URL: 'https://127.0.0.1/return' })), /localhost or a private network/i);
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_WEBHOOK_URL: 'https://other.example.com/webhook' })), /not in PAYOS_TRUSTED_HOSTS/i);
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, PAYOS_BASE_URL: 'http://api-merchant.payos.vn' })), /PAYOS_BASE_URL.*HTTPS/i);
+});
+
+test('requires production Resend credentials and a valid sender when email is live', () => {
+  const base = { EMAIL_DELIVERY_MODE: 'live' };
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment(base)), /RESEND_API_KEY/i);
+  assert.throws(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, RESEND_API_KEY: 'resend-key', EMAIL_FROM: 'invalid sender' })), /EMAIL_FROM/i);
+  assert.doesNotThrow(() => validateRuntimeConfiguration(validProductionEnvironment({ ...base, RESEND_API_KEY: 'resend-key', EMAIL_FROM: 'Airline <no-reply@example.com>' })));
 });

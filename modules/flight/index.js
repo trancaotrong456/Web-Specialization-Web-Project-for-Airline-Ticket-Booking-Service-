@@ -2,8 +2,8 @@ const express = require('express');
 const FlightService = require('./flight.service');
 const FlightController = require('./flight.controller');
 
-function createFlightModule({ expressModule = express, repository, service, controller, guards, validation, validators, getIO, flightStatusNotifier } = {}) {
-  const resolvedService = service || (repository ? new FlightService({ repository, getIO, flightStatusNotifier }) : undefined);
+function createFlightModule({ expressModule = express, repository, service, controller, guards, validation, validators, getIO, flightStatusNotifier, searchEngine } = {}) {
+  const resolvedService = service || (repository ? new FlightService({ repository, getIO, flightStatusNotifier, searchEngine }) : undefined);
   const resolvedController = controller || (resolvedService ? new FlightController({ service: resolvedService }) : undefined);
   if (!resolvedController || typeof guards?.authenticate !== 'function' || typeof guards?.authorize !== 'function' ||
       typeof validation?.validate !== 'function' || !validators?.searchFlightValidator || !validators?.createFlightValidator || !validators?.updateFlightValidator ||
