@@ -49,7 +49,11 @@ export function PaymentInitiatePage() {
   const startPayment = async (event) => {
     event.preventDefault();
     setState((current) => ({ ...current, submitting: true, error: '', result: null }));
-    const returnUrl = `${window.location.origin}/payments/result`;
+    // Keep the booking context in the browser return URL. payOS appends its
+    // own orderCode/status parameters, but a fresh tab may not retain
+    // sessionStorage from the checkout page. This is only a lookup hint; the
+    // backend still authorizes the status request and remains authoritative.
+    const returnUrl = `${window.location.origin}/payments/result?booking_id=${encodeURIComponent(id)}`;
     if (!idempotencyKey.current) idempotencyKey.current = window.crypto.randomUUID();
     try {
       const result = await api.initiatePayment({ booking_id: Number(id), payment_method: method, return_url: returnUrl, ...(!user ? { guest_email: guestEmail } : {}) }, idempotencyKey.current);
