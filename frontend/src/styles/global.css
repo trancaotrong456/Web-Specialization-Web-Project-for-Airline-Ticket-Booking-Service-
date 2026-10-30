@@ -10916,10 +10916,61 @@ code,
 
 .flight-search-card .multi-city-leg-row {
   display: grid !important;
-  grid-template-columns: minmax(0, 1.25fr) 3rem minmax(0, 1.25fr) minmax(0, 1fr) !important;
-  align-items: end !important;
+  grid-template-columns: minmax(0, 1.25fr) 3rem minmax(0, 1.25fr) minmax(0, 1.15fr) !important;
+  align-items: start !important;
   gap: 0.75rem !important;
   margin-top: 0 !important;
+}
+
+.flight-search-card .multi-city-leg-row .airport-field {
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+}
+
+.flight-search-card .multi-city-leg-row .airport-field > label,
+.flight-search-card .multi-city-leg-row .airport-field > span {
+  display: flex !important;
+  align-items: center !important;
+  height: 1.35rem !important;
+  min-height: 1.35rem !important;
+  margin-bottom: 0.45rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+}
+
+.flight-search-card .multi-city-leg-row .airport-combobox,
+.flight-search-card .multi-city-leg-row .field-input-wrap {
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+}
+
+.flight-search-card .multi-city-leg-row .airport-combobox input,
+.flight-search-card .multi-city-leg-row .field-input-wrap input {
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  padding: 0.75rem 1rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  border-radius: 0.65rem !important;
+  border: 1.5px solid #dce5ed !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+}
+
+.flight-search-card .multi-city-leg-row .field-input-wrap.has-prefix-icon input,
+.flight-search-card .multi-city-leg-row .airport-combobox.has-prefix-icon input {
+  padding-left: 2.75rem !important;
+}
+
+.flight-search-card .multi-city-leg-row .airport-combobox input:focus,
+.flight-search-card .multi-city-leg-row .field-input-wrap input:focus {
+  border-color: #0d9488 !important;
+  outline: 0 !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.16) !important;
 }
 
 .flight-search-card .multi-leg-swap {
@@ -10928,7 +10979,8 @@ code,
   width: 3rem !important;
   height: 3rem !important;
   min-height: 3rem !important;
-  margin: 0 0 0.2rem 0 !important;
+  margin: 2rem 0 0 0 !important;
+  align-self: start !important;
   border: 1.5px solid #e2e8f0 !important;
   border-radius: 50% !important;
   background: #ffffff !important;
@@ -10936,6 +10988,16 @@ code,
   cursor: pointer !important;
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1) !important;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04) !important;
+}
+
+.flight-search-card .multi-city-leg-row .multi-leg-date small {
+  display: block !important;
+  min-height: 1.15rem !important;
+  margin-top: 0.35rem !important;
+  font-size: 0.76rem !important;
+  color: #0d5c69 !important;
+  font-weight: 650 !important;
+  line-height: 1.2 !important;
 }
 
 .flight-search-card .multi-leg-swap:hover {
