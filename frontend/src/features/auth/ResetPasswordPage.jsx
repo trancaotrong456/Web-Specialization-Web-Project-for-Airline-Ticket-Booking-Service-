@@ -44,13 +44,20 @@ export function ResetPasswordPage() {
   };
 
   return (
-    <AuthLayout eyebrow="Bảo mật tài khoản" title="Đặt lại mật khẩu" description="Chọn mật khẩu mới cho tài khoản của bạn.">
+    <AuthLayout
+      variant="reset"
+      eyebrow="Bảo mật tài khoản"
+      title="Đặt lại mật khẩu"
+      description="Chọn mật khẩu mới cho tài khoản của bạn."
+      visualHeadline="Đặt lại mật khẩu an toàn"
+      visualDescription="Cập nhật mật khẩu mới để bảo vệ tài khoản và thông tin hành trình của bạn."
+    >
       {!validToken ? <Notice type="error">Liên kết đặt lại mật khẩu không hợp lệ hoặc đã hết hạn.</Notice> : null}
       {message ? <Notice type={message.startsWith('Đặt lại') ? 'success' : 'error'}>{message}</Notice> : null}
       <form className="form-stack" onSubmit={submit} noValidate>
         <Field id="reset-password" name="new_password" label="Mật khẩu mới" type="password" autoComplete="new-password" value={form.new_password} onChange={update} error={errors.new_password} />
         <Field id="reset-confirm" name="password_confirmation" label="Xác nhận mật khẩu mới" type="password" autoComplete="new-password" value={form.password_confirmation} onChange={update} error={errors.password_confirmation} />
-        <button className="button button-primary" type="submit" disabled={!validToken || pending}>{pending ? 'Đang cập nhật…' : 'Đặt lại mật khẩu'}</button>
+        <button className="button button-primary auth-submit" type="submit" disabled={!validToken || pending}>{pending ? 'Đang cập nhật…' : 'Đặt lại mật khẩu'}</button>
       </form>
       <p className="auth-switch"><Link to="/login">Quay lại đăng nhập</Link></p>
     </AuthLayout>

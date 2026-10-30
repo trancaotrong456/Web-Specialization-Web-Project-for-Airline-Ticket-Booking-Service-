@@ -15,6 +15,7 @@ export function AirportCombobox({
   initialAirports = [],
   error,
   placeholder,
+  icon,
 }) {
   const [query, setQuery] = useState(value ? labelAirport(value) : '');
   const [results, setResults] = useState(initialAirports);
@@ -133,7 +134,8 @@ export function AirportCombobox({
   return (
     <div className="airport-field" ref={rootRef}>
       <label htmlFor={id}>{label}</label>
-      <div className="airport-combobox">
+      <div className={`airport-combobox ${icon ? 'has-prefix-icon' : ''}`}>
+        {icon ? <span className="field-prefix-icon" aria-hidden="true">{icon}</span> : null}
         <input
           id={id}
           role="combobox"

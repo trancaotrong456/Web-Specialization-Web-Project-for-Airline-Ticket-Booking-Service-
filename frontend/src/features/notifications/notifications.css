@@ -13,4 +13,121 @@
 .notification-popover li span { color: var(--color-muted); font-size: .875rem; }
 .notification-popover time { color: var(--color-muted); font-size: .72rem; }
 .notification-load-more { display: block; width: calc(100% - 1rem); margin: .25rem .5rem .6rem; padding: .55rem; border: 1px solid var(--color-border); border-radius: .6rem; color: var(--color-primary); background: var(--color-surface); cursor: pointer; }
+.notification-popover-footer {
+  padding: 0.65rem 1rem;
+  border-top: 1px solid var(--color-border);
+  background: var(--color-surface-subtle, #f8fafc);
+  text-align: center;
+}
+.notification-view-all {
+  color: var(--color-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+.notification-view-all:hover {
+  text-decoration: underline;
+}
 @media (max-width: 48rem) { .notification-popover { right: -.5rem; } }
+
+/* Trang Thông báo - NotificationsPage */
+.notifications-page-layout {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+.notifications-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+.notification-page-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 1rem;
+  align-items: flex-start;
+  padding: 1.15rem 1.25rem;
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+  background: var(--color-surface);
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+}
+.notification-page-item:hover {
+  border-color: var(--color-primary-light, #93c5fd);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+}
+.notification-page-item.is-unread {
+  background: color-mix(in srgb, var(--color-primary) 5%, var(--color-surface));
+  border-left: 4px solid var(--color-primary);
+}
+.notification-page-icon {
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 0.5rem;
+  background: color-mix(in srgb, var(--color-primary) 12%, transparent);
+  color: var(--color-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.notification-page-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+.notification-page-header {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+.notification-page-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--color-text);
+  line-height: 1.35;
+}
+.notification-unread-dot {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  background: #d74636;
+  padding: 0.15rem 0.45rem;
+  border-radius: 999px;
+  line-height: 1;
+}
+.notification-page-message {
+  margin: 0;
+  font-size: 0.9rem;
+  color: var(--color-text-subtle, #475569);
+  line-height: 1.5;
+}
+.notification-page-meta {
+  font-size: 0.8rem;
+  color: var(--color-muted, #94a3b8);
+  margin-top: 0.2rem;
+}
+.notification-page-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+@media (max-width: 48rem) {
+  .notification-page-item {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .notification-page-icon {
+    display: none;
+  }
+  .notification-page-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+

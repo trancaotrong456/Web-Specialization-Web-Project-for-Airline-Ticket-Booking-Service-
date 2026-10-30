@@ -108,6 +108,11 @@ export function NotificationBell() {
         })}
       </ul>
       {hasMore ? <button type="button" className="notification-load-more" onClick={() => void loadMore()} disabled={loading}>{loading ? 'Đang tải…' : 'Xem thêm'}</button> : null}
+      <div className="notification-popover-footer">
+        <Link to="/notifications" className="notification-view-all" onClick={() => setOpen(false)}>
+          Xem tất cả thông báo →
+        </Link>
+      </div>
     </section> : null}
   </div>;
 }

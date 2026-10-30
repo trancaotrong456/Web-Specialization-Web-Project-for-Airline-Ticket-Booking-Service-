@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
-import { ArrowRightLeft, Search, Info } from 'lucide-react';
+import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
+import { ArrowRightLeft, Search, Info, AlertCircle, X, PlaneTakeoff, MapPin, Calendar, Plane, Plus } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
 import { AirportCombobox } from './AirportCombobox';
@@ -11,6 +11,7 @@ import { DestinationGrid } from './components/DestinationGrid';
 import { CabinClassCard } from './components/CabinClassCard';
 import { CtaBanner } from './components/CtaBanner';
 import { TrustSection } from './components/TrustSection';
+import { PassengerPicker } from './components/PassengerPicker';
 
 const todayLocal = () => {
   const now = new Date();
@@ -52,7 +53,7 @@ const readAirportPage = (result) => {
   return { airports: result.data, totalPages: Number(totalPages) };
 };
 
-export function HomePage() {
+export function HomePage({ forcedTripType }) {
   const { request } = useAuth();
   const api = useMemo(() => createFlightDiscoveryApi(request), [request]);
   const searchAirports = useCallback((params) => api.searchAirports(params), [api]);
@@ -62,10 +63,12 @@ export function HomePage() {
   const [airportError, setAirportError] = useState('');
   const [origin, setOrigin] = useState(null);
   const [destination, setDestination] = useState(null);
+  const [searchParams] = useSearchParams();
+  const initialTripType = forcedTripType || searchParams.get('trip_type') || 'one_way';
   const [activeAirportField, setActiveAirportField] = useState(null);
   const [departureDate, setDepartureDate] = useState(todayLocal());
   const [returnDate, setReturnDate] = useState('');
-  const [tripType, setTripType] = useState('one_way');
+  const [tripType, setTripType] = useState(initialTripType);
   const [itineraryLegs, setItineraryLegs] = useState(() => [
     { id: 1, origin: null, destination: null, date: todayLocal() },
     { id: 2, origin: null, destination: null, date: '' },
@@ -158,10 +161,17 @@ export function HomePage() {
   };
 
   const selectTripType = (nextType) => {
-    if (nextType === 'multi_city') return;
     setError('');
     cancelDestinationSuggestion();
     setActiveAirportField(null);
+    if (forcedTripType && nextType !== 'multi_city') {
+      navigate(`/?trip_type=${nextType}`);
+      return;
+    }
+    if (!forcedTripType && nextType === 'multi_city') {
+      navigate('/flights/multi-city');
+      return;
+    }
     setTripType(nextType);
   };
 
@@ -282,6 +292,15 @@ export function HomePage() {
     }
   };
 
+  useEffect(() => {
+    if (!error) return undefined;
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setError('');
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [error]);
+
   const submit = (event) => {
     event.preventDefault();
     cancelDestinationSuggestion();
@@ -315,12 +334,12 @@ export function HomePage() {
       return;
     }
 
-    if (!origin || !destination) return setError('Chọn điểm đi và điểm đến để tiếp tục.');
-    if (origin.id === destination.id) return setError('Điểm đi và điểm đến phải khác nhau.');
+    if (!origin || !destination) return setError('Chọn điểm đi và điểm đến để tiếp tục tìm chuyến bay.');
+    if (origin.id === destination.id) return setError('Điểm đi và điểm đến phải khác nhau. Vui lòng chọn lại.');
     if (!departureDate || departureDate < todayLocal()) return setError('Ngày khởi hành không được ở quá khứ.');
 
     if (tripType === 'round_trip') {
-      if (!returnDate) return setError('Chọn ngày về để tìm chuyến khứ hồi.');
+      if (!returnDate) return setError('Chọn ngày về để tìm chuyến bay khứ hồi.');
       if (returnDate < departureDate) return setError('Ngày về phải từ ngày khởi hành trở đi.');
       const params = new URLSearchParams({
         trip_type: 'round_trip',
@@ -378,10 +397,14 @@ export function HomePage() {
           <div className="home-hero-inner">
             <div className="home-copy">
               <h1 className="home-hero-headline">
-                Đặt vé máy bay nội địa và quốc tế
+                {tripType === 'multi_city'
+                  ? 'Đặt vé máy bay đa chặng từ Serene Flightways'
+                  : 'Đặt vé máy bay nội địa và quốc tế'}
               </h1>
               <p className="home-hero-description">
-                Tra cứu lịch bay, so sánh giá vé và giữ chỗ trực tuyến.
+                {tripType === 'multi_city'
+                  ? 'Từ nay bạn có thể đặt chuyến bay đa chặng đến nhiều thành phố khác nhau với Serene Flightways.'
+                  : 'Tra cứu lịch bay, so sánh giá vé và giữ chỗ trực tuyến.'}
               </p>
             </div>
           </div>
@@ -391,36 +414,26 @@ export function HomePage() {
             <form id="flight-search-form" className="flight-search-card glass-card" ref={searchFormRef} onSubmit={submit} noValidate>
               <div className="search-card-header-bar">
                 <div className="trip-type-tabs" role="tablist" aria-label="Loại hành trình">
-                  {tripModeOptions.map(([type, label], index) => {
-                    const isDisabled = type === 'multi_city';
-                    return (
-                      <button
-                        key={type}
-                        id={`trip-tab-${type}`}
-                        className={`trip-type-tab${tripType === type ? ' is-active' : ''}${isDisabled ? ' is-disabled' : ''}`}
-                        type="button"
-                        role="tab"
-                        aria-selected={tripType === type}
-                        aria-disabled={isDisabled ? 'true' : undefined}
-                        aria-controls="trip-search-panel"
-                        tabIndex={isDisabled ? -1 : (tripType === type ? 0 : -1)}
-                        disabled={isDisabled}
-                        onKeyDown={(event) => {
-                          if (isDisabled) return;
-                          handleTripModeTabKeyDown(event, index);
-                        }}
-                        onClick={() => {
-                          if (isDisabled) return;
-                          selectTripType(type);
-                        }}
-                      >
-                        <span>{label}</span>
-                        {isDisabled ? (
-                          <span className="tab-badge-coming-soon" aria-hidden="true">Sắp ra mắt</span>
-                        ) : null}
-                      </button>
-                    );
-                  })}
+                  {tripModeOptions.map(([type, label], index) => (
+                    <button
+                      key={type}
+                      id={`trip-tab-${type}`}
+                      className={`trip-type-tab${tripType === type ? ' is-active' : ''}`}
+                      type="button"
+                      role="tab"
+                      aria-selected={tripType === type}
+                      aria-controls="trip-search-panel"
+                      tabIndex={tripType === type ? 0 : -1}
+                      onKeyDown={(event) => {
+                        handleTripModeTabKeyDown(event, index);
+                      }}
+                      onClick={() => {
+                        selectTripType(type);
+                      }}
+                    >
+                      <span>{label}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -432,66 +445,98 @@ export function HomePage() {
                       const previousDate = index > 0 ? itineraryLegs[index - 1].date : todayLocal();
                       const originFieldId = `multi-leg-${leg.id}-origin`;
                       const destinationFieldId = `multi-leg-${leg.id}-destination`;
+                      const swapButtonId = `swap-multi-leg-${leg.id}`;
                       return (
-                        <fieldset className="multi-city-leg" key={leg.id} aria-label={`Chặng ${index + 1}`}>
-                          <legend><span className="leg-number">{String(index + 1).padStart(2, '0')}</span> Chặng {index + 1}</legend>
+                        <div className="multi-city-leg-card" key={leg.id} role="group" aria-label={`Chặng ${index + 1}`}>
+                          <div className="multi-city-leg-header">
+                            <span className="multi-city-leg-badge">
+                              <span className="leg-badge-num">{String(index + 1).padStart(2, '0')}</span>
+                              <span>Chặng {index + 1}</span>
+                            </span>
+                            {itineraryLegs.length > 2 && (
+                              <button
+                                className="remove-itinerary-leg"
+                                type="button"
+                                aria-label={`Xóa chặng ${index + 1}`}
+                                onClick={() => removeItineraryLeg(leg.id)}
+                                title="Xóa chặng này"
+                              >
+                                <X size={15} aria-hidden="true" />
+                                <span>Xóa chặng</span>
+                              </button>
+                            )}
+                          </div>
                           <div className="multi-city-leg-row">
                             <AirportCombobox
                               id={originFieldId}
                               peerId={destinationFieldId}
+                              coveredActionId={swapButtonId}
                               label="Điểm đi"
+                              icon={<PlaneTakeoff size={18} className="field-icon-svg" />}
                               value={leg.origin}
                               onChange={(airport) => updateLeg(leg.id, { origin: airport })}
                               open={activeAirportField === `leg-${leg.id}-origin`}
                               onOpenChange={(open) => setActiveAirportField(open ? `leg-${leg.id}-origin` : null)}
                               searchAirports={searchAirports}
                               initialAirports={airports}
-                              placeholder="Chọn sân bay khởi hành"
+                              placeholder="Thành phố hoặc sân bay"
                             />
                             <button
+                              id={swapButtonId}
                               className="swap-airports multi-leg-swap"
                               type="button"
                               aria-label={`Đổi điểm đi và điểm đến chặng ${index + 1}`}
                               onClick={() => updateLeg(leg.id, { origin: leg.destination, destination: leg.origin })}
-                            >⇄</button>
+                              title="Đổi chiều bay"
+                            >
+                              <ArrowRightLeft size={18} className="swap-icon-svg" aria-hidden="true" />
+                            </button>
                             <AirportCombobox
                               id={destinationFieldId}
                               peerId={originFieldId}
+                              coveredActionId={swapButtonId}
                               label="Điểm đến"
+                              icon={<MapPin size={18} className="field-icon-svg field-icon-svg--destination" />}
                               value={leg.destination}
                               onChange={(airport) => updateLeg(leg.id, { destination: airport })}
                               open={activeAirportField === `leg-${leg.id}-destination`}
                               onOpenChange={(open) => setActiveAirportField(open ? `leg-${leg.id}-destination` : null)}
                               searchAirports={searchAirports}
                               initialAirports={airports}
-                              placeholder="Chọn sân bay đến"
+                              placeholder="Thành phố hoặc sân bay"
                             />
                             <label className="airport-field search-detail-field multi-leg-date">
                               <span>Ngày khởi hành</span>
-                              <input
-                                aria-label={`Ngày khởi hành chặng ${index + 1}`}
-                                type="date"
-                                min={previousDate || todayLocal()}
-                                value={leg.date}
-                                onChange={(event) => updateLeg(leg.id, { date: event.target.value })}
-                              />
+                              <div className="field-input-wrap has-prefix-icon">
+                                <span className="field-prefix-icon" aria-hidden="true">
+                                  <Calendar size={18} className="field-icon-svg" />
+                                </span>
+                                <input
+                                  aria-label={`Ngày khởi hành chặng ${index + 1}`}
+                                  type="date"
+                                  min={previousDate || todayLocal()}
+                                  value={leg.date}
+                                  onChange={(event) => updateLeg(leg.id, { date: event.target.value })}
+                                />
+                              </div>
                               <small>{formatWeekday(leg.date) || (index ? 'Sau ngày chặng trước' : 'Chọn ngày khởi hành')}</small>
                             </label>
-                            <button
-                              className="remove-itinerary-leg"
-                              type="button"
-                              aria-label={`Xóa chặng ${index + 1}`}
-                              disabled={itineraryLegs.length <= 2}
-                              onClick={() => removeItineraryLeg(leg.id)}
-                            >×</button>
                           </div>
-                        </fieldset>
+                        </div>
                       );
                     })}
                     <div className="multi-city-actions">
-                      <p>Hành trình gồm {itineraryLegs.length}/4 chặng tối đa.</p>
-                      <button type="button" className="add-itinerary-leg" onClick={addItineraryLeg} disabled={itineraryLegs.length >= 4}>
-                        <span aria-hidden="true">＋</span> Thêm chặng
+                      <p className="multi-city-status">
+                        Hành trình gồm <strong>{itineraryLegs.length}/4</strong> chặng tối đa.
+                      </p>
+                      <button
+                        type="button"
+                        className="add-itinerary-leg"
+                        onClick={addItineraryLeg}
+                        disabled={itineraryLegs.length >= 4}
+                      >
+                        <Plus size={16} aria-hidden="true" />
+                        <span>Thêm chặng</span>
                       </button>
                     </div>
                   </section>
@@ -502,6 +547,7 @@ export function HomePage() {
                       peerId="destination-airport"
                       coveredActionId="swap-airports"
                       label="Điểm đi"
+                      icon={<PlaneTakeoff size={18} className="field-icon-svg" />}
                       value={origin}
                       onChange={(airport) => { cancelDestinationSuggestion(); originRef.current = airport; setOrigin(airport); }}
                       open={activeAirportField === 'origin'}
@@ -525,6 +571,7 @@ export function HomePage() {
                       peerId="origin-airport"
                       coveredActionId="swap-airports"
                       label="Điểm đến"
+                      icon={<MapPin size={18} className="field-icon-svg field-icon-svg--destination" />}
                       value={destination}
                       onChange={(airport) => { cancelDestinationSuggestion(); setDestination(airport); }}
                       open={activeAirportField === 'destination'}
@@ -539,49 +586,62 @@ export function HomePage() {
                 <div className={`search-details-row search-details-row--${tripType}`}>
                   <label className="airport-field search-detail-field airline-field">
                     <span>Hãng hàng không</span>
-                    <select
-                      aria-label="Hãng hàng không"
-                      value={airlineId}
-                      onChange={(event) => setAirlineId(event.target.value)}
-                      disabled={airlineLoading || Boolean(airlineError)}
-                    >
-                      <option value="">Tất cả hãng</option>
-                      {airlines.map((airline) => (
-                        <option key={airline.id} value={String(airline.id)}>
-                          {airline.iata_code ? `${airline.iata_code} · ` : ''}{airline.name}
-                        </option>
-                      ))}
-                    </select>
+                    <div className="field-input-wrap has-prefix-icon">
+                      <span className="field-prefix-icon" aria-hidden="true">
+                        <Plane size={18} className="field-icon-svg" />
+                      </span>
+                      <select
+                        aria-label="Hãng hàng không"
+                        value={airlineId}
+                        onChange={(event) => setAirlineId(event.target.value)}
+                        disabled={airlineLoading || Boolean(airlineError)}
+                      >
+                        <option value="">Tất cả hãng</option>
+                        {airlines.map((airline) => (
+                          <option key={airline.id} value={String(airline.id)}>
+                            {airline.iata_code ? `${airline.iata_code} · ` : ''}{airline.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <small>{airlineLoading ? 'Đang tải danh sách…' : 'Bộ lọc không bắt buộc'}</small>
                   </label>
 
-                  <label className="airport-field search-detail-field date-picker-field">
-                    <span>{tripType === 'multi_city' ? 'Hành trình' : 'Ngày khởi hành'}</span>
-                    {tripType === 'multi_city' ? (
-                      <span className="itinerary-passenger-summary">{itineraryLegs.length} chặng · chọn {passengers} hành khách bên dưới</span>
-                    ) : (
-                      <input
-                        aria-label="Departure date"
-                        type="date"
-                        min={todayLocal()}
-                        value={departureDate}
-                        onChange={(event) => { departureDateRef.current = event.target.value; setDepartureDate(event.target.value); }}
-                      />
-                    )}
-                    <small className="field-date-hint">{formatWeekday(departureDate) || 'Thứ Năm'}</small>
-                  </label>
+                  {tripType !== 'multi_city' ? (
+                    <label className="airport-field search-detail-field date-picker-field">
+                      <span>Ngày khởi hành</span>
+                      <div className="field-input-wrap has-prefix-icon">
+                        <span className="field-prefix-icon" aria-hidden="true">
+                          <Calendar size={18} className="field-icon-svg" />
+                        </span>
+                        <input
+                          aria-label="Departure date"
+                          type="date"
+                          min={todayLocal()}
+                          value={departureDate}
+                          onChange={(event) => { departureDateRef.current = event.target.value; setDepartureDate(event.target.value); }}
+                        />
+                      </div>
+                      <small className="field-date-hint">{formatWeekday(departureDate) || 'Thứ Năm'}</small>
+                    </label>
+                  ) : null}
 
                   {tripType === 'round_trip' ? (
                     <label className={`airport-field search-detail-field date-picker-field${isReturnDateInvalid ? ' field-has-error' : ''}`}>
                       <span>Ngày về</span>
-                      <input
-                        aria-label="Return date"
-                        type="date"
-                        min={departureDate || todayLocal()}
-                        value={returnDate}
-                        onChange={(event) => setReturnDate(event.target.value)}
-                        aria-invalid={isReturnDateInvalid ? 'true' : 'false'}
-                      />
+                      <div className="field-input-wrap has-prefix-icon">
+                        <span className="field-prefix-icon" aria-hidden="true">
+                          <Calendar size={18} className="field-icon-svg" />
+                        </span>
+                        <input
+                          aria-label="Return date"
+                          type="date"
+                          min={departureDate || todayLocal()}
+                          value={returnDate}
+                          onChange={(event) => setReturnDate(event.target.value)}
+                          aria-invalid={isReturnDateInvalid ? 'true' : 'false'}
+                        />
+                      </div>
                       {isReturnDateInvalid ? (
                         <small className="field-date-hint field-date-hint--error" role="alert">
                           Ngày về phải từ ngày khởi hành trở đi
@@ -592,20 +652,19 @@ export function HomePage() {
                     </label>
                   ) : null}
 
-                  <label className="airport-field search-detail-field passenger-field">
-                    <span>Số hành khách</span>
-                    <input
-                      aria-label="Passengers"
-                      type="number"
-                      min="1"
-                      step="1"
+                  <div className="airport-field search-detail-field passenger-field">
+                    <span>Hành khách</span>
+                    <PassengerPicker
                       value={passengers}
-                      onChange={(event) => { passengersRef.current = event.target.value; setPassengers(event.target.value); }}
+                      onChange={(nextCount) => {
+                        passengersRef.current = nextCount;
+                        setPassengers(nextCount);
+                      }}
                     />
                     <small>Tối thiểu 1 hành khách</small>
-                  </label>
+                  </div>
 
-                  <button className="button button-secondary search-submit" type="submit">
+                  <button className="button button-primary search-submit" type="submit">
                     <Search size={18} className="search-submit-icon-svg" aria-hidden="true" />
                     <span>Tìm chuyến bay</span>
                   </button>
@@ -627,7 +686,36 @@ export function HomePage() {
               {airlineLoading ? <p className="search-help" role="status">Đang tải danh sách hãng bay…</p> : null}
               {airlineError ? <p className="search-help" role="status">{airlineError}</p> : null}
               {destinationSuggestionStatus ? <p className="search-help" role="status" aria-live="polite">{destinationSuggestionStatus}</p> : null}
-              {error ? <p className="search-error" role="alert">{error}</p> : null}
+              {error ? (
+                <div
+                  className="search-reminder-modal-backdrop"
+                  onClick={() => setError('')}
+                  role="presentation"
+                >
+                  <div
+                    className="search-reminder-modal"
+                    role="alert"
+                    aria-modal="true"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="reminder-modal-close"
+                      onClick={() => setError('')}
+                      aria-label="Đóng thông báo"
+                    >
+                      <X size={18} aria-hidden="true" />
+                    </button>
+
+                    <div className="reminder-modal-icon-badge" aria-hidden="true">
+                      <span className="reminder-exclamation-mark">!</span>
+                    </div>
+
+                    <h3 className="reminder-modal-title">Bạn ơi!</h3>
+                    <p className="reminder-modal-text">{error}</p>
+                  </div>
+                </div>
+              ) : null}
             </form>
           </div>
         </section>

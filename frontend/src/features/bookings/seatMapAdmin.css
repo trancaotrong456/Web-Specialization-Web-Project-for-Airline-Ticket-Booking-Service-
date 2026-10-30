@@ -1,5 +1,5 @@
 .seat-map-admin-page { min-height: 100vh; background: #f5f8fc; }
-.seat-map-admin-main { width: min(1440px, calc(100% - 2rem)); margin: 0 auto; padding: 2rem 0 4rem; }
+.seat-map-admin-main { padding: 2rem 0 4rem; }
 .seat-admin-heading { margin: 0 0 1.5rem; }
 .seat-admin-heading h1 { margin: .25rem 0; color: #0b3f46; font-size: clamp(2rem, 4vw, 3rem); }
 .seat-admin-heading p, .seat-admin-card > p { color: #62757f; }

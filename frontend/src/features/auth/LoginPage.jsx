@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AuthLayout } from '../../components/AuthLayout';
@@ -16,6 +16,12 @@ export function LoginPage() {
   const [pending, setPending] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
+  useEffect(() => {
+    if (location.state?.sessionExpired) {
+      try { sessionStorage.removeItem('airline_session_expired'); } catch {}
+    }
+  }, [location.state?.sessionExpired]);
+
   const update = (event) => {
     const { name, value, checked, type } = event.target;
     setForm((current) => ({ ...current, [name]: type === 'checkbox' ? checked : value }));
@@ -31,6 +37,7 @@ export function LoginPage() {
     setPending(true);
     try {
       const user = await login({ email: normalizeEmail(form.email), password: form.password }, form.remember);
+      try { sessionStorage.removeItem('airline_session_expired'); } catch {}
       const requestedPath = location.state?.from?.pathname;
       navigate(requestedPath || (user.role === 'admin' ? '/admin/users' : '/profile'), { replace: true });
     } catch (error) {
@@ -46,9 +53,12 @@ export function LoginPage() {
       eyebrow="Chào mừng trở lại"
       title="Đăng nhập"
       description="Nhập thông tin tài khoản để tiếp tục."
-      visualHeadline="Hành trình của bạn bắt đầu từ đây."
-      visualDescription="Đăng nhập để tiếp tục quản lý tài khoản và hành trình của bạn."
+      visualHeadline="Đăng nhập để xem vé và đặt chỗ"
+      visualDescription="Đăng nhập để xem vé, quản lý đặt chỗ và hành trình của bạn."
     >
+      {location.state?.sessionExpired ? (
+        <Notice type="warning">Phiên đăng nhập của bạn đã hết hạn. Vui lòng đăng nhập lại để tiếp tục.</Notice>
+      ) : null}
       <Notice type="success">{location.state?.notice}</Notice>
       <Notice type="error">{message}</Notice>
       <form className="form-stack" onSubmit={submit} noValidate>

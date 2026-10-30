@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { ArrowRight } from 'lucide-react';
 import { homeDestinations } from '../homeData';
+import { formatCurrency } from '../../../lib/formatters';
 
 export function extractMinPriceForFlights(flightList) {
   if (!Array.isArray(flightList) || flightList.length === 0) return null;
@@ -93,19 +94,21 @@ export function DestinationGrid({ api, onSelectDestination }) {
           if (!airportId || typeof api.searchFlights !== 'function') return;
 
           try {
-            // Lọc theo sân bay đến của từng điểm đến, chỉ lấy chuyến còn ghế, sắp xếp giá thấp nhất
+            // Lọc theo sân bay đến của từng điểm đến từ ngày hiện tại để sử dụng index và tránh nghẽn pool
+            const todayStr = new Date().toISOString().slice(0, 10);
             const flightRes = await api.searchFlights({
               arrival_airport_id: airportId,
+              departure_date: todayStr,
               min_seats: 1,
               sort_by: 'price_low',
-              limit: 50,
+              limit: 10,
             });
 
             if (!active) return;
             const flightList = Array.isArray(flightRes?.data) ? flightRes.data : [];
             const minPrice = extractMinPriceForFlights(flightList);
             if (minPrice !== null) {
-              priceMap[destCode] = new Intl.NumberFormat('vi-VN').format(minPrice) + 'đ';
+              priceMap[destCode] = formatCurrency(minPrice);
             }
 
             // Với thẻ rộng (DAD, SGN): lấy dữ liệu thật số chuyến bay scheduled còn ghế trong 7 ngày tới

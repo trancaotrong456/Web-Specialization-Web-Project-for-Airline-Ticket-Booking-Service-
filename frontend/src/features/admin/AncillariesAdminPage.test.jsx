@@ -35,8 +35,8 @@ describe('Ancillaries Admin configuration', () => {
     await screen.findByRole('option', { name: 'Hành lý' });
     await user.selectOptions(screen.getByLabelText('Dịch vụ'), '5');
     await user.type(screen.getByLabelText('Tên gói'), '20 kg');
-    await user.type(screen.getByLabelText('Flight ID'), '17');
-    await user.type(screen.getByLabelText('FareClass ID'), '3');
+    await user.type(screen.getByLabelText('Chuyến bay'), '17');
+    await user.type(screen.getByLabelText('Hạng vé'), '3');
     await user.type(screen.getByLabelText('Giá VND'), '250000');
     await user.type(screen.getByLabelText('Sức chứa xác nhận'), '22');
     await user.selectOptions(screen.getByLabelText('Chính sách hoàn tiền'), 'refundable');
@@ -45,7 +45,7 @@ describe('Ancillaries Admin configuration', () => {
       method: 'POST', body: expect.objectContaining({ ancillary_service_id: 5, flight_id: 17, fare_class_id: 3, unit_price: '250000', capacity: 22, currency: 'VND', refund_policy: 'refundable' }),
     })));
     expect(await screen.findByText(/20 kg · 250000 VND/)).toBeInTheDocument();
-  });
+  }, 15000); // Timeout 15s: test nhập nhiều trường bằng userEvent trên JSDOM
 
   it('updates and deactivates the service shown by the real API envelope', async () => {
     const user = userEvent.setup();

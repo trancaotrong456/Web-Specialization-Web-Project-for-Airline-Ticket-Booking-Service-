@@ -42,7 +42,15 @@ export function AuthProvider({ children, fetchImpl = defaultFetchImpl }) {
     baseUrl,
     getAccessToken: () => accessTokenRef.current,
     refreshAccessToken: () => refreshActionRef.current(),
-    onUnauthorized: () => clearSessionRef.current(),
+    onUnauthorized: () => {
+      // Chỉ bật cờ phiên hết hạn khi trước đó thật sự đã có token/phiên hoạt động
+      if (accessTokenRef.current || tokenStorage.getRefreshToken()) {
+        try {
+          sessionStorage.setItem('airline_session_expired', '1');
+        } catch {}
+      }
+      clearSessionRef.current();
+    },
     fetchImpl,
   }), [baseUrl, fetchImpl]);
 
@@ -59,7 +67,8 @@ export function AuthProvider({ children, fetchImpl = defaultFetchImpl }) {
   refreshActionRef.current = performRefresh;
 
   const refreshSession = useCallback(async () => {
-    if (!tokenStorage.getRefreshToken()) {
+    const hasToken = Boolean(tokenStorage.getRefreshToken());
+    if (!hasToken) {
       clearSession();
       return null;
     }
@@ -71,6 +80,10 @@ export function AuthProvider({ children, fetchImpl = defaultFetchImpl }) {
       setStatus('authenticated');
       return profile;
     } catch (_error) {
+      // Đã có token trước đó nhưng refresh thất bại (token hết hạn hoặc bị thu hồi)
+      try {
+        sessionStorage.setItem('airline_session_expired', '1');
+      } catch {}
       clearSession();
       return null;
     }
@@ -81,6 +94,7 @@ export function AuthProvider({ children, fetchImpl = defaultFetchImpl }) {
   }, [refreshSession]);
 
   const acceptSession = useCallback((result, remember) => {
+    try { sessionStorage.removeItem('airline_session_expired'); } catch {}
     accessTokenRef.current = result.accessToken;
     tokenStorage.setRefreshToken(result.refreshToken, remember);
     const normalized = normalizeUser(result.user);
@@ -100,6 +114,7 @@ export function AuthProvider({ children, fetchImpl = defaultFetchImpl }) {
   }, [acceptSession, authApi]);
 
   const logout = useCallback(async () => {
+    try { sessionStorage.removeItem('airline_session_expired'); } catch {}
     try {
       if (accessTokenRef.current) await authApi.logout();
     } catch (_error) {

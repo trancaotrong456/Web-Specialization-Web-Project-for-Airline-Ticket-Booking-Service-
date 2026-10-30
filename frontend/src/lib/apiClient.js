@@ -1,3 +1,5 @@
+import { translateErrorMessage } from './errorHandler';
+
 export class ApiError extends Error {
   constructor(message, { status = 0, errors = null, data = null } = {}) {
     super(message);
@@ -7,6 +9,10 @@ export class ApiError extends Error {
     this.data = data;
   }
 }
+
+let lastServerTimeOffset = 0;
+export const getServerTimeOffset = () => lastServerTimeOffset;
+export const setServerTimeOffset = (offset) => { lastServerTimeOffset = offset; };
 
 const trimSlashes = (value, side = 'both') => {
   if (side === 'start') return value.replace(/^\/+/, '');
@@ -21,7 +27,13 @@ const isJsonBody = (body) => body
   && !(body instanceof Blob);
 
 const parseResponse = async (response, responseType) => {
-  if (responseType === 'blob' && response.ok) return response.blob();
+  if (responseType === 'blob' && response.ok) {
+    const blob = await response.blob();
+    if (blob && typeof blob.arrayBuffer !== 'function') {
+      blob.arrayBuffer = () => (response.arrayBuffer ? response.arrayBuffer() : Promise.resolve(new ArrayBuffer(0)));
+    }
+    return blob;
+  }
   const contentType = response.headers.get('content-type') || '';
   if (response.status === 204) return null;
   if (contentType.includes('application/json')) return response.json();
@@ -58,6 +70,14 @@ export const createApiClient = ({
       throw new ApiError('Không thể kết nối đến máy chủ.', { data: error });
     }
 
+    const dateHeader = response.headers?.get?.('date');
+    if (dateHeader) {
+      const serverTimestamp = new Date(dateHeader).getTime();
+      if (Number.isFinite(serverTimestamp)) {
+        lastServerTimeOffset = serverTimestamp - Date.now();
+      }
+    }
+
     const payload = await parseResponse(response, options.responseType);
     const isRefreshBoundary = normalizedPath === '/auth/refresh-token'
       || normalizedPath === '/auth/logout';
@@ -81,7 +101,10 @@ export const createApiClient = ({
     if (response.status === 401 && retryState.retried) onUnauthorized?.();
 
     if (!response.ok) {
-      throw new ApiError(payload?.message || 'Yêu cầu không thể hoàn tất.', {
+      const friendlyMessage = translateErrorMessage(payload?.message, response.status)
+        || payload?.message
+        || 'Yêu cầu không thể hoàn tất.';
+      throw new ApiError(friendlyMessage, {
         status: response.status,
         errors: payload?.errors || null,
         data: payload?.data || null,

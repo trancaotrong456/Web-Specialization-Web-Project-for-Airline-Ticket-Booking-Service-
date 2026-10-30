@@ -43,12 +43,26 @@ function RequestError({ message, onRetry }) {
   return <section className="surface-card admin-card catalog-error"><Notice type="error">{message}</Notice>{onRetry ? <button className="button button-secondary" type="button" onClick={onRetry}>Thử lại</button> : null}</section>;
 }
 
+function isActualLogoUrl(url) {
+  if (!url || typeof url !== 'string') return false;
+  const trimmed = url.trim();
+  if (!trimmed) return false;
+  // Dữ liệu seed hiện dùng ảnh Unsplash phong cảnh không phải logo thật
+  if (trimmed.includes('images.unsplash.com')) return false;
+  return true;
+}
+
 function Logo({ airline, className = '' }) {
   const [failed, setFailed] = useState(false);
   const source = airline?.logo_url;
   const isWebUrl = /^https?:\/\//i.test(source || '');
-  const initials = (airline?.iata_code || airline?.name || '✈').slice(0, 3).toUpperCase();
-  if (!source || failed) return <span className={`airline-logo-fallback ${className}`} aria-label={`Logo ${airline?.name || 'hãng hàng không'}`}>{initials}</span>;
+  const iata = (airline?.iata_code || '').trim().toUpperCase();
+  const initials = iata || (airline?.name || '✈').slice(0, 3).toUpperCase();
+  const valid = isActualLogoUrl(source);
+
+  if (!valid || failed) {
+    return <span className={`airline-logo-fallback ${className}`} aria-label={`Logo ${airline?.name || 'hãng hàng không'}`}>{initials}</span>;
+  }
   return <img className={`airline-logo ${className}`} src={source} alt={`Logo ${airline?.name || 'hãng hàng không'}`} onError={() => setFailed(true)} data-web-url={isWebUrl ? 'true' : 'false'} />;
 }
 

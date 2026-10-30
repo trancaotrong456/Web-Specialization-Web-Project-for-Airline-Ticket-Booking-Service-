@@ -66,7 +66,7 @@ describe('Flight and Fare Class management screens', () => {
       if (url.includes('/flights?')) return json({ data: [], pagination: { total: 0, page: 1, limit: 20, totalPages: 0 } });
       throw new Error(`Unexpected request ${url}`);
     })}><MemoryRouter initialEntries={['/admin/flights']}><AppRoutes /></MemoryRouter></AuthProvider>);
-    expect(await screen.findByRole('link', { name: 'Vận hành chuyến bay' })).toHaveAttribute('href', '/admin/flights');
+    expect(await screen.findByRole('link', { name: 'Chuyến bay' })).toHaveAttribute('href', '/admin/flights');
     unmount();
     sessionStorage.clear();
     renderAs('customer', '/admin/flights', noFlights);
