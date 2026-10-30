@@ -11086,3 +11086,549 @@ code,
     margin-top: 0.5rem !important;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   SEARCH SUMMARY HEADER STRIP & BOOKING SUMMARY SIDEBAR (VIETJET-INSPIRED)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Search Summary Header Banner ── */
+.search-summary-banner {
+  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%) !important;
+  color: #ffffff !important;
+  border-radius: 0.85rem !important;
+  padding: 1.15rem 1.6rem !important;
+  margin-bottom: 1.5rem !important;
+  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.22) !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
+.search-summary-banner::before {
+  content: '';
+  position: absolute;
+  top: -40px;
+  right: -40px;
+  width: 140px;
+  height: 140px;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.search-summary-content {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 1.5rem !important;
+  flex-wrap: wrap !important;
+}
+
+.search-summary-left {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.65rem !important;
+  flex: 1 1 500px !important;
+}
+
+.search-summary-badge-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  font-size: 0.88rem !important;
+}
+
+.search-summary-type-tag {
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+  background: rgba(0, 0, 0, 0.15) !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 0.35rem !important;
+  font-size: 0.82rem !important;
+}
+
+.search-summary-divider {
+  opacity: 0.6 !important;
+  font-weight: 300 !important;
+}
+
+.search-summary-passenger-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  font-weight: 700 !important;
+  background: rgba(255, 255, 255, 0.2) !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 0.35rem !important;
+  backdrop-filter: blur(4px) !important;
+}
+
+.search-summary-route-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+  flex-wrap: wrap !important;
+}
+
+.search-summary-endpoint {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+}
+
+.summary-point-dot {
+  font-size: 1.15rem !important;
+  line-height: 1 !important;
+}
+
+.summary-point-dot.origin {
+  color: #ef4444 !important;
+  text-shadow: 0 0 8px rgba(255, 255, 255, 0.6) !important;
+}
+
+.summary-point-dot.destination {
+  font-size: 1rem !important;
+}
+
+.summary-point-label {
+  font-size: 0.82rem !important;
+  opacity: 0.9 !important;
+  font-weight: 500 !important;
+}
+
+.summary-point-value {
+  font-size: 1.05rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.01em !important;
+}
+
+.summary-iata-tag {
+  font-weight: 900 !important;
+  letter-spacing: 0.05em !important;
+}
+
+.search-summary-direction {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.direction-icon-wrap {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 1.85rem !important;
+  height: 1.85rem !important;
+  background: #ffffff !important;
+  color: #ea580c !important;
+  border-radius: 50% !important;
+  font-weight: 900 !important;
+  font-size: 0.95rem !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+}
+
+.search-summary-dates {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  background: rgba(0, 0, 0, 0.15) !important;
+  padding: 0.3rem 0.75rem !important;
+  border-radius: 0.35rem !important;
+  margin-left: 0.25rem !important;
+}
+
+.search-summary-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1.25rem !important;
+}
+
+/* 4 Bước tiến trình tròn */
+.search-summary-steps {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+}
+
+.search-summary-steps .step-badge {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 0.25rem !important;
+}
+
+.search-summary-steps .step-circle {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  transition: all 0.2s ease !important;
+}
+
+.search-summary-steps .step-badge.is-active .step-circle {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8), 0 4px 10px rgba(16, 185, 129, 0.4) !important;
+  transform: scale(1.08) !important;
+}
+
+.search-summary-steps .step-text {
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  opacity: 0.9 !important;
+  white-space: nowrap !important;
+}
+
+.search-summary-steps .step-badge.is-active .step-text {
+  opacity: 1 !important;
+  font-weight: 800 !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* Nút Chỉnh sửa tìm kiếm trong Banner */
+.search-summary-edit-btn {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  background: #ffffff !important;
+  color: #b45309 !important;
+  font-weight: 800 !important;
+  font-size: 0.85rem !important;
+  padding: 0.55rem 1rem !important;
+  border-radius: 0.5rem !important;
+  text-decoration: none !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12) !important;
+  transition: all 0.2s ease !important;
+}
+
+.search-summary-edit-btn:hover {
+  background: #fef3c7 !important;
+  color: #92400e !important;
+  transform: translateY(-1px) !important;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16) !important;
+}
+
+/* ── 2. Results 2-Column Layout ── */
+.results-layout-grid {
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) 340px !important;
+  gap: 1.5rem !important;
+  align-items: start !important;
+  margin-top: 1.25rem !important;
+}
+
+.results-main-col {
+  min-width: 0 !important;
+}
+
+.results-sidebar-col {
+  min-width: 0 !important;
+}
+
+/* ── 3. Booking Summary Sidebar Widget ── */
+.booking-summary-widget {
+  background: #ffffff !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
+  overflow: hidden !important;
+  position: sticky !important;
+  top: 5.5rem !important;
+  z-index: 20 !important;
+}
+
+.booking-summary-header {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  padding: 0.85rem 1.25rem !important;
+  text-align: center !important;
+}
+
+.booking-summary-title {
+  margin: 0 !important;
+  color: #ffffff !important;
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+}
+
+.booking-summary-body {
+  padding: 1.1rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.85rem !important;
+}
+
+/* Hộp thông tin hành khách */
+.summary-passenger-box {
+  background: #f1f5f9 !important;
+  border-radius: 0.5rem !important;
+  padding: 0.75rem 1rem !important;
+  border: 1px solid #e2e8f0 !important;
+}
+
+.summary-box-label {
+  display: block !important;
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+  margin-bottom: 0.35rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+}
+
+.summary-passenger-content {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  color: #0f172a !important;
+  font-size: 0.95rem !important;
+}
+
+.summary-passenger-content strong {
+  font-weight: 700 !important;
+}
+
+.summary-icon {
+  color: #0284c7 !important;
+}
+
+/* Hộp chặng bay */
+.summary-leg-card {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  border-radius: 0.5rem !important;
+  padding: 0.85rem 1rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.summary-leg-card.is-current {
+  background: #f0fdfa !important;
+  border-color: #0d9488 !important;
+  border-left: 4px solid #0d9488 !important;
+}
+
+.summary-leg-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-bottom: 0.45rem !important;
+}
+
+.summary-leg-name {
+  font-weight: 800 !important;
+  color: #0284c7 !important;
+  font-size: 0.88rem !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+}
+
+.summary-leg-card.is-current .summary-leg-name {
+  color: #0d9488 !important;
+}
+
+.summary-leg-date {
+  font-size: 0.78rem !important;
+  font-weight: 600 !important;
+  color: #64748b !important;
+}
+
+.summary-leg-route {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  color: #0f172a !important;
+  margin-bottom: 0.55rem !important;
+}
+
+.summary-leg-arrow {
+  color: #0284c7 !important;
+  font-size: 0.85rem !important;
+}
+
+.summary-leg-card.is-current .summary-leg-arrow {
+  color: #0d9488 !important;
+}
+
+.summary-leg-details {
+  background: #ffffff !important;
+  border: 1px dashed #cbd5e1 !important;
+  border-radius: 0.35rem !important;
+  padding: 0.5rem 0.75rem !important;
+  margin-bottom: 0.65rem !important;
+}
+
+.summary-flight-meta {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 0.5rem !important;
+  font-size: 0.85rem !important;
+}
+
+.summary-flight-time {
+  color: #0f172a !important;
+  font-weight: 800 !important;
+}
+
+.summary-flight-carrier {
+  color: #64748b !important;
+  font-weight: 600 !important;
+  font-size: 0.8rem !important;
+}
+
+.summary-fare-badge {
+  margin-top: 0.35rem !important;
+  font-size: 0.78rem !important;
+  color: #0d9488 !important;
+}
+
+.summary-fare-badge strong {
+  font-weight: 700 !important;
+}
+
+.summary-leg-unselected {
+  background: #ffffff !important;
+  border: 1px dashed #e2e8f0 !important;
+  border-radius: 0.35rem !important;
+  padding: 0.55rem 0.75rem !important;
+  text-align: center !important;
+  margin-bottom: 0.65rem !important;
+}
+
+.summary-leg-unselected span {
+  display: block !important;
+  font-size: 0.8rem !important;
+  letter-spacing: 0.1em !important;
+  color: #94a3b8 !important;
+}
+
+.summary-leg-unselected small {
+  display: block !important;
+  font-size: 0.75rem !important;
+  color: #64748b !important;
+  margin-top: 0.15rem !important;
+}
+
+.summary-pricing-breakdown {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.35rem !important;
+  font-size: 0.82rem !important;
+  color: #475569 !important;
+  border-top: 1px solid #f1f5f9 !important;
+  padding-top: 0.5rem !important;
+}
+
+.summary-pricing-breakdown .pricing-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+}
+
+.summary-pricing-breakdown .pricing-row strong {
+  color: #0f172a !important;
+  font-weight: 700 !important;
+}
+
+.summary-pricing-breakdown .pricing-row small {
+  color: #64748b !important;
+  font-size: 0.75rem !important;
+}
+
+/* Hộp tổng tiền đỏ */
+.summary-total-strip {
+  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  color: #ffffff !important;
+  border-radius: 0.5rem !important;
+  padding: 0.85rem 1.15rem !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  margin-top: 0.45rem !important;
+  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25) !important;
+}
+
+.summary-total-strip span {
+  font-size: 0.95rem !important;
+  font-weight: 700 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.02em !important;
+}
+
+.summary-total-amount {
+  font-size: 1.25rem !important;
+  font-weight: 900 !important;
+  letter-spacing: -0.01em !important;
+}
+
+/* Nút Đi tiếp vàng cam */
+.summary-continue-btn {
+  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%) !important;
+  color: #ffffff !important;
+  border: none !important;
+  width: 100% !important;
+  padding: 0.85rem 1.25rem !important;
+  border-radius: 0.5rem !important;
+  font-size: 1rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.02em !important;
+  cursor: pointer !important;
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35) !important;
+  transition: all 0.2s ease !important;
+  text-align: center !important;
+}
+
+.summary-continue-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #d97706 0%, #ea580c 100%) !important;
+  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45) !important;
+  transform: translateY(-1px) !important;
+}
+
+.summary-continue-btn:disabled {
+  opacity: 0.55 !important;
+  cursor: not-allowed !important;
+  box-shadow: none !important;
+  filter: grayscale(40%) !important;
+}
+
+/* ── Responsive Mobile ── */
+@media (max-width: 1024px) {
+  .results-layout-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .booking-summary-widget {
+    position: static !important;
+    margin-top: 1.5rem !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .search-summary-banner {
+    padding: 1rem !important;
+  }
+
+  .search-summary-content {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 1rem !important;
+  }
+
+  .search-summary-right {
+    width: 100% !important;
+    justify-content: space-between !important;
+  }
+
+  .search-summary-steps {
+    display: none !important;
+  }
+}
