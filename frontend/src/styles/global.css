@@ -8274,27 +8274,30 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 /* 3. Luxury Flight Result Card (Stitch Spec) */
 .flight-result-card {
   display: grid !important;
-  grid-template-columns: minmax(10rem, 1fr) minmax(18rem, 1.8fr) minmax(7.5rem, 0.8fr) minmax(11rem, 1.1fr) auto !important;
+  grid-template-columns: 140px minmax(210px, 1.4fr) minmax(90px, 0.7fr) minmax(130px, 1fr) auto !important;
   align-items: center !important;
-  gap: 1.25rem !important;
-  padding: 1.25rem 1.5rem !important;
-  border-radius: var(--surface-radius, 4px) !important;
+  gap: 1rem !important;
+  padding: 1.15rem 1.35rem !important;
+  border-radius: var(--surface-radius, 6px) !important;
   background: var(--color-surface, #FFFFFF) !important;
   border: 1px solid var(--color-border, #D8D2C6) !important;
-  box-shadow: 0 2px 8px rgba(26, 26, 23, 0.04) !important;
+  border-left: 4px solid #0f6b66 !important;
+  box-shadow: 0 2px 10px rgba(10, 73, 70, 0.05) !important;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast) !important;
+  overflow: visible !important;
 }
 
 .flight-result-card:hover {
-  transform: translateY(-1px) !important;
-  border-color: var(--color-primary, #16382C) !important;
-  box-shadow: 0 4px 16px rgba(26, 26, 23, 0.08) !important;
+  transform: translateY(-2px) !important;
+  border-color: #0f6b66 !important;
+  box-shadow: 0 6px 20px rgba(10, 73, 70, 0.12) !important;
 }
 
 .flight-result-card .flight-carrier {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .flight-result-card .carrier-logo {
@@ -8442,22 +8445,103 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 
 .flight-result-card .flight-book-link {
   padding: 0.65rem 1.25rem !important;
-  border-radius: var(--button-radius, 4px) !important;
-  background: var(--color-primary, #16382C) !important;
+  border-radius: 0.5rem !important;
+  background: #0f6b66 !important;
   color: #FFFFFF !important;
-  font-weight: 600 !important;
-  font-size: 0.875rem !important;
+  font-weight: 700 !important;
+  font-size: 0.88rem !important;
   text-decoration: none !important;
   white-space: nowrap !important;
-  border: 1px solid var(--color-primary, #16382C) !important;
-  box-shadow: none !important;
-  transition: background var(--transition-fast) !important;
+  border: none !important;
+  box-shadow: 0 2px 6px rgba(15, 107, 102, 0.25) !important;
+  transition: all 0.2s ease !important;
+  cursor: pointer !important;
+  justify-self: end !important;
+  flex-shrink: 0 !important;
 }
 
 .flight-result-card .flight-book-link:hover {
-  background: var(--color-primary-dark, #0E241C) !important;
-  border-color: var(--color-primary-dark, #0E241C) !important;
-  transform: none !important;
+  background: #0a4946 !important;
+  box-shadow: 0 4px 14px rgba(10, 73, 70, 0.4) !important;
+  transform: translateY(-1px) !important;
+}
+
+/* Khối so sánh nhanh hạng vé Phổ thông & Thương gia chiếm trọn bề ngang card */
+.flight-fare-compare-wrap {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  margin-top: 0.45rem !important;
+  padding-top: 0.65rem !important;
+  border-top: 1px dashed #e2e8f0 !important;
+}
+
+.flight-compare-toggle {
+  background: #f0fdfa !important;
+  border: 1px solid #ccfbf1 !important;
+  color: #0f6b66 !important;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  padding: 0.35rem 0.85rem !important;
+  border-radius: 0.35rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+}
+
+.flight-compare-toggle:hover {
+  background: #ccfbf1 !important;
+  color: #0a4946 !important;
+}
+
+.flight-compare-drawer {
+  display: grid !important;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
+  gap: 0.85rem !important;
+  margin-top: 0.75rem !important;
+}
+
+.fare-compare-card {
+  padding: 0.85rem 1rem !important;
+  border-radius: 0.5rem !important;
+  border: 1px solid #e2e8f0 !important;
+  background: #f8fafc !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+}
+
+.fare-compare-card.is-economy {
+  border-left: 3.5px solid #0f6b66 !important;
+}
+
+.fare-compare-card.is-business {
+  border-left: 3.5px solid #e8a33d !important;
+  background: #fffdfa !important;
+}
+
+.fare-compare-badge {
+  font-size: 0.75rem !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.04em !important;
+  color: #0f6b66 !important;
+}
+
+.fare-compare-card.is-business .fare-compare-badge {
+  color: #b45309 !important;
+}
+
+.fare-compare-price {
+  font-size: 1.2rem !important;
+  font-weight: 800 !important;
+  color: #0f172a !important;
+}
+
+.fare-compare-quota {
+  font-size: 0.75rem !important;
+  color: #64748b !important;
 }
 
 /* 4. Interactive Fare Class Picker (Stitch Inspired) */
@@ -11603,11 +11687,110 @@ code,
   transform: translateY(-1px) !important;
 }
 
-.summary-continue-btn:disabled {
+.summary-continue-btn:disabled,
+.summary-continue-btn.is-disabled {
   opacity: 0.55 !important;
   cursor: not-allowed !important;
   box-shadow: none !important;
   filter: grayscale(40%) !important;
+  background: #64748b !important;
+}
+
+.summary-continue-btn.is-active {
+  background: linear-gradient(135deg, #e8a33d 0%, #d97706 100%) !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  box-shadow: 0 4px 16px rgba(232, 163, 61, 0.45) !important;
+}
+
+.summary-leg-title-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 0.5rem !important;
+}
+
+.summary-leg-title-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.summary-leg-title-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.summary-leg-price {
+  color: #0f6b66 !important;
+  font-size: 0.92rem !important;
+  font-weight: 800 !important;
+  background: #e6f7f6 !important;
+  padding: 0.15rem 0.45rem !important;
+  border-radius: 0.3rem !important;
+  border: 1px solid #b2e4df !important;
+}
+
+.summary-leg-edit-btn {
+  background: transparent !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f6b66 !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 0.15rem 0.4rem !important;
+  border-radius: 0.25rem !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.summary-leg-edit-btn:hover {
+  background: #e6f7f6 !important;
+  border-color: #0f6b66 !important;
+}
+
+/* Thẻ chuyến bay được chọn (Selected Flight Card) */
+.flight-result-card.is-selected {
+  border: 2px solid #0f6b66 !important;
+  background: linear-gradient(180deg, #f7fdfc 0%, #ffffff 100%) !important;
+  box-shadow: 0 6px 22px rgba(15, 107, 102, 0.12) !important;
+}
+
+.flight-result-card.is-selected .flight-book-link {
+  background: linear-gradient(135deg, #0a4946 0%, #073533 100%) !important;
+  border: 1.5px solid #feb64e !important;
+  box-shadow: 0 2px 8px rgba(10, 73, 70, 0.3) !important;
+}
+
+.flight-selected-banner {
+  grid-column: 1 / -1 !important;
+  background: linear-gradient(90deg, #e6f7f6 0%, #f0fdfa 100%) !important;
+  border: 1px solid #99f6e4 !important;
+  border-radius: 0.4rem !important;
+  padding: 0.4rem 0.85rem !important;
+  color: #073533 !important;
+  font-size: 0.85rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.6rem !important;
+  margin-top: 0.35rem !important;
+}
+
+.flight-selected-banner .selected-check-badge {
+  background: #0f6b66 !important;
+  color: #ffffff !important;
+  padding: 0.15rem 0.5rem !important;
+  border-radius: 9999px !important;
+  font-weight: 800 !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.02em !important;
+}
+
+.flight-selected-banner .selected-fare-note {
+  color: #334155 !important;
+  font-size: 0.85rem !important;
 }
 
 /* ── 4. Advanced Flight Filters Enhancements ── */
@@ -11744,5 +11927,38 @@ code,
   .advanced-filter-journey-bar {
     flex-direction: column !important;
     align-items: flex-start !important;
+  }
+}
+
+/* ── Container kết quả tìm kiếm rộng rãi & cân đối ── */
+.results-page .results-main {
+  max-width: 1360px !important;
+  margin: 0 auto !important;
+  padding: 1.5rem 1.25rem 3.5rem !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+}
+
+/* ── Định dạng dòng ghi chú giờ bay trong Footer nền xanh ── */
+.site-footer.serene-full-footer .footer-system-notes {
+  max-width: 78rem !important;
+  margin: 0 auto !important;
+  padding: 0.85rem 1.5rem !important;
+  font-size: 0.82rem !important;
+  color: rgba(255, 255, 255, 0.65) !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.1) !important;
+  box-sizing: border-box !important;
+}
+
+@media (max-width: 1200px) {
+  .results-layout-grid {
+    grid-template-columns: minmax(0, 1fr) 310px !important;
+    gap: 1.15rem !important;
+  }
+
+  .flight-result-card {
+    grid-template-columns: 120px minmax(180px, 1.2fr) minmax(75px, 0.6fr) minmax(110px, 0.9fr) auto !important;
+    gap: 0.75rem !important;
+    padding: 1rem !important;
   }
 }
