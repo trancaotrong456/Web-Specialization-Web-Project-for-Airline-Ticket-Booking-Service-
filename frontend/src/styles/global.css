@@ -11687,11 +11687,110 @@ code,
   transform: translateY(-1px) !important;
 }
 
-.summary-continue-btn:disabled {
+.summary-continue-btn:disabled,
+.summary-continue-btn.is-disabled {
   opacity: 0.55 !important;
   cursor: not-allowed !important;
   box-shadow: none !important;
   filter: grayscale(40%) !important;
+  background: #64748b !important;
+}
+
+.summary-continue-btn.is-active {
+  background: linear-gradient(135deg, #e8a33d 0%, #d97706 100%) !important;
+  color: #ffffff !important;
+  opacity: 1 !important;
+  filter: none !important;
+  box-shadow: 0 4px 16px rgba(232, 163, 61, 0.45) !important;
+}
+
+.summary-leg-title-row {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  width: 100% !important;
+  gap: 0.5rem !important;
+}
+
+.summary-leg-title-left {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.summary-leg-title-right {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+}
+
+.summary-leg-price {
+  color: #0f6b66 !important;
+  font-size: 0.92rem !important;
+  font-weight: 800 !important;
+  background: #e6f7f6 !important;
+  padding: 0.15rem 0.45rem !important;
+  border-radius: 0.3rem !important;
+  border: 1px solid #b2e4df !important;
+}
+
+.summary-leg-edit-btn {
+  background: transparent !important;
+  border: 1px solid #cbd5e1 !important;
+  color: #0f6b66 !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 0.15rem 0.4rem !important;
+  border-radius: 0.25rem !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+}
+
+.summary-leg-edit-btn:hover {
+  background: #e6f7f6 !important;
+  border-color: #0f6b66 !important;
+}
+
+/* Thẻ chuyến bay được chọn (Selected Flight Card) */
+.flight-result-card.is-selected {
+  border: 2px solid #0f6b66 !important;
+  background: linear-gradient(180deg, #f7fdfc 0%, #ffffff 100%) !important;
+  box-shadow: 0 6px 22px rgba(15, 107, 102, 0.12) !important;
+}
+
+.flight-result-card.is-selected .flight-book-link {
+  background: linear-gradient(135deg, #0a4946 0%, #073533 100%) !important;
+  border: 1.5px solid #feb64e !important;
+  box-shadow: 0 2px 8px rgba(10, 73, 70, 0.3) !important;
+}
+
+.flight-selected-banner {
+  grid-column: 1 / -1 !important;
+  background: linear-gradient(90deg, #e6f7f6 0%, #f0fdfa 100%) !important;
+  border: 1px solid #99f6e4 !important;
+  border-radius: 0.4rem !important;
+  padding: 0.4rem 0.85rem !important;
+  color: #073533 !important;
+  font-size: 0.85rem !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.6rem !important;
+  margin-top: 0.35rem !important;
+}
+
+.flight-selected-banner .selected-check-badge {
+  background: #0f6b66 !important;
+  color: #ffffff !important;
+  padding: 0.15rem 0.5rem !important;
+  border-radius: 9999px !important;
+  font-weight: 800 !important;
+  font-size: 0.75rem !important;
+  letter-spacing: 0.02em !important;
+}
+
+.flight-selected-banner .selected-fare-note {
+  color: #334155 !important;
+  font-size: 0.85rem !important;
 }
 
 /* ── 4. Advanced Flight Filters Enhancements ── */
