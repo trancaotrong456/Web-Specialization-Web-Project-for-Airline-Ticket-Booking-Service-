@@ -2,6 +2,7 @@
 
 const { after, afterEach, before, test } = require('node:test');
 const assert = require('node:assert/strict');
+const { Op } = require('sequelize');
 const paymentService = require('../../services/payment.service');
 const bookingService = require('../../services/booking.service');
 const { models, verifyConnectedDatabase } = require('./helpers/mysqlTestDatabase');
@@ -25,6 +26,49 @@ async function fixture(suffix) {
     paymentId: payment.id, bookingId: booking.id, provider: 'payos', nextAttemptAt: new Date(0),
   }, { transaction }));
   return { flight, booking, payment, reconciliationCase };
+}
+
+async function withCaseScope(caseId, callback) {
+  const originalFindAll = models.PaymentReconciliationCase.findAll;
+  models.PaymentReconciliationCase.findAll = (query = {}) => originalFindAll.call(models.PaymentReconciliationCase, {
+    ...query,
+    where: { ...query.where, id: caseId },
+  });
+  try {
+    return await callback();
+  } finally {
+    models.PaymentReconciliationCase.findAll = originalFindAll;
+  }
+}
+
+async function withPaymentScope(paymentId, callback) {
+  const repository = paymentService.repository;
+  const originalFindPending = repository.findPendingPayosPaymentsWithoutCase;
+  repository.findPendingPayosPaymentsWithoutCase = async (cutoff) => {
+    const candidates = await originalFindPending.call(repository, cutoff, Number.MAX_SAFE_INTEGER);
+    return candidates.filter((payment) => String(payment.id) === String(paymentId));
+  };
+  try {
+    return await callback();
+  } finally {
+    repository.findPendingPayosPaymentsWithoutCase = originalFindPending;
+  }
+}
+
+async function withPaymentIdsScope(paymentIds, callback) {
+  const originalFindAll = models.Payment.findAll;
+  const ids = paymentIds.map((id) => Number(id));
+  models.Payment.findAll = (query = {}) => originalFindAll.call(models.Payment, {
+    ...query,
+    where: {
+      [Op.and]: [query.where || {}, { id: { [Op.in]: ids } }],
+    },
+  });
+  try {
+    return await callback();
+  } finally {
+    models.Payment.findAll = originalFindAll;
+  }
 }
 
 before(async () => { await verifyConnectedDatabase(); });
@@ -89,12 +133,12 @@ test('IT-34 payOS worker resolves a verified PAID case exactly once', { timeout:
   const previous = paymentService.getPayosPaymentStatus;
   paymentService.getPayosPaymentStatus = async () => ({ status: 'PAID', orderCode: f.payment.transaction_ref, amount: f.payment.amount });
   try {
-    const result = await paymentService.reconcilePayosCases({ now: new Date(), jitterRatio: 0 });
+    const result = await withCaseScope(f.reconciliationCase.id, () => paymentService.reconcilePayosCases({ now: new Date(), jitterRatio: 0 }));
     assert.equal(result.claimedCount, 1);
     assert.equal((await models.Payment.findByPk(f.payment.id)).status, 'success');
     assert.equal((await models.Booking.findByPk(f.booking.id)).status, 'confirmed');
     assert.equal((await models.PaymentReconciliationCase.findByPk(f.reconciliationCase.id)).state, 'resolved');
-    assert.equal((await paymentService.reconcilePayosCases({ now: new Date(), jitterRatio: 0 })).claimedCount, 0);
+    assert.equal((await withCaseScope(f.reconciliationCase.id, () => paymentService.reconcilePayosCases({ now: new Date(), jitterRatio: 0 }))).claimedCount, 0);
   } finally { paymentService.getPayosPaymentStatus = previous; }
 });
 
@@ -107,7 +151,7 @@ test('IT-35 pending payOS attempts use persisted backoff and escalate after six 
     const expectedDelays = [60000, 120000, 240000, 480000, 960000];
     for (let attempt = 1; attempt <= 6; attempt += 1) {
       await models.PaymentReconciliationCase.update({ next_attempt_at: now, lease_owner: null, lease_expires_at: null }, { where: { id: f.reconciliationCase.id } });
-      assert.equal((await paymentService.reconcilePayosCases({ now, jitterRatio: 0 })).claimedCount, 1);
+      assert.equal((await withCaseScope(f.reconciliationCase.id, () => paymentService.reconcilePayosCases({ now, jitterRatio: 0 }))).claimedCount, 1);
       const stored = await models.PaymentReconciliationCase.findByPk(f.reconciliationCase.id);
       if (attempt < 6) {
         assert.equal(stored.state, 'active');
@@ -170,9 +214,9 @@ test('IT-42 payOS worker does not claim a VNPay reconciliation case', { timeout:
   const vnpayCase = await models.sequelize.transaction((transaction) => repository.createOrFindCase({
     paymentId: f.payment.id, bookingId: f.booking.id, provider: 'vnpay', nextAttemptAt: new Date(0),
   }, { transaction }));
-  const result = await models.sequelize.transaction((transaction) => repository.claimDueCases({
+  const result = await withCaseScope(vnpayCase.id, () => models.sequelize.transaction((transaction) => repository.claimDueCases({
     owner: 'it42-payos-worker', provider: 'payos', now: new Date(), limit: 10,
-  }, { transaction }));
+  }, { transaction })));
   const stored = await models.PaymentReconciliationCase.findByPk(vnpayCase.id);
   assert.equal(result.length, 0);
   assert.equal(stored.provider, 'vnpay');
@@ -197,7 +241,10 @@ test('IT-43 discovery finds a missing case after the first 100 existing cases', 
   await models.PaymentReconciliationCase.bulkCreate(payments.slice(0, 100).map((payment) => ({
     payment_id: payment.id, booking_id: payment.booking_id, provider: 'payos', next_attempt_at: new Date(0),
   })));
-  const created = await paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 60000), graceMinutes: 0, limit: 100 });
+  const created = await withPaymentIdsScope(
+    payments.map((payment) => payment.id),
+    () => paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 60000), graceMinutes: 0, limit: 100 }),
+  );
   assert.equal(created, 1);
   assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: payments[100].id } }), 1);
 });
@@ -213,10 +260,10 @@ test('IT-44 failed case persistence is recoverable on the next discovery run', {
     return previous.apply(repository, args);
   };
   try {
-    assert.equal(await paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 60000), graceMinutes: 0 }), 0);
+    assert.equal(await withPaymentScope(f.payment.id, () => paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 60000), graceMinutes: 0 })), 0);
     assert.equal((await models.Payment.findByPk(f.payment.id)).status, 'pending');
     assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: f.payment.id } }), 0);
-    assert.equal(await paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 120000), graceMinutes: 0 }), 1);
+    assert.equal(await withPaymentScope(f.payment.id, () => paymentService.ensurePayosReconciliationCases({ now: new Date(Date.now() + 120000), graceMinutes: 0 })), 1);
     assert.equal(await models.PaymentReconciliationCase.count({ where: { payment_id: f.payment.id } }), 1);
   } finally { repository.createOrFindCase = previous; }
 });

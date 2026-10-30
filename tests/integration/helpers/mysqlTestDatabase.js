@@ -21,6 +21,12 @@ function assertSafeIntegrationEnvironment() {
     .map(([key, expected]) => `${key} must be ${expected}`);
 
   if (!process.env.DB_PASS) mismatches.push('DB_PASS must be present');
+  if (String(process.env.PAYOS_MODE || '').toLowerCase() === 'live') {
+    mismatches.push('PAYOS_MODE must not be live for integration tests');
+  }
+  if (String(process.env.VNPAY_MODE || '').toLowerCase() === 'production') {
+    mismatches.push('VNPAY_MODE must not be production for integration tests');
+  }
   if (mismatches.length > 0) {
     throw new Error(`Refusing MySQL integration test: ${mismatches.join('; ')}`);
   }

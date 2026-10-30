@@ -35,6 +35,19 @@ async function claim(repository, owner, options = {}) {
   }, { transaction }));
 }
 
+async function claimScoped(repository, caseId, owner, options = {}) {
+  const originalFindAll = models.PaymentReconciliationCase.findAll;
+  models.PaymentReconciliationCase.findAll = (query = {}) => originalFindAll.call(models.PaymentReconciliationCase, {
+    ...query,
+    where: { ...query.where, id: caseId },
+  });
+  try {
+    return await claim(repository, owner, options);
+  } finally {
+    models.PaymentReconciliationCase.findAll = originalFindAll;
+  }
+}
+
 before(async () => { await verifyConnectedDatabase(); });
 afterEach(async () => { await cleanupTrackedFixtures(); });
 after(async () => { await cleanupTrackedFixtures(); await models.sequelize.close(); });
@@ -77,21 +90,33 @@ test('IT-27c conflicting concurrent create is rejected without reassignment', { 
 });
 
 test('IT-28 concurrent workers claim a due case only once', { timeout: 20000 }, async () => {
-  const { repository } = await createCaseFixture('IT28');
-  const results = await Promise.all([claim(repository, 'worker-a'), claim(repository, 'worker-b')]);
+  const { repository, reconciliationCase } = await createCaseFixture('IT28');
+  const originalFindAll = models.PaymentReconciliationCase.findAll;
+  // Keep the real repository transaction/locking path, but scope the model
+  // read to this fixture so unrelated due cases cannot be claimed.
+  models.PaymentReconciliationCase.findAll = (options = {}) => originalFindAll.call(models.PaymentReconciliationCase, {
+    ...options,
+    where: { ...options.where, id: reconciliationCase.id },
+  });
+  let results;
+  try {
+    results = await Promise.all([claim(repository, 'worker-a'), claim(repository, 'worker-b')]);
+  } finally {
+    models.PaymentReconciliationCase.findAll = originalFindAll;
+  }
   assert.equal(results.filter((rows) => rows.length === 1).length, 1);
   assert.equal(results.reduce((total, rows) => total + rows.length, 0), 1);
-  assert.equal((await models.PaymentReconciliationCase.findOne()).attempt_count, 1);
+  assert.equal((await models.PaymentReconciliationCase.findByPk(reconciliationCase.id)).attempt_count, 1);
 });
 
 test('IT-28a claim enforces the persisted retry budget', { timeout: 20000 }, async () => {
   const { repository, reconciliationCase } = await createCaseFixture('IT28A');
   await models.PaymentReconciliationCase.update({ max_attempts: 2, attempt_count: 1 }, { where: { id: reconciliationCase.id } });
-  assert.equal((await claim(repository, 'worker-b')).length, 1);
+  assert.equal((await claimScoped(repository, reconciliationCase.id, 'worker-b')).length, 1);
   await models.PaymentReconciliationCase.update({ attempt_count: 2, lease_owner: null, lease_expires_at: null }, { where: { id: reconciliationCase.id } });
-  assert.equal((await claim(repository, 'worker-c')).length, 0);
+  assert.equal((await claimScoped(repository, reconciliationCase.id, 'worker-c')).length, 0);
   await models.PaymentReconciliationCase.update({ attempt_count: 3 }, { where: { id: reconciliationCase.id } });
-  assert.equal((await claim(repository, 'worker-d')).length, 0);
+  assert.equal((await claimScoped(repository, reconciliationCase.id, 'worker-d')).length, 0);
   const stored = await models.PaymentReconciliationCase.findByPk(reconciliationCase.id);
   assert.equal(stored.state, 'active');
   assert.equal(stored.attempt_count, 3);
@@ -99,10 +124,10 @@ test('IT-28a claim enforces the persisted retry budget', { timeout: 20000 }, asy
 
 test('IT-29 active lease protects a case and expired lease can be recovered', { timeout: 20000 }, async () => {
   const { repository, reconciliationCase } = await createCaseFixture('IT29');
-  assert.equal((await claim(repository, 'worker-a')).length, 1);
-  assert.equal((await claim(repository, 'worker-b')).length, 0);
+  assert.equal((await claimScoped(repository, reconciliationCase.id, 'worker-a')).length, 1);
+  assert.equal((await claimScoped(repository, reconciliationCase.id, 'worker-b')).length, 0);
   await models.PaymentReconciliationCase.update({ lease_expires_at: new Date(0) }, { where: { id: reconciliationCase.id } });
-  assert.equal((await claim(repository, 'worker-b')).length, 1);
+  assert.equal((await claimScoped(repository, reconciliationCase.id, 'worker-b')).length, 1);
   const stored = await models.PaymentReconciliationCase.findByPk(reconciliationCase.id);
   assert.equal(stored.lease_owner, 'worker-b');
   assert.equal(stored.attempt_count, 2);
@@ -141,9 +166,9 @@ test('IT-32 transaction rollback does not persist a reconciliation case', { time
 
 test('IT-33 persisted case survives worker restart and is reclaimable', { timeout: 20000 }, async () => {
   const { repository, reconciliationCase } = await createCaseFixture('IT33');
-  await claim(repository, 'worker-before-restart');
+  await claimScoped(repository, reconciliationCase.id, 'worker-before-restart');
   await models.PaymentReconciliationCase.update({ lease_expires_at: new Date(0) }, { where: { id: reconciliationCase.id } });
-  const recovered = await claim(repository, 'worker-after-restart');
+  const recovered = await claimScoped(repository, reconciliationCase.id, 'worker-after-restart');
   assert.equal(recovered.length, 1);
   assert.equal(recovered[0].lease_owner, 'worker-after-restart');
 });
