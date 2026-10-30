@@ -288,6 +288,7 @@ function FlightCard({
   sortBy = 'departure_earliest',
   isSelected = false,
   selectedFare = null,
+  asLink = false,
 }) {
   const [flight, setFlight] = useState(initialFlight);
   const [seatWarning, setSeatWarning] = useState(null);
@@ -390,9 +391,47 @@ function FlightCard({
       </div>
       <div className="flight-fare">{shownFare !== undefined ? <><small>{sortBy === 'price_high' ? 'Mức giá cao nhất' : 'Giá từ'}</small><strong className="table-mono-cell">{formatCurrency(shownFare)}</strong></> : <span>Chưa có thông tin giá</span>}</div>
       {flight.status_reason ? <p className="flight-status-reason">Lý do cập nhật: {flight.status_reason}</p> : null}
-      {onSelectFlight
-        ? <button className={`button button-primary flight-book-link ${isSelected ? 'is-selected' : ''}`} type="button" disabled={!bookable} onClick={() => onSelectFlight(flight)} aria-label="Chọn chuyến bay">{isSelected ? '✔ Đã chọn' : (bookable ? 'Chọn chuyến bay' : 'Không thể đặt chuyến này')}</button>
-        : bookable ? <Link className="button button-primary flight-book-link" to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}>Chọn chuyến bay</Link> : <button className="button button-secondary flight-book-link" type="button" disabled>{flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}</button>}
+      {asLink ? (
+        bookable ? (
+          <a
+            href={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}
+            role="link"
+            className={`button button-primary flight-book-link ${isSelected ? 'is-selected' : ''}`}
+            onClick={(e) => {
+              e.preventDefault();
+              if (onSelectFlight) onSelectFlight(flight);
+            }}
+            aria-label="Chọn chuyến bay"
+          >
+            {isSelected ? '✔ Đã chọn' : 'Chọn chuyến bay'}
+          </a>
+        ) : (
+          <button className="button button-secondary flight-book-link" type="button" disabled>
+            {flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}
+          </button>
+        )
+      ) : onSelectFlight ? (
+        <button
+          className={`button button-primary flight-book-link ${isSelected ? 'is-selected' : ''}`}
+          type="button"
+          disabled={!bookable}
+          onClick={() => onSelectFlight(flight)}
+          aria-label="Chọn chuyến bay"
+        >
+          {isSelected ? '✔ Đã chọn' : (bookable ? 'Chọn chuyến bay' : 'Không thể đặt chuyến này')}
+        </button>
+      ) : bookable ? (
+        <Link
+          className="button button-primary flight-book-link"
+          to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}
+        >
+          Chọn chuyến bay
+        </Link>
+      ) : (
+        <button className="button button-secondary flight-book-link" type="button" disabled>
+          {flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}
+        </button>
+      )}
 
       {isSelected ? (
         <div className="flight-selected-banner" role="status">
@@ -921,12 +960,29 @@ const airportsOfFlight = (flight) => `${flight?.departureAirport?.iata_code || '
 
 export function FlightResultsPage() {
   const { request } = useAuth();
+  const navigate = useNavigate();
   const api = useMemo(() => createFlightDiscoveryApi(request), [request]);
   const [searchParams, setSearchParams] = useSearchParams();
   const tripType = searchParams.get('trip_type') || '';
   const tripMode = tripType === 'round_trip' || tripType === 'multi_city';
   const passengerCount = searchParams.get('passengers') || '1';
   const airlineId = searchParams.get('airline_id') || '';
+
+  const [oneWaySelectedFlight, setOneWaySelectedFlight] = useState(null);
+  const [oneWaySelectedFare, setOneWaySelectedFare] = useState(null);
+
+  useEffect(() => {
+    setOneWaySelectedFlight(null);
+    setOneWaySelectedFare(null);
+  }, [searchParams]);
+
+  const handleSelectFlightOneWay = (flight) => {
+    setOneWaySelectedFlight(flight);
+    const existingFares = Array.isArray(flight.fareClasses) ? flight.fareClasses : [];
+    const preferred = existingFares.find((f) => /eco|phổ thông/i.test(f.class_name)) || existingFares[0] || null;
+    setOneWaySelectedFare(preferred);
+  };
+
   let itineraryLegs = [];
   if (tripMode) {
     try { itineraryLegs = JSON.parse(searchParams.get('legs') || '[]'); } catch { itineraryLegs = []; }
@@ -1229,7 +1285,16 @@ export function FlightResultsPage() {
                     {result.data.length ? (
                       <div className="flight-results-list">
                         {result.data.map((flight) => (
-                          <FlightCard key={flight.id} flight={flight} passengerCount={values.min_seats} sortBy={values.sort_by} />
+                          <FlightCard
+                            key={flight.id}
+                            flight={flight}
+                            passengerCount={values.min_seats}
+                            sortBy={values.sort_by}
+                            isSelected={oneWaySelectedFlight?.id === flight.id}
+                            selectedFare={oneWaySelectedFlight?.id === flight.id ? oneWaySelectedFare : null}
+                            onSelectFlight={handleSelectFlightOneWay}
+                            asLink={true}
+                          />
                         ))}
                       </div>
                     ) : (
@@ -1264,11 +1329,22 @@ export function FlightResultsPage() {
                     legIndex={0}
                     chosenFlights={[]}
                     chosenFares={[]}
-                    selectedFlight={null}
-                    selectedFare={null}
+                    selectedFlight={oneWaySelectedFlight}
+                    selectedFare={oneWaySelectedFare}
                     airportsMap={airportsMap}
-                    canContinue={false}
-                    continueLabel="Chọn chuyến bay"
+                    canContinue={Boolean(oneWaySelectedFlight)}
+                    continueLabel="Thanh toán"
+                    onContinue={() => {
+                      if (!oneWaySelectedFlight) return;
+                      const params = new URLSearchParams({
+                        flight_id: String(oneWaySelectedFlight.id),
+                        passengers: String(values.min_seats || 1),
+                      });
+                      if (oneWaySelectedFare?.id) {
+                        params.set('fare_class_id', String(oneWaySelectedFare.id));
+                      }
+                      navigate(`/bookings/new?${params.toString()}`);
+                    }}
                   />
                 </div>
               ) : null}
