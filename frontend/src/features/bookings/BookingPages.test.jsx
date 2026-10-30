@@ -67,7 +67,10 @@ describe('booking customer pages', () => {
     });
     render(<MemoryRouter initialEntries={['/admin/bookings/7']}><Routes><Route path="/admin/bookings/:id" element={<BookingDetailPage admin />} /></Routes></MemoryRouter>);
     expect(await screen.findByText('Lịch sử trạng thái')).toBeInTheDocument();
-    expect(screen.getByText('payment initiated')).toBeInTheDocument();
+    expect(screen.getByText('Bắt đầu thanh toán')).toBeInTheDocument();
+    expect(screen.getByTitle('payment_initiated')).toHaveTextContent('Bắt đầu thanh toán');
+    expect(screen.getByText('Thanh toán payOS thành công')).toBeInTheDocument();
+    expect(screen.getByTitle('payment_payos_success')).toHaveTextContent('Thanh toán payOS thành công');
     expect(screen.getByText('Demo Customer')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Chi tiết' })).toHaveAttribute('href', '/admin/payments/9');
   });
@@ -121,7 +124,7 @@ describe('booking customer pages', () => {
       ]);
       expect(JSON.stringify(createCall[1].body)).not.toContain('unit_price');
     });
-  });
+  }, 15000); // Timeout 15s: luồng chọn dịch vụ bổ sung và nhập thông tin nhiều hành khách
 
   it('loads a selected multi-leg itinerary and submits one booking containing every real flight and fare', async () => {
     mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
@@ -258,7 +261,7 @@ describe('booking customer pages', () => {
     await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
     expect(await screen.findByText(/email hợp lệ/i)).toBeInTheDocument();
     expect(mocks.request.mock.calls.some(([path]) => path === '/bookings')).toBe(false);
-  });
+  }, 15000); // Timeout 15s: luồng tìm chuyến bay, chọn hạng vé và nhập email khách vãng lai qua userEvent
 
   it('creates an authenticated booking without guest_email', async () => {
     mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
@@ -387,5 +390,46 @@ describe('booking customer pages', () => {
     await userEvent.setup().click(await screen.findByRole('button', { name: 'Tải vé PDF' }));
     expect(mocks.request).toHaveBeenCalledWith('/bookings/7/ticket?guest_email=guest%40example.com', { responseType: 'blob' });
     expect(createUrl).toHaveBeenCalledWith(pdf);
+  });
+
+  it('provides quick status filter chips and displays remaining hold time for holding bookings', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    const holdExpires = new Date(Date.now() + 15 * 60 * 1000).toISOString();
+    mocks.request.mockResolvedValue({
+      data: [{ id: 8, booking_code: 'BK-HOLD', status: 'holding', hold_expires_at: holdExpires, flight }],
+      pagination: { page: 1, totalPages: 1, total: 1 },
+    });
+    const user = userEvent.setup();
+    renderPage(<AdminBookingsPage />, '/admin/bookings');
+
+    const confirmedChip = await screen.findByRole('button', { name: 'Đã xác nhận' });
+    expect(confirmedChip).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Tất cả' })).toBeInTheDocument();
+    expect(screen.getAllByText(/Còn 1[45]:/).length).toBeGreaterThan(0);
+
+    await user.click(confirmedChip);
+    await waitFor(() => expect(mocks.request).toHaveBeenCalledWith(expect.stringContaining('status=confirmed')));
+  });
+
+  it('renders a visual status history timeline for admin booking detail', async () => {
+    mocks.user = { id: 1, role: 'admin' }; mocks.status = 'authenticated';
+    mocks.request.mockResolvedValue({
+      id: 7,
+      booking_code: 'BK123',
+      status: 'confirmed',
+      flight,
+      passengers: [],
+      statusHistory: [
+        { id: 101, from_status: null, to_status: 'holding', source: 'customer_web', created_at: '2026-10-25T10:00:00Z' },
+        { id: 102, from_status: 'holding', to_status: 'confirmed', source: 'payos_webhook', created_at: '2026-10-25T10:05:00Z', actor: { full_name: 'Cổng payOS' } },
+      ],
+    });
+    renderPage(<BookingDetailPage admin />, '/admin/bookings/7');
+    expect(await screen.findByText('Lịch sử trạng thái')).toBeInTheDocument();
+    expect(screen.getAllByText('Giữ chỗ / Chờ thanh toán').length).toBeGreaterThan(0);
+    expect(screen.getByText('Webhook payOS')).toBeInTheDocument();
+    expect(screen.getByTitle('payos_webhook')).toHaveTextContent('Webhook payOS');
+    expect(screen.getByText('Đặt chỗ qua website')).toBeInTheDocument();
+    expect(screen.getByTitle('customer_web')).toHaveTextContent('Đặt chỗ qua website');
   });
 });

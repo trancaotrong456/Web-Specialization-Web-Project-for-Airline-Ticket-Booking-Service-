@@ -624,7 +624,7 @@ describe('public flight discovery pages', () => {
     expect(multiCityTab).toHaveTextContent('Sắp ra mắt');
     expect(screen.queryByLabelText('Return date')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Một chiều' })).toBeInTheDocument();
-    expect(screen.getByText(/Bộ lọc không bắt buộc/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Bộ lọc không bắt buộc/i)).toBeInTheDocument();
     expect(screen.getByText(/Kết quả phụ thuộc vào lịch bay hiện có/i)).toBeInTheDocument();
     expect(screen.queryByText(/46 chuyến bay|giá bán chống tăng|biểu đồ giá 30 ngày/i)).not.toBeInTheDocument();
     const footer = screen.getByRole('contentinfo');

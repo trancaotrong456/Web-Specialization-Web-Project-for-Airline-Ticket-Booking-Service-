@@ -2,20 +2,23 @@ const express = require('express');
 const FlightService = require('./flight.service');
 const FlightController = require('./flight.controller');
 
-function createFlightModule({ expressModule = express, repository, service, controller, guards, validation, validators, getIO, flightStatusNotifier } = {}) {
-  const resolvedService = service || (repository ? new FlightService({ repository, getIO, flightStatusNotifier }) : undefined);
+function createFlightModule({ expressModule = express, repository, service, controller, guards, validation, validators, getIO, flightStatusNotifier, searchEngine } = {}) {
+  const resolvedService = service || (repository ? new FlightService({ repository, getIO, flightStatusNotifier, searchEngine }) : undefined);
   const resolvedController = controller || (resolvedService ? new FlightController({ service: resolvedService }) : undefined);
   if (!resolvedController || typeof guards?.authenticate !== 'function' || typeof guards?.authorize !== 'function' ||
       typeof validation?.validate !== 'function' || !validators?.searchFlightValidator || !validators?.createFlightValidator || !validators?.updateFlightValidator ||
-      !validators?.flightStatusValidator || !validators?.updateFlightStatusValidator || !validators?.cancelFlightValidator) {
+      !validators?.flightStatusValidator || !validators?.updateFlightStatusValidator || !validators?.cancelFlightValidator ||
+      !validators?.flightCalendarValidator) {
     throw new TypeError('controller, guards, validation and validators are required');
   }
-  for (const method of ['searchFlights', 'getFlightById', 'getFlightStatus', 'updateFlightStatus', 'getAllFlights', 'createFlight', 'updateFlight', 'cancelFlight', 'deleteFlight']) {
+  for (const method of ['searchFlights', 'getFlightById', 'getFlightStatus', 'updateFlightStatus', 'getAllFlights', 'createFlight', 'updateFlight', 'cancelFlight', 'deleteFlight', 'getFlightCalendar']) {
     if (typeof resolvedController[method] !== 'function') throw new TypeError(`controller.${method} must be a function`);
   }
   const router = expressModule.Router();
   const bind = (method) => resolvedController[method].bind(resolvedController);
   router.get('/search', validators.searchFlightValidator, validation.validate, bind('searchFlights'));
+  // #27 Lịch chuyến bay dạng calendar — đặt TRƯỚC /:id để tránh Express capture 'calendar' làm id
+  router.get('/calendar', guards.authenticate, guards.authorize('admin', 'staff'), validators.flightCalendarValidator, validation.validate, bind('getFlightCalendar'));
   router.get('/status/:id', validators.flightStatusValidator, validation.validate, bind('getFlightStatus'));
   router.patch('/status/:id', guards.authenticate, guards.authorize('admin'), validators.updateFlightStatusValidator, validation.validate, bind('updateFlightStatus'));
   router.get('/:id', bind('getFlightById'));

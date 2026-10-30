@@ -10,20 +10,20 @@ export function AuthLayout({
   benefits = [],
   children,
 }) {
-  const hasAuthRedesign = ['login', 'register', 'forgot'].includes(variant);
+  const hasAuthRedesign = ['login', 'register', 'forgot', 'reset'].includes(variant);
 
   return (
     <main className={`auth-page${hasAuthRedesign ? ` auth-page--${variant}` : ''}`}>
       <section className={`auth-panel${hasAuthRedesign ? ` auth-panel--${variant}` : ''}`} aria-labelledby="auth-title">
-        <aside className={`auth-visual${hasAuthRedesign ? ` auth-visual--${variant}` : ''}`} aria-label="Airline Booking">
+        <aside className={`auth-visual${hasAuthRedesign ? ` auth-visual--${variant}` : ''}`} aria-label="Serene Flightways">
           <Link className="auth-brand" to="/" aria-label="Serene Flightways - Trang chủ">
             <span className="auth-brand-mark" aria-hidden="true">✈</span>
-            <span><strong>Serene Flightways</strong><small>Airline Booking</small></span>
+            <span><strong>Serene Flightways</strong><small>Serene Flightways</small></span>
           </Link>
           <div className="auth-visual-copy">
-            <span className="auth-chip">{hasAuthRedesign ? 'Airline Booking' : 'Serene Flightways'}</span>
-            <h2>{visualHeadline || 'Tài khoản của bạn, truy cập an tâm.'}</h2>
-            <p>{visualDescription || 'Đăng nhập để quản lý hồ sơ và bảo mật tài khoản của bạn.'}</p>
+            <span className="auth-chip">Serene Flightways</span>
+            <h2>{visualHeadline || (variant === 'reset' ? 'Đặt lại mật khẩu an toàn' : 'Đăng nhập để xem vé và đặt chỗ')}</h2>
+            <p>{visualDescription || (variant === 'reset' ? 'Cập nhật mật khẩu mới để bảo vệ tài khoản và thông tin hành trình của bạn.' : 'Đăng nhập để xem vé, quản lý đặt chỗ và hành trình của bạn.')}</p>
           </div>
           {benefits.length > 0 ? (
             <ul className="auth-benefits" aria-label="Lợi ích tài khoản">

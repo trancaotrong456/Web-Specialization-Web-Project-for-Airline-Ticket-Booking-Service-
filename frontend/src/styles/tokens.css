@@ -1,54 +1,102 @@
 :root {
   color-scheme: light;
-  font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  --color-primary: #0a3d46;
-  --color-primary-dark: #06282e;
-  --color-primary-light: #0d5c69;
-  --color-primary-teal: #0d9488;
-  --color-teal-glow: #14b8a6;
-  --color-secondary: #f59e0b;
-  --color-secondary-hover: #e59005;
-  --color-secondary-dark: #d97706;
-  --color-gold: #e5a93c;
-  --color-gold-light: #fef3c7;
-  --color-dark-bg: #071922;
-  --color-dark-card: #0d2731;
-  --color-neutral: #475569;
-  --color-background: #f8fafc;
-  --color-surface: #ffffff;
-  --color-text: #0f172a;
-  --color-text-muted: #64748b;
-  --color-muted: #64748b;
-  --color-border: #e2e8f0;
-  --color-border-subtle: #f1f5f9;
-  --color-danger: #dc2626;
-  --color-success: #059669;
+
+  /* Typography */
+  --font-display: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-ui: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, Menlo, monospace;
+  font-family: var(--font-ui);
+
+  /* Color Palette — Drawn directly from Homepage */
+  --color-background: #F4F1EA;
+  --color-surface: #FFFFFF;
+  --color-surface-be: #EFEBE2;
+  --color-surface-be-hover: #EAE5DC;
+
+  /* Borders */
+  --color-border: #D8D2C6;
+  --color-border-subtle: #E5E0D6;
+  --color-border-strong: #B5ADA0;
+
+  /* Text Colors */
+  --color-text: #1A1A17;
+  --color-text-muted: #595750;
+  --color-text-subtle: #736F66;
+  --color-muted: #595750;
+
+  /* Brand Colors */
+  --color-primary: #16382C;
+  --color-primary-dark: #0E241C;
+  --color-primary-light: #244C3D;
+  --color-primary-contrast: #FFFFFF;
+
+  /* Accent Colors (Cam đất — chỉ dùng cho nút chính nổi bật và điểm nhấn) */
+  --color-accent: #D9622B;
+  --color-accent-hover: #BF4F1C;
+  --color-accent-light: #FCEFE9;
+  --color-accent-contrast: #FFFFFF;
+
+  /* Secondary (Be - Dải thông tin, nút phụ) */
+  --color-secondary: #EFEBE2;
+  --color-secondary-hover: #EAE5DC;
+  --color-secondary-text: #16382C;
+  --color-secondary-border: #D8D2C6;
+
+  /* Status Colors */
+  --color-success: #0F5132;
+  --color-success-bg: #D1E7DD;
+  --color-success-border: #BADBCC;
+
+  --color-warning: #664D03;
+  --color-warning-bg: #FFF3CD;
+  --color-warning-border: #FFECB5;
+
+  --color-danger: #842029;
+  --color-danger-bg: #F8D7DA;
+  --color-danger-border: #F5C2C7;
+
+  --color-info: #084298;
+  --color-info-bg: #CFE2FF;
+  --color-info-border: #B6D4FE;
+
+  /* Spacing Scale */
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
-  --space-5: 1.5rem;
-  --space-6: 2rem;
-  --space-7: 2.5rem;
-  --radius-sm: 0.5rem;
-  --radius-md: 0.75rem;
-  --radius-lg: 1.125rem;
-  --radius-xl: 1.5rem;
-  --radius-2xl: 2rem;
-  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
-  --shadow-card: 0 12px 36px -8px rgb(7 25 34 / 0.09), 0 4px 12px -2px rgb(7 25 34 / 0.04);
-  --shadow-card-hover: 0 20px 45px -10px rgb(7 25 34 / 0.15), 0 8px 16px -4px rgb(7 25 34 / 0.06);
-  --shadow-floating: 0 24px 60px -12px rgb(7 25 34 / 0.22);
-  --focus-ring: 0 0 0 3px rgb(13 148 136 / 25%);
-  --content-width: 78rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 2.5rem;
+  --space-9: 3rem;
+  --space-10: 4rem;
+
+  /* Radii — Bo góc nhỏ, sắc cạnh, tối giản */
+  --radius-xs: 2px;
+  --radius-sm: 3px;
+  --radius-md: 4px;
+  --radius-lg: 6px;
+  --radius-full: 9999px;
+  --button-radius: 4px;
+  --control-radius: 4px;
+  --surface-radius: 6px;
+
+  /* Shadows — Rất nhẹ hoặc phẳng */
+  --shadow-none: none;
+  --shadow-sm: 0 1px 3px rgba(26, 26, 23, 0.04);
+  --shadow-card: 0 4px 16px rgba(26, 26, 23, 0.05);
+  --shadow-floating: 0 8px 24px rgba(26, 26, 23, 0.08);
+
+  /* Layout Boundaries */
   --content-max: 78rem;
-  --page-gutter: 1.5rem;
+  --content-width: min(100% - 2.5rem, 78rem);
+  --page-gutter: 1.25rem;
   --control-height: 2.85rem;
-  --button-radius: 0.6rem;
-  --surface-radius: 1rem;
-  --section-gap: 1.75rem;
-  --breakpoint-tablet: 48rem;
-  --breakpoint-desktop: 64rem;
-  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+
+  /* Focus Ring */
+  --focus-ring: 0 0 0 2px #FFFFFF, 0 0 0 4px #16382C;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 250ms ease;
 }

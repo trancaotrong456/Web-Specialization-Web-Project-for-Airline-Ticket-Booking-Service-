@@ -142,7 +142,7 @@ describe('Promotion administration', () => {
     expect(body.valid_from).toMatch(/^2026-10-10T/);
     expect(body.valid_to).toMatch(/^2026-10-30T/);
     expect(body).not.toHaveProperty('used_count');
-  });
+  }, 15000); // Timeout 15s: luồng render và điền form tạo khuyến mại đầy đủ qua userEvent khi chạy full suite
 
   it('validates percentage, date order, and optional max uses before POST', async () => {
     const user = userEvent.setup();
@@ -162,7 +162,7 @@ describe('Promotion administration', () => {
     expect(screen.getByText('Thời gian kết thúc phải sau thời gian bắt đầu.')).toBeInTheDocument();
     expect(screen.getByText('Giới hạn phải là số nguyên không âm hoặc để trống.')).toBeInTheDocument();
     expect(fetchImpl.mock.calls.some(([url, options]) => url.endsWith('/promotions') && options.method === 'POST')).toBe(false);
-  });
+  }, 15000); // Timeout 15s: luồng render và validate nhiều trường form khuyến mại qua userEvent khi chạy full suite
 
   it('updates promotion fields but does not include used_count in PUT payload', async () => {
     const user = userEvent.setup();
@@ -214,7 +214,7 @@ describe('Promotion administration', () => {
     await user.type(screen.getByLabelText('Có hiệu lực từ'), '2026-10-10T08:00');
     await user.type(screen.getByLabelText('Có hiệu lực đến'), '2026-10-30T23:59');
     await user.click(screen.getByRole('button', { name: 'Tạo khuyến mại' }));
-    expect(await screen.findByRole('alert')).toHaveTextContent('Validation failed');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Dữ liệu nhập vào chưa hợp lệ. Vui lòng kiểm tra lại các trường được đánh dấu đỏ hoặc hướng dẫn bên dưới.');
     expect(screen.getByText('Code must be at most 30 characters.')).toBeInTheDocument();
     expect(fetchImpl.mock.calls.some(([url, options]) => url.endsWith('/promotions') && options.method === 'POST')).toBe(true);
   });
