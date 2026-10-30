@@ -11088,17 +11088,18 @@ code,
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   SEARCH SUMMARY HEADER STRIP & BOOKING SUMMARY SIDEBAR (VIETJET-INSPIRED)
+   SERENE FLIGHTWAYS THEME — SEARCH SUMMARY BANNER, JOURNEY BAR & SIDEBAR
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Search Summary Header Banner ── */
+/* ── 1. Search Summary Header Banner (Serene Brand Teal & Amber) ── */
 .search-summary-banner {
-  background: linear-gradient(135deg, #f59e0b 0%, #ea580c 100%) !important;
+  background: linear-gradient(135deg, #073533 0%, #0a4946 50%, #0f6b66 100%) !important;
   color: #ffffff !important;
   border-radius: 0.85rem !important;
   padding: 1.15rem 1.6rem !important;
   margin-bottom: 1.5rem !important;
-  box-shadow: 0 8px 24px rgba(234, 88, 12, 0.22) !important;
+  box-shadow: 0 10px 28px rgba(10, 73, 70, 0.22) !important;
+  border: 1px solid rgba(162, 241, 234, 0.2) !important;
   position: relative !important;
   overflow: hidden !important;
 }
@@ -11106,11 +11107,11 @@ code,
 .search-summary-banner::before {
   content: '';
   position: absolute;
-  top: -40px;
-  right: -40px;
-  width: 140px;
-  height: 140px;
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.25) 0%, transparent 70%);
+  top: -50px;
+  right: -50px;
+  width: 160px;
+  height: 160px;
+  background: radial-gradient(circle, rgba(162, 241, 234, 0.18) 0%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
 }
@@ -11141,15 +11142,18 @@ code,
   font-weight: 800 !important;
   letter-spacing: 0.05em !important;
   text-transform: uppercase !important;
-  background: rgba(0, 0, 0, 0.15) !important;
+  background: rgba(0, 0, 0, 0.3) !important;
+  color: #feb64e !important;
   padding: 0.25rem 0.65rem !important;
   border-radius: 0.35rem !important;
   font-size: 0.82rem !important;
+  border: 1px solid rgba(254, 182, 78, 0.4) !important;
 }
 
 .search-summary-divider {
-  opacity: 0.6 !important;
+  opacity: 0.45 !important;
   font-weight: 300 !important;
+  color: #a2f1ea !important;
 }
 
 .search-summary-passenger-tag {
@@ -11157,9 +11161,11 @@ code,
   align-items: center !important;
   gap: 0.4rem !important;
   font-weight: 700 !important;
-  background: rgba(255, 255, 255, 0.2) !important;
+  background: rgba(255, 255, 255, 0.12) !important;
+  color: #ffffff !important;
   padding: 0.25rem 0.65rem !important;
   border-radius: 0.35rem !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
   backdrop-filter: blur(4px) !important;
 }
 
@@ -11182,17 +11188,18 @@ code,
 }
 
 .summary-point-dot.origin {
-  color: #ef4444 !important;
-  text-shadow: 0 0 8px rgba(255, 255, 255, 0.6) !important;
+  color: #feb64e !important;
+  text-shadow: 0 0 10px rgba(254, 182, 78, 0.5) !important;
 }
 
 .summary-point-dot.destination {
   font-size: 1rem !important;
+  color: #feb64e !important;
 }
 
 .summary-point-label {
   font-size: 0.82rem !important;
-  opacity: 0.9 !important;
+  color: rgba(255, 255, 255, 0.8) !important;
   font-weight: 500 !important;
 }
 
@@ -11200,11 +11207,13 @@ code,
   font-size: 1.05rem !important;
   font-weight: 800 !important;
   letter-spacing: -0.01em !important;
+  color: #ffffff !important;
 }
 
 .summary-iata-tag {
   font-weight: 900 !important;
   letter-spacing: 0.05em !important;
+  color: #a2f1ea !important;
 }
 
 .search-summary-direction {
@@ -11220,11 +11229,11 @@ code,
   width: 1.85rem !important;
   height: 1.85rem !important;
   background: #ffffff !important;
-  color: #ea580c !important;
+  color: #0a4946 !important;
   border-radius: 50% !important;
   font-weight: 900 !important;
   font-size: 0.95rem !important;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18) !important;
 }
 
 .search-summary-dates {
@@ -11233,7 +11242,9 @@ code,
   gap: 0.4rem !important;
   font-size: 0.85rem !important;
   font-weight: 600 !important;
-  background: rgba(0, 0, 0, 0.15) !important;
+  background: rgba(0, 0, 0, 0.25) !important;
+  color: #eaf1ff !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
   padding: 0.3rem 0.75rem !important;
   border-radius: 0.35rem !important;
   margin-left: 0.25rem !important;
@@ -11266,29 +11277,31 @@ code,
   width: 2.25rem !important;
   height: 2.25rem !important;
   border-radius: 50% !important;
-  background: rgba(255, 255, 255, 0.25) !important;
-  color: #ffffff !important;
+  background: rgba(255, 255, 255, 0.15) !important;
+  color: #eaf1ff !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
   transition: all 0.2s ease !important;
 }
 
 .search-summary-steps .step-badge.is-active .step-circle {
-  background: #10b981 !important;
+  background: #e8a33d !important;
   color: #ffffff !important;
-  box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.8), 0 4px 10px rgba(16, 185, 129, 0.4) !important;
+  border-color: #feb64e !important;
+  box-shadow: 0 0 0 3px rgba(254, 182, 78, 0.45), 0 4px 12px rgba(232, 163, 61, 0.4) !important;
   transform: scale(1.08) !important;
 }
 
 .search-summary-steps .step-text {
   font-size: 0.72rem !important;
   font-weight: 700 !important;
-  opacity: 0.9 !important;
+  color: rgba(255, 255, 255, 0.8) !important;
   white-space: nowrap !important;
 }
 
 .search-summary-steps .step-badge.is-active .step-text {
-  opacity: 1 !important;
+  color: #feb64e !important;
   font-weight: 800 !important;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2) !important;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.25) !important;
 }
 
 /* Nút Chỉnh sửa tìm kiếm trong Banner */
@@ -11297,21 +11310,22 @@ code,
   align-items: center !important;
   gap: 0.45rem !important;
   background: #ffffff !important;
-  color: #b45309 !important;
+  color: #0a4946 !important;
   font-weight: 800 !important;
   font-size: 0.85rem !important;
   padding: 0.55rem 1rem !important;
   border-radius: 0.5rem !important;
   text-decoration: none !important;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.12) !important;
+  border: 1px solid #a2f1ea !important;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15) !important;
   transition: all 0.2s ease !important;
 }
 
 .search-summary-edit-btn:hover {
-  background: #fef3c7 !important;
-  color: #92400e !important;
+  background: #e6f7f6 !important;
+  color: #00504c !important;
   transform: translateY(-1px) !important;
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.16) !important;
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* ── 2. Results 2-Column Layout ── */
@@ -11331,12 +11345,12 @@ code,
   min-width: 0 !important;
 }
 
-/* ── 3. Booking Summary Sidebar Widget ── */
+/* ── 3. Booking Summary Sidebar Widget (Serene Flightways Teal & Gold) ── */
 .booking-summary-widget {
   background: #ffffff !important;
   border: 1px solid #e2e8f0 !important;
   border-radius: 0.75rem !important;
-  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08) !important;
+  box-shadow: 0 8px 24px rgba(10, 73, 70, 0.08) !important;
   overflow: hidden !important;
   position: sticky !important;
   top: 5.5rem !important;
@@ -11344,17 +11358,18 @@ code,
 }
 
 .booking-summary-header {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  background: linear-gradient(135deg, #073533 0%, #0a4946 60%, #0f6b66 100%) !important;
   padding: 0.85rem 1.25rem !important;
   text-align: center !important;
+  border-bottom: 2.5px solid #e8a33d !important;
 }
 
 .booking-summary-title {
   margin: 0 !important;
   color: #ffffff !important;
-  font-size: 1rem !important;
+  font-size: 0.95rem !important;
   font-weight: 800 !important;
-  letter-spacing: 0.05em !important;
+  letter-spacing: 0.06em !important;
   text-transform: uppercase !important;
 }
 
@@ -11367,17 +11382,17 @@ code,
 
 /* Hộp thông tin hành khách */
 .summary-passenger-box {
-  background: #f1f5f9 !important;
+  background: #f0fdfa !important;
   border-radius: 0.5rem !important;
   padding: 0.75rem 1rem !important;
-  border: 1px solid #e2e8f0 !important;
+  border: 1px solid #ccfbf1 !important;
 }
 
 .summary-box-label {
   display: block !important;
   font-size: 0.78rem !important;
   font-weight: 600 !important;
-  color: #64748b !important;
+  color: #0f6b66 !important;
   margin-bottom: 0.35rem !important;
   text-transform: uppercase !important;
   letter-spacing: 0.02em !important;
@@ -11396,7 +11411,7 @@ code,
 }
 
 .summary-icon {
-  color: #0284c7 !important;
+  color: #0f6b66 !important;
 }
 
 /* Hộp chặng bay */
@@ -11410,8 +11425,8 @@ code,
 
 .summary-leg-card.is-current {
   background: #f0fdfa !important;
-  border-color: #0d9488 !important;
-  border-left: 4px solid #0d9488 !important;
+  border-color: #0f6b66 !important;
+  border-left: 4px solid #0f6b66 !important;
 }
 
 .summary-leg-header {
@@ -11423,14 +11438,10 @@ code,
 
 .summary-leg-name {
   font-weight: 800 !important;
-  color: #0284c7 !important;
+  color: #0f6b66 !important;
   font-size: 0.88rem !important;
   text-transform: uppercase !important;
   letter-spacing: 0.02em !important;
-}
-
-.summary-leg-card.is-current .summary-leg-name {
-  color: #0d9488 !important;
 }
 
 .summary-leg-date {
@@ -11450,17 +11461,13 @@ code,
 }
 
 .summary-leg-arrow {
-  color: #0284c7 !important;
+  color: #0f6b66 !important;
   font-size: 0.85rem !important;
-}
-
-.summary-leg-card.is-current .summary-leg-arrow {
-  color: #0d9488 !important;
 }
 
 .summary-leg-details {
   background: #ffffff !important;
-  border: 1px dashed #cbd5e1 !important;
+  border: 1px dashed #99f6e4 !important;
   border-radius: 0.35rem !important;
   padding: 0.5rem 0.75rem !important;
   margin-bottom: 0.65rem !important;
@@ -11475,7 +11482,7 @@ code,
 }
 
 .summary-flight-time {
-  color: #0f172a !important;
+  color: #0a4946 !important;
   font-weight: 800 !important;
 }
 
@@ -11488,7 +11495,7 @@ code,
 .summary-fare-badge {
   margin-top: 0.35rem !important;
   font-size: 0.78rem !important;
-  color: #0d9488 !important;
+  color: #0f6b66 !important;
 }
 
 .summary-fare-badge strong {
@@ -11544,9 +11551,9 @@ code,
   font-size: 0.75rem !important;
 }
 
-/* Hộp tổng tiền đỏ */
+/* Hộp tổng tiền Teal & Amber */
 .summary-total-strip {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%) !important;
+  background: linear-gradient(135deg, #073533 0%, #0a4946 100%) !important;
   color: #ffffff !important;
   border-radius: 0.5rem !important;
   padding: 0.85rem 1.15rem !important;
@@ -11554,7 +11561,8 @@ code,
   align-items: center !important;
   justify-content: space-between !important;
   margin-top: 0.45rem !important;
-  box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25) !important;
+  box-shadow: 0 4px 16px rgba(10, 73, 70, 0.25) !important;
+  border: 1px solid rgba(254, 182, 78, 0.3) !important;
 }
 
 .summary-total-strip span {
@@ -11568,11 +11576,13 @@ code,
   font-size: 1.25rem !important;
   font-weight: 900 !important;
   letter-spacing: -0.01em !important;
+  color: #feb64e !important;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3) !important;
 }
 
-/* Nút Đi tiếp vàng cam */
+/* Nút Đi tiếp Amber của Serene */
 .summary-continue-btn {
-  background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%) !important;
+  background: linear-gradient(135deg, #e8a33d 0%, #d97706 100%) !important;
   color: #ffffff !important;
   border: none !important;
   width: 100% !important;
@@ -11582,14 +11592,14 @@ code,
   font-weight: 800 !important;
   letter-spacing: 0.02em !important;
   cursor: pointer !important;
-  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35) !important;
+  box-shadow: 0 4px 14px rgba(232, 163, 61, 0.35) !important;
   transition: all 0.2s ease !important;
   text-align: center !important;
 }
 
 .summary-continue-btn:hover:not(:disabled) {
-  background: linear-gradient(135deg, #d97706 0%, #ea580c 100%) !important;
-  box-shadow: 0 6px 18px rgba(245, 158, 11, 0.45) !important;
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%) !important;
+  box-shadow: 0 6px 18px rgba(232, 163, 61, 0.45) !important;
   transform: translateY(-1px) !important;
 }
 
@@ -11598,6 +11608,105 @@ code,
   cursor: not-allowed !important;
   box-shadow: none !important;
   filter: grayscale(40%) !important;
+}
+
+/* ── 4. Advanced Flight Filters Enhancements ── */
+.advanced-flight-filters {
+  border: 1px solid #cce3e1 !important;
+  border-left: 4px solid #0f6b66 !important;
+  border-radius: 0.75rem !important;
+  box-shadow: 0 4px 16px rgba(10, 73, 70, 0.05) !important;
+}
+
+.advanced-filter-journey-bar {
+  background: linear-gradient(90deg, #f0fdfa 0%, #e6f7f6 100%) !important;
+  border: 1px solid #99f6e4 !important;
+  border-radius: 0.55rem !important;
+  padding: 0.65rem 1rem !important;
+  margin-bottom: 1.15rem !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  flex-wrap: wrap !important;
+  gap: 0.75rem !important;
+}
+
+.journey-bar-route {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  font-size: 0.95rem !important;
+  color: #0a4946 !important;
+}
+
+.journey-bar-dot {
+  font-size: 1.1rem !important;
+  line-height: 1 !important;
+}
+
+.journey-bar-dot.origin,
+.journey-bar-dot.destination {
+  color: #e8a33d !important;
+}
+
+.journey-bar-place strong {
+  font-weight: 800 !important;
+  color: #0a4946 !important;
+}
+
+.journey-bar-place small {
+  margin-left: 0.25rem !important;
+  color: #0f6b66 !important;
+  font-weight: 700 !important;
+}
+
+.journey-bar-arrow {
+  color: #0f6b66 !important;
+  font-size: 1.05rem !important;
+  font-weight: 900 !important;
+}
+
+.journey-bar-meta {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.45rem !important;
+  flex-wrap: wrap !important;
+}
+
+.journey-meta-item {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.35rem !important;
+  background: #ffffff !important;
+  border: 1px solid #99f6e4 !important;
+  color: #0f6b66 !important;
+  font-size: 0.8rem !important;
+  font-weight: 600 !important;
+  padding: 0.25rem 0.65rem !important;
+  border-radius: 0.35rem !important;
+}
+
+.journey-meta-item.is-airline {
+  background: #0f6b66 !important;
+  color: #ffffff !important;
+  border-color: #0f6b66 !important;
+}
+
+.advanced-filter-grid input:focus,
+.advanced-filter-grid select:focus {
+  border-color: #0f6b66 !important;
+  box-shadow: 0 0 0 2px rgba(15, 107, 102, 0.15) !important;
+}
+
+.advanced-filter-actions .button-primary {
+  background: #0f6b66 !important;
+  border-color: #0f6b66 !important;
+  color: #ffffff !important;
+}
+
+.advanced-filter-actions .button-primary:hover {
+  background: #0a4946 !important;
+  border-color: #0a4946 !important;
 }
 
 /* ── Responsive Mobile ── */
@@ -11630,5 +11739,10 @@ code,
 
   .search-summary-steps {
     display: none !important;
+  }
+
+  .advanced-filter-journey-bar {
+    flex-direction: column !important;
+    align-items: flex-start !important;
   }
 }

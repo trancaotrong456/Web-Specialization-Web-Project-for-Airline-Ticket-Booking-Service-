@@ -1018,7 +1018,19 @@ export function FlightResultsPage() {
 
         {tripMode ? (
           <>
-            <AdvancedFlightFilters api={api} values={values} onApply={applyFilters} onClear={clearFilter} onReset={resetFilters} />
+            <AdvancedFlightFilters
+              api={api}
+              values={values}
+              onApply={applyFilters}
+              onClear={clearFilter}
+              onReset={resetFilters}
+              departureAirport={departureAirport}
+              arrivalAirport={arrivalAirport}
+              departureDate={bannerDepartureDate}
+              returnDate={bannerReturnDate}
+              passengerCount={passengerCount}
+              tripType={tripType}
+            />
             <TripFlightResults
               api={api}
               tripType={tripType}
@@ -1034,7 +1046,21 @@ export function FlightResultsPage() {
           </>
         ) : (
           <>
-            {valid ? <AdvancedFlightFilters api={api} values={values} onApply={applyFilters} onClear={clearFilter} onReset={resetFilters} /> : null}
+            {valid ? (
+              <AdvancedFlightFilters
+                api={api}
+                values={values}
+                onApply={applyFilters}
+                onClear={clearFilter}
+                onReset={resetFilters}
+                departureAirport={departureAirport}
+                arrivalAirport={arrivalAirport}
+                departureDate={bannerDepartureDate}
+                returnDate={bannerReturnDate}
+                passengerCount={values.min_seats}
+                tripType="one_way"
+              />
+            ) : null}
 
             <div className="results-layout-grid">
               <div className="results-main-col">

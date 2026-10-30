@@ -32,7 +32,19 @@ const SORT_OPTIONS = [
 const draftFrom = (values) => Object.fromEntries(FILTER_FIELDS.map(([key]) => [key, values[key] || (key === 'sort_by' ? 'departure_earliest' : '')]));
 const hasValue = (key, value) => value && !(key === 'sort_by' && value === 'departure_earliest');
 
-export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }) {
+export function AdvancedFlightFilters({
+  api,
+  values,
+  onApply,
+  onClear,
+  onReset,
+  departureAirport,
+  arrivalAirport,
+  departureDate,
+  returnDate,
+  passengerCount,
+  tripType,
+}) {
   const [draft, setDraft] = useState(() => draftFrom(values));
   const [airlines, setAirlines] = useState([]);
 
@@ -49,6 +61,10 @@ export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }
   const setField = (key, value) => setDraft((current) => ({ ...current, [key]: value }));
   const activeFilters = FILTER_FIELDS.filter(([key]) => hasValue(key, values[key]));
 
+  const selectedAirlineName = airlines.find((a) => String(a.id) === String(draft.airline_id))?.name;
+  const originText = departureAirport?.city || departureAirport?.name || departureAirport?.iata_code;
+  const destText = arrivalAirport?.city || arrivalAirport?.name || arrivalAirport?.iata_code;
+
   return <section className="advanced-flight-filters surface-card" aria-labelledby="advanced-filter-heading">
     <div className="advanced-filter-heading">
       <div>
@@ -60,6 +76,45 @@ export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }
       </div>
       <span>Giờ bay theo múi giờ Việt Nam (UTC+7)</span>
     </div>
+
+    {/* Thanh tóm tắt thông tin chuyến bay đang lọc (giúp bộ lọc không bị trống) */}
+    {(originText || destText) ? (
+      <div className="advanced-filter-journey-bar" aria-label="Thông tin tìm kiếm hiện tại">
+        <div className="journey-bar-route">
+          <span className="journey-bar-dot origin" aria-hidden="true">◉</span>
+          <span className="journey-bar-place">
+            <strong>{originText || 'Điểm đi'}</strong>
+            {departureAirport?.iata_code ? <small>({departureAirport.iata_code})</small> : null}
+          </span>
+          <span className="journey-bar-arrow" aria-hidden="true">
+            {tripType === 'round_trip' ? '⇄' : '➔'}
+          </span>
+          <span className="journey-bar-dot destination" aria-hidden="true">📍</span>
+          <span className="journey-bar-place">
+            <strong>{destText || 'Điểm đến'}</strong>
+            {arrivalAirport?.iata_code ? <small>({arrivalAirport.iata_code})</small> : null}
+          </span>
+        </div>
+        <div className="journey-bar-meta">
+          {departureDate ? (
+            <span className="journey-meta-item">
+              <Clock size={13} aria-hidden="true" />
+              <span>{departureDate}{returnDate ? ` – ${returnDate}` : ''}</span>
+            </span>
+          ) : null}
+          {passengerCount ? (
+            <span className="journey-meta-item">
+              <span>{passengerCount} Hành khách</span>
+            </span>
+          ) : null}
+          <span className="journey-meta-item is-airline">
+            <Plane size={13} aria-hidden="true" />
+            <span>{selectedAirlineName || 'Tất cả hãng bay'}</span>
+          </span>
+        </div>
+      </div>
+    ) : null}
+
     <form className="advanced-filter-grid" onSubmit={(event) => { event.preventDefault(); onApply(draft); }}>
       <label>Hãng hàng không
         <div className="field-input-wrap has-prefix-icon">
@@ -85,7 +140,7 @@ export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }
           <span className="field-prefix-icon" aria-hidden="true">
             <Coins size={16} />
           </span>
-          <input aria-label="Giá thấp nhất" type="number" min="0" step="1" value={draft.min_price} onChange={(event) => setField('min_price', event.target.value)} />
+          <input aria-label="Giá thấp nhất" type="number" min="0" step="1" placeholder="VD: 500.000" value={draft.min_price} onChange={(event) => setField('min_price', event.target.value)} />
         </div>
       </label>
       <label>Giá cao nhất (₫)
@@ -93,7 +148,7 @@ export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }
           <span className="field-prefix-icon" aria-hidden="true">
             <Coins size={16} />
           </span>
-          <input aria-label="Giá cao nhất" type="number" min="0" step="1" value={draft.max_price} onChange={(event) => setField('max_price', event.target.value)} />
+          <input aria-label="Giá cao nhất" type="number" min="0" step="1" placeholder="VD: 5.000.000" value={draft.max_price} onChange={(event) => setField('max_price', event.target.value)} />
         </div>
       </label>
       <label>Khởi hành từ
@@ -133,7 +188,7 @@ export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }
           <span className="field-prefix-icon" aria-hidden="true">
             <Hourglass size={16} />
           </span>
-          <input aria-label="Thời lượng tối thiểu" type="number" min="1" max="1440" step="1" value={draft.min_duration_minutes} onChange={(event) => setField('min_duration_minutes', event.target.value)} />
+          <input aria-label="Thời lượng tối thiểu" type="number" min="1" max="1440" step="1" placeholder="VD: 60 (phút)" value={draft.min_duration_minutes} onChange={(event) => setField('min_duration_minutes', event.target.value)} />
         </div>
       </label>
       <label>Thời lượng đến (phút)
@@ -141,7 +196,7 @@ export function AdvancedFlightFilters({ api, values, onApply, onClear, onReset }
           <span className="field-prefix-icon" aria-hidden="true">
             <Hourglass size={16} />
           </span>
-          <input aria-label="Thời lượng tối đa" type="number" min="1" max="1440" step="1" value={draft.max_duration_minutes} onChange={(event) => setField('max_duration_minutes', event.target.value)} />
+          <input aria-label="Thời lượng tối đa" type="number" min="1" max="1440" step="1" placeholder="VD: 240 (phút)" value={draft.max_duration_minutes} onChange={(event) => setField('max_duration_minutes', event.target.value)} />
         </div>
       </label>
       <label className="advanced-filter-sort">Sắp xếp
