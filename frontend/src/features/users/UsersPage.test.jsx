@@ -88,7 +88,7 @@ describe('admin users list', () => {
 
     await user.type(screen.getByLabelText('Tìm kiếm người dùng'), 'an@example.com');
     await waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url.includes('search=an%40example.com') && url.includes('page=1'))).toBe(true), { timeout: 1500 });
-    await user.selectOptions(screen.getByLabelText('Trạng thái'), 'locked');
+    await user.selectOptions(await screen.findByLabelText('Trạng thái'), 'locked');
     await waitFor(() => expect(fetchImpl.mock.calls.some(([url]) => url.includes('status=locked') && url.includes('page=1'))).toBe(true));
   });
 

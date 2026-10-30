@@ -519,7 +519,7 @@ export function HomePage({ forcedTripType }) {
                                   onChange={(event) => updateLeg(leg.id, { date: event.target.value })}
                                 />
                               </div>
-                              <small>{formatWeekday(leg.date) || (index ? 'Sau ngày chặng trước' : 'Chọn ngày khởi hành')}</small>
+                              <small className="field-date-hint">{formatWeekday(leg.date) || (index ? 'Sau ngày chặng trước' : 'Chọn ngày khởi hành')}</small>
                             </label>
                           </div>
                         </div>
