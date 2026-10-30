@@ -237,6 +237,17 @@ test('#39 invalid signature and amount never update state', async (t) => {
   assert.equal(f.writes.length, 0);
 });
 
+test('VNPay signed amount mismatch takes precedence over duplicate success', async (t) => {
+  const f = fixture(t, { status: 'pending_payment' });
+  f.payment.status = 'success';
+  f.booking.status = 'confirmed';
+  const result = await paymentService.handleVnpayIpn(ipn(100));
+  assert.deepEqual(result, { RspCode: '04', Message: 'Invalid amount' });
+  assert.equal(f.payment.status, 'success');
+  assert.equal(f.booking.status, 'confirmed');
+  assert.equal(f.writes.length, 0);
+});
+
 test('#39 VNPay does not confirm when transaction status is not successful', async (t) => {
   const f = fixture(t, { status: 'pending_payment' });
   await paymentService.handleVnpayIpn(ipn(180000, '00', '02'));

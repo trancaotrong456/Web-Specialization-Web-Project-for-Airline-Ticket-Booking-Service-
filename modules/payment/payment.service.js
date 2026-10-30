@@ -979,7 +979,14 @@ class PaymentService {
       return { isValidChecksum: false, isSuccess: false, message: 'VNPay is disabled' };
     }
     const secretKey = config.hashSecret;
-    const isValidChecksum = verifyVnpayChecksum(queryParams, secretKey);
+    // Browser context hints (for example booking_id) are not part of the
+    // VNPay-signed payload. Verify only the gateway namespace so a frontend
+    // lookup hint cannot invalidate an otherwise valid VNPay return.
+    const signedParams = Object.fromEntries(
+      Object.entries(queryParams || {})
+        .filter(([key]) => key.toLowerCase().startsWith('vnp_'))
+    );
+    const isValidChecksum = verifyVnpayChecksum(signedParams, secretKey);
     const isValidTmnCode = queryParams.vnp_TmnCode === config.tmnCode;
 
     const responseCode = queryParams.vnp_ResponseCode;
@@ -1024,9 +1031,9 @@ class PaymentService {
    * Đúng thứ tự 6 bước theo đặc tả sandbox VNPay:
    * Bước 1: Checksum -> RspCode '97'
    * Bước 2: Tìm payment & booking -> RspCode '01'
-   * Bước 3: Idempotent (payment.status === 'success') -> RspCode '02'
-   * Bước 4: Check booking status (status === 'pending_payment') -> RspCode '02'
-   * Bước 5: So sánh amount -> RspCode '04'
+   * Bước 3: So sánh amount -> RspCode '04'
+   * Bước 4: Idempotent (payment.status === 'success') -> RspCode '02'
+   * Bước 5: Check booking status (status === 'pending_payment') -> RspCode '02'
    * Bước 6: Update DB trong transaction có row-level lock -> RspCode '00'
    */
   async handleVnpayIpn(queryParams) {
@@ -1082,7 +1089,14 @@ class PaymentService {
       return { RspCode: '01', Message: 'Order not found' };
     }
 
-    // BƯỚC 3: Kiểm tra Idempotent (nếu payment đã thành công trước đó)
+    // BƯỚC 3: Đối chiếu số tiền trước trạng thái idempotent. Một IPN
+    // đã ký nhưng sai amount phải trả 04, kể cả payment đã success.
+    if (Math.round(Number(payment.amount)) !== Math.round(vnpAmount)) {
+      console.warn(`[VNPay IPN] Amount mismatch: Expected ${payment.amount}, received ${vnpAmount}`);
+      return { RspCode: '04', Message: 'Invalid amount' };
+    }
+
+    // BƯỚC 4: Kiểm tra Idempotent (nếu payment đã thành công trước đó)
     if (payment.status === 'success') {
       console.log(`[VNPay IPN] Payment ${txnRef} already processed successfully (Idempotent call).`);
       return { RspCode: '02', Message: 'Order already confirmed' };
@@ -1098,12 +1112,6 @@ class PaymentService {
     if (payment.booking.status !== 'pending_payment' && !isRecordableLateSuccess) {
       console.warn(`[VNPay IPN] Invalid booking status: ${payment.booking.status}`);
       return { RspCode: '02', Message: 'Order already updated or invalid state' };
-    }
-
-    // BƯỚC 5: Đối chiếu số tiền thanh toán (Amount)
-    if (Math.round(Number(payment.amount)) !== Math.round(vnpAmount)) {
-      console.warn(`[VNPay IPN] Amount mismatch: Expected ${payment.amount}, received ${vnpAmount}`);
-      return { RspCode: '04', Message: 'Invalid amount' };
     }
 
     let bookingIdToEmail = null;
