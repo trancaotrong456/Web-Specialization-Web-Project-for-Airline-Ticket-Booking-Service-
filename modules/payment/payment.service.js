@@ -1037,6 +1037,25 @@ class PaymentService {
     // BƯỚC 1: Verify Checksum
     const isChecksumValid = verifyVnpayChecksum(queryParams, secretKey);
     if (!isChecksumValid) {
+      if (process.env.NODE_ENV === 'test') {
+        const vnpayFields = Object.keys(queryParams || {})
+          .filter((key) => key.toLowerCase().startsWith('vnp_'))
+          .sort();
+        const fieldTypes = {};
+        for (const key of ['vnp_TmnCode', 'vnp_TxnRef', 'vnp_Amount', 'vnp_ResponseCode', 'vnp_SecureHash']) {
+          if (Object.prototype.hasOwnProperty.call(queryParams || {}, key)) fieldTypes[key] = typeof queryParams[key];
+        }
+        console.warn('[VNPay IPN] Checksum diagnostics (test only):', {
+          receivedAt: new Date().toISOString(),
+          vnpayFields,
+          tmnCodeMatches: queryParams?.vnp_TmnCode === config.tmnCode,
+          txnRef: queryParams?.vnp_TxnRef || null,
+          amount: queryParams?.vnp_Amount || null,
+          responseCode: queryParams?.vnp_ResponseCode || null,
+          fieldTypes,
+          secureHashPresent: Boolean(queryParams?.vnp_SecureHash || queryParams?.vnp_securehash),
+        });
+      }
       console.warn('[VNPay IPN] Invalid checksum received:', {
         txnRef: queryParams.vnp_TxnRef || null,
         receivedAt: new Date().toISOString(),
