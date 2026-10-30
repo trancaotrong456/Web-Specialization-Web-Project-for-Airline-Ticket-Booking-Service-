@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
+import { AppFooter } from '../../components/AppFooter';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Field } from '../../components/Field';
 import { LoadingView } from '../../components/LoadingView';
@@ -36,7 +37,7 @@ const readPaymentContext = (values = []) => {
   return {};
 };
 
-function PaymentShell({ children }) { return <div className="public-page booking-page"><AppHeader /><main className="booking-main">{children}</main><footer className="site-footer"><span>Serene Flightways</span><span>Thanh toán được xác nhận từ trạng thái hệ thống.</span></footer></div>; }
+function PaymentShell({ children }) { return <div className="public-page booking-page"><AppHeader /><main className="booking-main">{children}</main><AppFooter note="Thanh toán được xác nhận từ trạng thái hệ thống." /></div>; }
 function Heading({ eyebrow = 'THANH TOÁN', title, description, actions }) { return <header className="booking-heading"><div><span className="eyebrow">{eyebrow}</span><h1>{title}</h1>{description ? <p>{description}</p> : null}</div>{actions ? <div className="booking-heading-actions">{actions}</div> : null}</header>; }
 const errorText = (error, fallback) => error?.message || fallback;
 

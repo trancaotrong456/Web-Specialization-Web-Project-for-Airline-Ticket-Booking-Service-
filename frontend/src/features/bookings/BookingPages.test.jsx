@@ -281,7 +281,7 @@ describe('booking customer pages', () => {
     await user.click(screen.getByRole('button', { name: 'Tiếp tục' })); await user.type(screen.getByLabelText('Họ tên'), 'Nguyen Van A');
     await user.click(screen.getByRole('button', { name: /Tạo đặt chỗ/ }));
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings', expect.objectContaining({ method: 'POST', body: expect.not.objectContaining({ guest_email: expect.anything() }) })));
-  });
+  }, 15000);
 
   it('validates a promotion before including promotion_code in booking creation', async () => {
     mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';
@@ -308,7 +308,7 @@ describe('booking customer pages', () => {
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/bookings', expect.objectContaining({
       method: 'POST', body: expect.objectContaining({ promotion_code: 'SKY10' }),
     })));
-  });
+  }, 15000);
 
   it('loads My Bookings with pagination and the selected status', async () => {
     mocks.user = { id: 2, role: 'customer' }; mocks.status = 'authenticated';

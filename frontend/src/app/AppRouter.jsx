@@ -14,6 +14,7 @@ import { UserDetailPage } from '../features/users/UserDetailPage';
 import { RolesPage } from '../features/roles/RolesPage';
 import { RoleDetailPage } from '../features/roles/RoleDetailPage';
 import { HomePage } from '../features/flights/HomePage';
+import { MultiCitySearchPage } from '../features/flights/MultiCitySearchPage';
 import { FlightResultsPage } from '../features/flights/FlightResultsPage';
 import {
   FareClassDetailPage,
@@ -67,6 +68,8 @@ export function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<HomePage />} />
+      <Route path="/flights/multi-city" element={<MultiCitySearchPage />} />
+      <Route path="/multi-city" element={<MultiCitySearchPage />} />
       <Route path="/flights/search" element={<FlightResultsPage />} />
       <Route path="/bookings/new" element={<BookingCreatePage />} />
       <Route path="/bookings/lookup" element={<BookingLookupPage />} />

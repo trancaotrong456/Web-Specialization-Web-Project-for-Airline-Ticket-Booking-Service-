@@ -27,7 +27,13 @@ const isJsonBody = (body) => body
   && !(body instanceof Blob);
 
 const parseResponse = async (response, responseType) => {
-  if (responseType === 'blob' && response.ok) return response.blob();
+  if (responseType === 'blob' && response.ok) {
+    const blob = await response.blob();
+    if (blob && typeof blob.arrayBuffer !== 'function') {
+      blob.arrayBuffer = () => (response.arrayBuffer ? response.arrayBuffer() : Promise.resolve(new ArrayBuffer(0)));
+    }
+    return blob;
+  }
   const contentType = response.headers.get('content-type') || '';
   if (response.status === 204) return null;
   if (contentType.includes('application/json')) return response.json();

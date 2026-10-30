@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
+import { AppFooter } from '../../components/AppFooter';
 import { LoadingView } from '../../components/LoadingView';
 import { Skeleton } from '../../components/Skeleton';
 import { getSocket } from '../../lib/socket';
@@ -9,6 +10,7 @@ import { createFlightDiscoveryApi } from './flightDiscoveryApi';
 import { AdvancedFlightFilters } from './AdvancedFlightFilters';
 import { formatCurrency } from '../../lib/formatters';
 import { formatVnDayOfWeek, getNearbyDates, toVnDateString } from '../../lib/dateUtils';
+import { ArrowLeft } from 'lucide-react';
 
 const pageSize = 20;
 const EMPTY_FILTER_VALUES = Object.freeze({});
@@ -583,7 +585,10 @@ export function FlightResultsPage() {
     <div className="public-page results-page">
       <AppHeader />
       <main className="results-main">
-        <Link className="back-link" to="/">← Chỉnh sửa tìm kiếm</Link>
+        <Link className="back-link" to="/">
+          <ArrowLeft size={16} aria-hidden="true" />
+          <span>Chỉnh sửa tìm kiếm</span>
+        </Link>
         {!tripMode && valid ? <AdvancedFlightFilters api={api} values={values} onApply={applyFilters} onClear={clearFilter} onReset={resetFilters} /> : null}
         {tripMode ? <>
           <AdvancedFlightFilters api={api} values={values} onApply={applyFilters} onClear={clearFilter} onReset={resetFilters} />
@@ -635,7 +640,7 @@ export function FlightResultsPage() {
         </> : null}
         </>}
       </main>
-      <footer className="site-footer"><span>Serene Flightways</span><span>Giờ bay hiển thị theo giờ Việt Nam (UTC+7).</span></footer>
+      <AppFooter note="Giờ bay hiển thị theo giờ Việt Nam (UTC+7)." />
     </div>
   );
 }

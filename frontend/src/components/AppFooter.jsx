@@ -37,14 +37,14 @@ export function AppFooter({ note }) {
             <NavLink to="/bookings/my">Đặt chỗ của tôi</NavLink>
             <NavLink to="/profile">Hồ sơ khách hàng</NavLink>
             <NavLink to="/profile/security">Bảo mật tài khoản</NavLink>
-            <span>Các chính sách và điều kiện vận chuyển đang được cập nhật.</span>
+            <span>Các chính sách và thông tin hợp tác đang được cập nhật.</span>
           </div>
         </div>
 
         <div className="footer-col app-col">
           <h4>Tra cứu hành trình</h4>
           <p>Tìm lịch bay theo sân bay đi, sân bay đến và ngày khởi hành bạn chọn.</p>
-          <Link className="app-download-card app-search-link" to="/">
+          <Link className="app-download-card app-search-link" to="/#flight-search-form">
             <span className="download-icon" aria-hidden="true">✈</span>
             <span><small>Mở biểu mẫu</small><strong>Tìm chuyến bay</strong></span>
           </Link>
@@ -55,12 +55,12 @@ export function AppFooter({ note }) {
 
         <div className="footer-col newsletter-col">
           <h4>Bản tin Serene Club</h4>
-          <p>Đăng ký nhận thông tin hành trình mới và thông báo lịch bay sớm nhất.</p>
+          <p>Đăng ký nhận thông tin hành trình mới và đặc quyền ưu đãi sớm nhất.</p>
           <form className="footer-newsletter-form" onSubmit={(e) => { e.preventDefault(); alert('Cảm ơn bạn đã đăng ký nhận bản tin Serene Flightways!'); }}>
             <input type="email" placeholder="Nhập email của bạn" required aria-label="Địa chỉ email nhận bản tin" />
             <button type="submit" className="button button-secondary">Đăng ký</button>
           </form>
-          <small className="newsletter-note">Cam kết bảo mật thông tin liên hệ của hành khách.</small>
+          <small className="newsletter-note">Cam kết bảo mật thông tin theo tiêu chuẩn quốc tế.</small>
         </div>
       </div>
 
