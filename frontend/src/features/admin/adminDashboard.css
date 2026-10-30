@@ -70,9 +70,377 @@
 .metric-skeleton-line.medium { width: 90%; height: .75rem; }
 @keyframes metric-pulse { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+.admin-metric-card.infobox-style {
+  position: relative;
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.admin-metric-card.infobox-style:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 24px rgb(24 50 68 / 8%);
+}
+.infobox-icon-wrap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 4.8rem;
+  flex-shrink: 0;
+  color: #fff;
+}
+.infobox-icon-wrap svg {
+  width: 2rem;
+  height: 2rem;
+}
+.infobox-icon-wrap.bg-emerald {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+.infobox-icon-wrap.bg-blue {
+  background: linear-gradient(135deg, #1d4ed8 0%, #3b82f6 100%);
+}
+.infobox-icon-wrap.bg-amber {
+  background: linear-gradient(135deg, #d97706 0%, #f59e0b 100%);
+}
+.infobox-icon-wrap.bg-navy {
+  background: linear-gradient(135deg, #1e293b 0%, #334155 100%);
+}
+.infobox-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 0.95rem 1rem;
+  min-width: 0;
+}
+
+/* Monthly Recap Section */
+.admin-recap-section {
+  padding: 0.5rem 0 1.5rem;
+}
+.admin-recap-card {
+  background: #ffffff;
+  border: 1px solid #e0e7ee;
+  border-radius: 0.85rem;
+  box-shadow: 0 2px 12px rgb(24 50 68 / 4%);
+  overflow: hidden;
+}
+.admin-recap-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid #edf2f7;
+  background: #fafcff;
+}
+.admin-recap-header h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.recap-subtitle {
+  font-size: 0.78rem;
+  color: #64748b;
+  display: block;
+  margin-top: 0.15rem;
+}
+.recap-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+.recap-date-range {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 0.25rem 0.65rem;
+  border-radius: 999px;
+}
+.recap-link-button {
+  font-size: 0.8rem;
+  font-weight: 650;
+  color: #087656;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.recap-link-button:hover {
+  color: #044e39;
+  text-decoration: underline;
+}
+.admin-recap-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(18rem, 1.15fr);
+  gap: 1.5rem;
+  padding: 1.4rem;
+}
+.chart-legend-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+.chart-title-tag {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #334155;
+}
+.chart-legend-items {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.legend-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+.legend-badge .legend-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+}
+.legend-revenue { color: #0d9488; }
+.legend-revenue .legend-dot { background: #0d9488; }
+.legend-bookings { color: #2563eb; }
+.legend-bookings .legend-dot { background: #2563eb; }
+.recap-svg-container {
+  width: 100%;
+  overflow-x: auto;
+  background: #ffffff;
+  border-radius: 0.5rem;
+}
+.recap-svg-chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  min-height: 200px;
+}
+.admin-recap-goals-col {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding-left: 1rem;
+  border-left: 1px solid #edf2f7;
+}
+.goals-title {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+.goal-list {
+  display: grid;
+  gap: 1.1rem;
+}
+.goal-item {
+  display: grid;
+  gap: 0.35rem;
+}
+.goal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.78rem;
+}
+.goal-name {
+  color: #475569;
+  font-weight: 550;
+}
+.goal-value {
+  color: #0f172a;
+  font-weight: 750;
+}
+.goal-progress-bar {
+  width: 100%;
+  height: 0.55rem;
+  background: #edf2f7;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.goal-progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.6s ease;
+}
+.goal-progress-fill.bg-blue { background: #2563eb; }
+.goal-progress-fill.bg-emerald { background: #059669; }
+.goal-progress-fill.bg-rose { background: #e11d48; }
+.goal-progress-fill.bg-amber { background: #d97706; }
+.admin-recap-footer {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  border-top: 1px solid #edf2f7;
+  background: #fafcff;
+}
+.recap-footer-col {
+  padding: 1.1rem 1.4rem;
+  border-right: 1px solid #edf2f7;
+  display: grid;
+  gap: 0.2rem;
+}
+.recap-footer-col:last-child {
+  border-right: 0;
+}
+.recap-trend {
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+.recap-trend.trend-up { color: #16a34a; }
+.recap-trend.trend-neutral { color: #0284c7; }
+.recap-stat-val {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+.recap-stat-lbl {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+/* Recent Activity Data Table */
+.admin-recent-section {
+  padding: 0 0 1.5rem;
+}
+.admin-table-card {
+  background: #ffffff;
+  border: 1px solid #e0e7ee;
+  border-radius: 0.85rem;
+  box-shadow: 0 2px 12px rgb(24 50 68 / 4%);
+  overflow: hidden;
+}
+.admin-table-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.4rem;
+  border-bottom: 1px solid #edf2f7;
+  background: #fafcff;
+}
+.admin-table-header h3 {
+  margin: 0;
+  font-size: 1.08rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+.table-header-subtitle {
+  font-size: 0.78rem;
+  color: #64748b;
+  display: block;
+  margin-top: 0.15rem;
+}
+.table-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+.table-badge-live {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #16a34a;
+  background: #dcfce7;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+.button-small {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.78rem;
+}
+.admin-table-container {
+  overflow-x: auto;
+}
+.admin-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.84rem;
+  text-align: left;
+}
+.admin-data-table th {
+  padding: 0.75rem 1.25rem;
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 650;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+.admin-data-table td {
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid #edf2f7;
+  vertical-align: middle;
+  color: #1e293b;
+}
+.admin-data-table tr:hover td {
+  background: #f8fafc;
+}
+.booking-pnr-tag {
+  color: #0369a1;
+  font-weight: 750;
+}
+.customer-info-cell {
+  display: grid;
+  gap: 0.1rem;
+}
+.customer-info-cell strong {
+  color: #0f172a;
+  font-size: 0.86rem;
+}
+.customer-info-cell small {
+  color: #64748b;
+  font-size: 0.74rem;
+}
+.route-badge {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.35rem;
+  background: #f1f5f9;
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.78rem;
+}
+.amount-highlight {
+  color: #087656;
+  font-weight: 750;
+}
+.row-action-link {
+  color: #0284c7;
+  font-weight: 600;
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+.row-action-link:hover {
+  color: #0369a1;
+  text-decoration: underline;
+}
+.table-loading-wrap {
+  padding: 1.5rem;
+  display: grid;
+  gap: 0.75rem;
+}
+.table-empty-wrap {
+  padding: 2.5rem;
+  text-align: center;
+  color: #64748b;
+}
+
 .admin-dashboard-footer { display: flex; justify-content: space-between; gap: 1rem; padding: 1.1rem max(1.25rem, calc((100vw - 82rem) / 2)); border-top: 1px solid #e0e7ee; color: #6a7d8c; font-size: .74rem; }
 @media (max-width: 64rem) {
   .admin-metrics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .admin-recap-body { grid-template-columns: 1fr; }
+  .admin-recap-goals-col { padding-left: 0; border-left: 0; border-top: 1px solid #edf2f7; padding-top: 1.25rem; }
+  .admin-recap-footer { grid-template-columns: repeat(2, 1fr); }
+  .recap-footer-col:nth-child(2) { border-right: 0; }
   .admin-module-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 48rem) {

@@ -94,12 +94,14 @@ export function DestinationGrid({ api, onSelectDestination }) {
           if (!airportId || typeof api.searchFlights !== 'function') return;
 
           try {
-            // Lọc theo sân bay đến của từng điểm đến, chỉ lấy chuyến còn ghế, sắp xếp giá thấp nhất
+            // Lọc theo sân bay đến của từng điểm đến từ ngày hiện tại để sử dụng index và tránh nghẽn pool
+            const todayStr = new Date().toISOString().slice(0, 10);
             const flightRes = await api.searchFlights({
               arrival_airport_id: airportId,
+              departure_date: todayStr,
               min_seats: 1,
               sort_by: 'price_low',
-              limit: 50,
+              limit: 10,
             });
 
             if (!active) return;

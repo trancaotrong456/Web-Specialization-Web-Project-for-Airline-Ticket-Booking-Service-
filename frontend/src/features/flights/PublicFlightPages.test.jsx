@@ -618,10 +618,8 @@ describe('public flight discovery pages', () => {
     expect(screen.getByRole('tablist', { name: /Loại hành trình/i })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('tab', { name: 'Khứ hồi' })).toHaveAttribute('aria-selected', 'false');
-    const multiCityTab = screen.getByRole('tab', { name: 'Nhiều chặng' });
+    const multiCityTab = screen.getByRole('tab', { name: /Nhiều chặng/i });
     expect(multiCityTab).toHaveAttribute('aria-selected', 'false');
-    expect(multiCityTab).toHaveAttribute('aria-disabled', 'true');
-    expect(multiCityTab).toHaveTextContent('Sắp ra mắt');
     expect(screen.queryByLabelText('Return date')).not.toBeInTheDocument();
     expect(screen.getByRole('tab', { name: 'Một chiều' })).toBeInTheDocument();
     expect(await screen.findByText(/Bộ lọc không bắt buộc/i)).toBeInTheDocument();
@@ -680,19 +678,15 @@ describe('public flight discovery pages', () => {
     expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveFocus();
   });
 
-  it('locks the multi-city tab with aria-disabled and does not allow selecting it', async () => {
+  it('navigates to the multi-city search page when selecting multi-city tab', async () => {
     const user = userEvent.setup();
     renderRoutes('/', createFetch());
 
-    const multiCityTab = screen.getByRole('tab', { name: 'Nhiều chặng' });
-    expect(multiCityTab).toHaveAttribute('aria-disabled', 'true');
-    expect(multiCityTab).toHaveTextContent('Sắp ra mắt');
+    const multiCityTab = screen.getByRole('tab', { name: /Nhiều chặng/i });
     expect(multiCityTab).toHaveAttribute('aria-selected', 'false');
 
     await user.click(multiCityTab);
-    expect(multiCityTab).toHaveAttribute('aria-selected', 'false');
-    expect(screen.getByRole('tab', { name: 'Một chiều' })).toHaveAttribute('aria-selected', 'true');
-    expect(screen.queryByRole('group', { name: /Chặng 1/i })).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /Đặt vé máy bay đa chặng/i })).toBeInTheDocument();
   });
 
   it('validates and serializes search values into the results URL', async () => {

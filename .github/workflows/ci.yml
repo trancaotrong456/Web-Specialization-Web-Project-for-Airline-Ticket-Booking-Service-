@@ -72,6 +72,11 @@ jobs:
         run: |
           cat > .env.integration <<'EOF'
           NODE_ENV=test
+          CLIENT_URL=http://localhost:5173
+          VNPAY_MODE=sandbox
+          VNP_TMN_CODE=TEST_TMN
+          VNP_HASH_SECRET=ci-only-vnpay-secret
+          PAYOS_MODE=demo
           DB_HOST=127.0.0.1
           DB_PORT=3309
           DB_NAME=airline_booking_integration_test

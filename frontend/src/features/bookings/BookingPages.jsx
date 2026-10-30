@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
+import { AppFooter } from '../../components/AppFooter';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Field } from '../../components/Field';
 import { LoadingView } from '../../components/LoadingView';
@@ -72,7 +73,7 @@ const countFromSearchParams = (params) => {
 };
 
 function BookingShell({ children, admin = false }) {
-  return <div className="public-page booking-page"><AppHeader /><main className={`booking-main ${admin ? 'booking-admin-main' : ''}`}>{children}</main><footer className="site-footer"><span>Serene Flightways</span><span>Thông tin đặt chỗ được xử lý theo trạng thái từ hệ thống.</span></footer></div>;
+  return <div className="public-page booking-page"><AppHeader /><main className={`booking-main ${admin ? 'booking-admin-main' : ''}`}>{children}</main><AppFooter note="Thông tin đặt chỗ được xử lý theo trạng thái từ hệ thống." /></div>;
 }
 
 function PageHeading({ eyebrow = 'ĐẶT VÉ MÁY BAY', title, description, actions }) {
