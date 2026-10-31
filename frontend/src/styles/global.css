@@ -11000,7 +11000,7 @@ code,
 /* ── Multi-city Leg Row: hoàn toàn cân đối, chuẩn xác từng pixel ── */
 .flight-search-card .multi-city-leg-row {
   display: grid !important;
-  grid-template-columns: minmax(0, 1.4fr) 3rem minmax(0, 1.4fr) minmax(0, 1.35fr) !important;
+  grid-template-columns: minmax(0, 1fr) 3rem minmax(0, 1fr) minmax(0, 1fr) !important;
   align-items: start !important;
   gap: 0.85rem !important;
   margin-top: 0 !important;
@@ -11112,12 +11112,13 @@ code,
   white-space: nowrap !important;
 }
 
-/* ── multi-city-actions: Bỏ hoàn toàn vạch đứt thừa, làm nút thêm chặng sang trọng ── */
+/* ── multi-city-actions: Bỏ hoàn toàn vạch đứt thừa, lề trong chuẩn khớp với card ── */
 .flight-search-card .multi-city-actions {
   display: flex !important;
   align-items: center !important;
   justify-content: space-between !important;
-  padding: 0.6rem 0.25rem !important;
+  padding: 0.6rem 1.35rem !important;
+  box-sizing: border-box !important;
   background: transparent !important;
   border: none !important;
   border-radius: 0 !important;
@@ -11170,17 +11171,52 @@ code,
   transform: none !important;
 }
 
-/* ── search-details-row cho multi_city: 3 cột cân đối tuyệt đối ── */
+/* ── search-details-row cho multi_city: đồng bộ 100% cột và căn thẳng hàng với hàng chặng ── */
 .flight-search-card .search-details-row--multi_city {
   display: grid !important;
-  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1.2fr) minmax(0, 1fr) !important;
-  gap: 1.25rem !important;
+  grid-template-columns: minmax(0, 1fr) 3rem minmax(0, 1fr) minmax(0, 1fr) !important;
+  gap: 0.85rem !important;
   align-items: start !important;
   margin-top: 1.25rem !important;
+  padding: 0 1.35rem !important;
+  box-sizing: border-box !important;
+}
+
+.flight-search-card .search-details-row--multi_city .search-detail-field > span {
+  height: 1.35rem !important;
+  min-height: 1.35rem !important;
+  line-height: 1.35rem !important;
+  margin-bottom: 0.45rem !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #334155 !important;
+}
+
+.flight-search-card .search-details-row--multi_city .airline-field {
+  grid-column: 1 !important;
+}
+
+.flight-search-card .search-details-row--multi_city .airline-field .field-input-wrap,
+.flight-search-card .search-details-row--multi_city .airline-field .field-input-wrap select {
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  max-height: 3.4rem !important;
+  box-sizing: border-box !important;
+}
+
+.flight-search-card .search-details-row--multi_city .passenger-field {
+  grid-column: 3 !important;
+}
+
+.flight-search-card .search-details-row--multi_city .passenger-field .passenger-picker-trigger {
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  max-height: 3.4rem !important;
 }
 
 .flight-search-card .search-details-row--multi_city > .search-submit {
-  margin: 1.7rem 0 0 0 !important;
+  grid-column: 4 !important;
+  margin: 1.8rem 0 0 0 !important;
   height: 3.4rem !important;
   min-height: 3.4rem !important;
   max-height: 3.4rem !important;
@@ -11197,6 +11233,12 @@ code,
   }
   .flight-search-card .search-details-row--multi_city {
     grid-template-columns: minmax(0, 1fr) !important;
+    padding: 0 0.5rem !important;
+  }
+  .flight-search-card .search-details-row--multi_city .airline-field,
+  .flight-search-card .search-details-row--multi_city .passenger-field,
+  .flight-search-card .search-details-row--multi_city > .search-submit {
+    grid-column: 1 !important;
   }
   .flight-search-card .search-details-row--multi_city > .search-submit {
     margin-top: 0.5rem !important;
