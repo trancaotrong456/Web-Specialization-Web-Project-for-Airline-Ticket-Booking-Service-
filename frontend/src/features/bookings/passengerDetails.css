@@ -1,0 +1,598 @@
+/* ═══════════════════════════════════════════════════════════════════════
+   SERENE FLIGHTWAYS — THÔNG TIN HÀNH KHÁCH (VIETJET AIR INSPIRATION)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Header Banner Tuyến bay & Stepper Quy trình ── */
+.passenger-step-header {
+  background: linear-gradient(135deg, #0e3d36 0%, #164e46 60%, #1d5f55 100%);
+  color: #ffffff;
+  padding: 1.15rem 1.75rem;
+  border-radius: 0.75rem 0.75rem 0 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  box-shadow: 0 4px 14px rgba(14, 61, 54, 0.2);
+  margin-bottom: 0;
+}
+
+.passenger-step-route-info {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  min-width: 0;
+}
+
+.passenger-step-trip-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #fef08a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.passenger-step-route-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #ffffff;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.passenger-step-route-title .route-arrow {
+  color: #fde047;
+  font-size: 1.1rem;
+}
+
+/* Stepper tròn bên phải của Header */
+.passenger-stepper-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+}
+
+.stepper-circle-step {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 50%;
+  font-size: 1rem;
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
+  transition: all 0.25s ease;
+  position: relative;
+}
+
+.stepper-circle-step.is-done {
+  background: #10b981;
+  border-color: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+}
+
+.stepper-circle-step.is-active {
+  background: #f59e0b;
+  border-color: #fef08a;
+  color: #0f172a;
+  font-weight: 800;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
+}
+
+.stepper-circle-step span.step-tooltip {
+  display: none;
+}
+
+/* ── 2. Layout 2 cột: Cột Form bên trái, Sidebar bên phải ── */
+.passenger-checkout-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.85fr) minmax(320px, 1.15fr);
+  gap: 1.5rem;
+  align-items: start;
+  margin-top: 1.25rem;
+}
+
+.passenger-main-form-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
+}
+
+.passenger-page-title {
+  font-size: 1.45rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0.25rem 0 0.5rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* ── 3. Thẻ Card cho từng Hành khách ── */
+.passenger-vj-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.passenger-vj-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+
+.passenger-vj-card-header {
+  background: #f8fafc;
+  padding: 0.9rem 1.35rem;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.passenger-vj-card-title {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: #0f172a;
+  margin: 0;
+}
+
+.passenger-vj-card-title svg {
+  color: #0d9488;
+}
+
+.passenger-self-booking-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  user-select: none;
+}
+
+.passenger-self-booking-toggle input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #0d9488;
+  cursor: pointer;
+}
+
+.passenger-vj-card-body {
+  padding: 1.35rem 1.5rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Nhóm chọn Giới tính */
+.gender-selection-row {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.gender-radio-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+}
+
+.gender-radio-item input[type="radio"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #0d9488;
+  cursor: pointer;
+  margin: 0;
+}
+
+/* Lưới các ô nhập thông tin */
+.passenger-input-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.15rem 1.35rem;
+}
+
+.passenger-vj-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  min-width: 0;
+}
+
+.passenger-vj-field > label {
+  font-size: 0.83rem;
+  font-weight: 700;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.passenger-vj-field > label .req-star {
+  color: #e11d48;
+  font-weight: 800;
+}
+
+.passenger-vj-field input,
+.passenger-vj-field select {
+  height: 3.25rem;
+  min-height: 3.25rem;
+  padding: 0.65rem 0.95rem;
+  border: 1.5px solid #dce5ed;
+  border-radius: 0.55rem;
+  background: #f8fafc;
+  color: #0f172a;
+  font-size: 0.92rem;
+  font-weight: 600;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+}
+
+.passenger-vj-field input:focus,
+.passenger-vj-field select:focus {
+  border-color: #0d9488;
+  outline: none;
+  background: #ffffff;
+  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.16);
+}
+
+.passenger-phone-wrap {
+  display: grid;
+  grid-template-columns: 5.5rem 1fr;
+  gap: 0.5rem;
+}
+
+.passenger-phone-prefix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 3.25rem;
+  background: #f1f5f9;
+  border: 1.5px solid #dce5ed;
+  border-radius: 0.55rem;
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.passenger-field-hint {
+  font-size: 0.74rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.25;
+}
+
+/* ── 4. Phần Điều khoản & Quyền riêng tư ── */
+.passenger-policies-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.15rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.policy-privacy-note {
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #475569;
+  margin: 0;
+}
+
+.policy-checkbox-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.85rem;
+  color: #334155;
+  line-height: 1.4;
+  cursor: pointer;
+  user-select: none;
+}
+
+.policy-checkbox-item input[type="checkbox"] {
+  width: 1.15rem;
+  height: 1.15rem;
+  accent-color: #0d9488;
+  cursor: pointer;
+  margin-top: 0.15rem;
+  flex-shrink: 0;
+}
+
+.policy-checkbox-item strong {
+  color: #0f172a;
+}
+
+.policy-checkbox-item a {
+  color: #0d9488;
+  font-weight: 600;
+  text-decoration: underline;
+}
+
+/* ── 5. Sidebar THÔNG TIN ĐẶT CHỖ (Vietjet / Serene Style) ── */
+.passenger-vj-summary-sidebar {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+  position: sticky;
+  top: 1.5rem;
+}
+
+.passenger-vj-summary-header {
+  background: #0e3d36;
+  color: #ffffff;
+  padding: 1rem 1.35rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.passenger-vj-summary-content {
+  padding: 1.25rem 1.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.summary-passenger-badge {
+  background: #f1f5f9;
+  padding: 0.65rem 0.95rem;
+  border-radius: 0.5rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.summary-leg-block {
+  border: 1px solid #e2e8f0;
+  border-radius: 0.65rem;
+  background: #fafcff;
+  overflow: hidden;
+}
+
+.summary-leg-title-bar {
+  background: #f0fdfa;
+  padding: 0.65rem 0.95rem;
+  border-bottom: 1px solid #ccfbf1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.86rem;
+  font-weight: 750;
+  color: #0f766e;
+}
+
+.summary-leg-title-bar .summary-leg-price {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #0d9488;
+}
+
+.summary-leg-route-details {
+  padding: 0.85rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.84rem;
+  color: #334155;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.summary-leg-route-details .route-airports {
+  font-size: 0.95rem;
+  font-weight: 750;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.summary-leg-route-details .route-timing {
+  color: #64748b;
+  font-size: 0.82rem;
+}
+
+.summary-price-breakdown {
+  padding: 0.75rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  font-size: 0.83rem;
+}
+
+.summary-price-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #475569;
+}
+
+.summary-price-row strong {
+  color: #0f172a;
+}
+
+/* Hộp tổng tiền cuối sidebar */
+.passenger-vj-total-box {
+  background: #0e3d36;
+  color: #ffffff;
+  padding: 1.15rem 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.25rem;
+}
+
+.passenger-vj-total-box .total-label {
+  font-size: 0.95rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #ffffff;
+}
+
+.passenger-vj-total-box .total-amount {
+  font-size: 1.45rem;
+  font-weight: 900;
+  color: #fef08a;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 6. Thanh Bottom Action Bar ── */
+.passenger-bottom-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
+}
+
+.passenger-bottom-actions .button-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.55rem;
+  background: #ffffff;
+  color: #475569;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.passenger-bottom-actions .button-back:hover {
+  border-color: #94a3b8;
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.passenger-bottom-submit-group {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.passenger-bottom-total-display {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15rem;
+}
+
+.passenger-bottom-total-display span {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.passenger-bottom-total-display strong {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
+}
+
+.passenger-bottom-actions .button-continue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 2.25rem;
+  border: none;
+  border-radius: 0.55rem;
+  background: #f59e0b;
+  color: #0f172a;
+  font-size: 1.05rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
+}
+
+.passenger-bottom-actions .button-continue:hover:not(:disabled) {
+  background: #d97706;
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.45);
+}
+
+.passenger-bottom-actions .button-continue:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+@media (max-width: 960px) {
+  .passenger-checkout-layout {
+    grid-template-columns: 1fr;
+  }
+  .passenger-vj-summary-sidebar {
+    position: static;
+  }
+  .passenger-step-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .passenger-stepper-badges {
+    align-self: flex-start;
+  }
+  .passenger-input-grid-2 {
+    grid-template-columns: 1fr;
+  }
+  .passenger-bottom-actions {
+    flex-direction: column-reverse;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  .passenger-bottom-submit-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .passenger-bottom-total-display {
+    align-items: center;
+  }
+}

@@ -938,7 +938,7 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
           airportsMap={airportsMap}
           onContinue={selectedFlight && selectedFare ? continueWithFare : undefined}
           canContinue={Boolean(selectedFlight && selectedFare)}
-          continueLabel={legIndex + 1 < legs.length ? 'Chọn chuyến về →' : 'Tiếp tục thanh toán'}
+          continueLabel={legIndex + 1 < legs.length ? 'Chọn chuyến về →' : 'Đi tiếp'}
           onEditLeg={(targetIdx) => {
             if (targetIdx < legIndex) {
               setLegIndex(targetIdx);
@@ -1333,7 +1333,7 @@ export function FlightResultsPage() {
                     selectedFare={oneWaySelectedFare}
                     airportsMap={airportsMap}
                     canContinue={Boolean(oneWaySelectedFlight)}
-                    continueLabel="Thanh toán"
+                    continueLabel="Đi tiếp"
                     onContinue={() => {
                       if (!oneWaySelectedFlight) return;
                       const params = new URLSearchParams({
