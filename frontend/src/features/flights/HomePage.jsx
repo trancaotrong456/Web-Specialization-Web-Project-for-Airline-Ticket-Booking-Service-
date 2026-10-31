@@ -505,13 +505,17 @@ export function HomePage({ forcedTripType }) {
                               initialAirports={airports}
                               placeholder="Thành phố hoặc sân bay"
                             />
-                            <label className="airport-field search-detail-field multi-leg-date">
-                              <span>Ngày khởi hành</span>
-                              <div className="field-input-wrap has-prefix-icon">
+                            <div className="airport-field search-detail-field multi-leg-date">
+                              <label htmlFor={`leg-${leg.id}-date`}>
+                                <span>Ngày khởi hành</span>
+                                <small>{formatWeekday(leg.date) || (index ? 'Sau ngày chặng trước' : 'Chọn ngày khởi hành')}</small>
+                              </label>
+                              <div className="airport-combobox field-input-wrap has-prefix-icon">
                                 <span className="field-prefix-icon" aria-hidden="true">
                                   <Calendar size={18} className="field-icon-svg" />
                                 </span>
                                 <input
+                                  id={`leg-${leg.id}-date`}
                                   aria-label={`Ngày khởi hành chặng ${index + 1}`}
                                   type="date"
                                   min={previousDate || todayLocal()}
@@ -519,8 +523,7 @@ export function HomePage({ forcedTripType }) {
                                   onChange={(event) => updateLeg(leg.id, { date: event.target.value })}
                                 />
                               </div>
-                              <small>{formatWeekday(leg.date) || (index ? 'Sau ngày chặng trước' : 'Chọn ngày khởi hành')}</small>
-                            </label>
+                            </div>
                           </div>
                         </div>
                       );

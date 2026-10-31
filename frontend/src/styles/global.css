@@ -11014,17 +11014,38 @@ code,
   position: relative !important;
 }
 
-.flight-search-card .multi-city-leg-row .airport-field > label,
-.flight-search-card .multi-city-leg-row .airport-field > span {
+.flight-search-card .multi-city-leg-row .airport-field > label {
   display: flex !important;
   align-items: center !important;
+  justify-content: space-between !important;
   height: 1.35rem !important;
   min-height: 1.35rem !important;
+  max-height: 1.35rem !important;
   margin-bottom: 0.45rem !important;
   font-size: 0.82rem !important;
   font-weight: 700 !important;
   color: #334155 !important;
   line-height: 1.35rem !important;
+}
+
+.flight-search-card .multi-city-leg-row .airport-field > label > span {
+  display: inline-block !important;
+  white-space: nowrap !important;
+}
+
+/* Badge thứ trong tuần ở góc trên bên phải của ô Ngày khởi hành */
+.flight-search-card .multi-city-leg-row .multi-leg-date > label small {
+  margin: 0 !important;
+  height: 1.35rem !important;
+  line-height: 1.35rem !important;
+  font-size: 0.74rem !important;
+  font-weight: 650 !important;
+  color: #0d9488 !important;
+  background: #f0fdfa !important;
+  padding: 0 0.55rem !important;
+  border-radius: 9999px !important;
+  border: 1px solid #ccfbf1 !important;
+  white-space: nowrap !important;
 }
 
 .flight-search-card .multi-city-leg-row .airport-combobox,
@@ -11033,6 +11054,10 @@ code,
   min-height: 3.4rem !important;
   max-height: 3.4rem !important;
   position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
 }
 
 .flight-search-card .multi-city-leg-row .airport-combobox input,
@@ -11041,7 +11066,7 @@ code,
   height: 3.4rem !important;
   min-height: 3.4rem !important;
   max-height: 3.4rem !important;
-  padding: 0.75rem 1rem !important;
+  padding: 0.75rem 1rem 0.75rem 2.75rem !important;
   font-size: 0.95rem !important;
   font-weight: 600 !important;
   border-radius: 0.65rem !important;
@@ -11052,9 +11077,22 @@ code,
   transition: all 0.2s ease !important;
 }
 
-.flight-search-card .multi-city-leg-row .field-input-wrap.has-prefix-icon input,
-.flight-search-card .multi-city-leg-row .airport-combobox.has-prefix-icon input {
-  padding-left: 2.75rem !important;
+.flight-search-card .multi-city-leg-row input[type="date"] {
+  display: flex !important;
+  align-items: center !important;
+  line-height: normal !important;
+  -webkit-appearance: none !important;
+}
+
+.flight-search-card .multi-city-leg-row input[type="date"]::-webkit-calendar-picker-indicator {
+  cursor: pointer !important;
+  opacity: 0.65 !important;
+  transition: opacity 0.2s ease !important;
+  margin-right: 0.25rem !important;
+}
+
+.flight-search-card .multi-city-leg-row input[type="date"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1 !important;
 }
 
 .flight-search-card .multi-city-leg-row .airport-combobox input:focus,
@@ -11071,8 +11109,9 @@ code,
   width: 3rem !important;
   height: 3rem !important;
   min-height: 3rem !important;
-  margin: 1.95rem 0 0 0 !important;
+  margin: 2rem 0 0 0 !important;
   align-self: start !important;
+  justify-self: center !important;
   border: 1.5px solid #e2e8f0 !important;
   border-radius: 50% !important;
   background: #ffffff !important;
@@ -11088,28 +11127,6 @@ code,
   color: #0d9488 !important;
   transform: rotate(180deg) !important;
   box-shadow: 0 4px 12px rgba(13, 148, 136, 0.15) !important;
-}
-
-/* Badge thứ trong tuần ở góc trên bên phải của ô Ngày khởi hành */
-.flight-search-card .multi-city-leg-row .multi-leg-date {
-  position: relative !important;
-}
-
-.flight-search-card .multi-city-leg-row .multi-leg-date small {
-  position: absolute !important;
-  top: 0 !important;
-  right: 0 !important;
-  margin: 0 !important;
-  height: 1.35rem !important;
-  line-height: 1.35rem !important;
-  font-size: 0.74rem !important;
-  font-weight: 650 !important;
-  color: #0d9488 !important;
-  background: #f0fdfa !important;
-  padding: 0 0.55rem !important;
-  border-radius: 9999px !important;
-  border: 1px solid #ccfbf1 !important;
-  white-space: nowrap !important;
 }
 
 /* ── multi-city-actions: Bỏ hoàn toàn vạch đứt thừa, lề trong chuẩn khớp với card ── */
