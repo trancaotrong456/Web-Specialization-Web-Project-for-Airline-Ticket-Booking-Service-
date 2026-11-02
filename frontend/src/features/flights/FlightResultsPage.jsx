@@ -27,6 +27,9 @@ export function SearchSummaryBanner({
   departureDate,
   returnDate,
   legs = [],
+  currentStep = 1,
+  editUrl = '/',
+  editText = 'Chỉnh sửa tìm kiếm',
 }) {
   const isRoundTrip = tripType === 'round_trip';
   const isMultiCity = tripType === 'multi_city';
@@ -91,28 +94,30 @@ export function SearchSummaryBanner({
 
         <div className="search-summary-right">
           <div className="search-summary-steps" aria-label="Tiến trình đặt vé">
-            <div className="step-badge is-active" title="Bước 1: Chuyến bay">
+            <div className={`step-badge ${currentStep === 1 ? 'is-active' : currentStep > 1 ? 'is-done' : ''}`} title="Bước 1: Chuyến bay">
               <span className="step-circle"><Plane size={14} /></span>
               <span className="step-text">Chuyến bay</span>
             </div>
-            <div className="step-badge" title="Bước 2: Hành khách">
+            <div className={`step-badge ${currentStep === 2 ? 'is-active' : currentStep > 2 ? 'is-done' : ''}`} title="Bước 2: Hành khách">
               <span className="step-circle"><User size={14} /></span>
               <span className="step-text">Hành khách</span>
             </div>
-            <div className="step-badge" title="Bước 3: Dịch vụ & Chỗ ngồi">
+            <div className={`step-badge ${currentStep === 3 ? 'is-active' : currentStep > 3 ? 'is-done' : ''}`} title="Bước 3: Dịch vụ & Chỗ ngồi">
               <span className="step-circle"><ShoppingBag size={14} /></span>
               <span className="step-text">Dịch vụ</span>
             </div>
-            <div className="step-badge" title="Bước 4: Thanh toán">
+            <div className={`step-badge ${currentStep === 4 ? 'is-active' : ''}`} title="Bước 4: Thanh toán">
               <span className="step-circle"><CreditCard size={14} /></span>
               <span className="step-text">Thanh toán</span>
             </div>
           </div>
 
-          <Link className="back-link search-summary-edit-btn" to="/">
-            <ArrowLeft size={16} aria-hidden="true" />
-            <span>Chỉnh sửa tìm kiếm</span>
-          </Link>
+          {editUrl ? (
+            <Link className="back-link search-summary-edit-btn" to={editUrl}>
+              <ArrowLeft size={16} aria-hidden="true" />
+              <span>{editText}</span>
+            </Link>
+          ) : null}
         </div>
       </div>
     </div>

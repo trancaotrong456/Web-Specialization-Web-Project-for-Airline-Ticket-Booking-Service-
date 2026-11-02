@@ -15,6 +15,7 @@ import { money } from '../../lib/formatters';
 import { getServerTimeOffset } from '../../lib/apiClient';
 import { BoardingPassCard } from './BoardingPassCard';
 import { FlightPicker } from '../../components/FlightPicker';
+import { SearchSummaryBanner } from '../flights/FlightResultsPage';
 import './seatSelection.css';
 import './passengerDetails.css';
 
@@ -382,48 +383,17 @@ export function BookingCreatePage() {
       </> : null}
       {state.stage === 'fare' || state.loadingFares && flight ? <><div className="booking-section-heading"><div><h2>Chọn hạng vé</h2><p>{flightCarrier(flight)} · {airportsOf(flight)} · {dateTime(flight.departure_time)}</p></div><button className="button button-outline" type="button" onClick={() => { setFlight(null); setFare(null); setState((current) => ({ ...current, stage: 'flight' })); }}>Đổi chuyến bay</button></div>{state.loadingFares ? <LoadingView label="Đang tải hạng vé…" /> : fares.length ? <><div className="booking-fare-list">{fares.map((item) => <label className={`booking-fare-option ${fare?.id === item.id ? 'is-selected' : ''}`} key={item.id}><input type="radio" name="fare" checked={fare?.id === item.id} onChange={() => setFare(item)} /><span><strong>{item.class_name}</strong><small>{item.seat_quota ?? '—'} ghế phân bổ</small></span><strong>{money(item.price)} / khách</strong></label>)}</div><button className="button button-primary" type="button" onClick={continueToPassenger}>Tiếp tục</button></> : <div className="empty-state"><h3>Chưa có hạng vé cho chuyến bay này</h3><p>Hãy chọn chuyến bay khác hoặc quay lại sau.</p></div>}</> : null}
       {state.stage === 'passenger' ? <>
-        <div className="passenger-step-header">
-          <div className="passenger-step-route-info">
-            <span className="passenger-step-trip-badge">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
-              {itineraryFlights.length > 1
-                ? (tripType === 'round_trip' ? 'CHUYẾN BAY KHỨ HỒI' : 'CHUYẾN BAY NHIỀU CHẶNG')
-                : 'CHUYẾN BAY MỘT CHIỀU'} | {passengers.length} Người lớn
-            </span>
-            <h1 className="passenger-step-route-title">
-              {itineraryFlights.length > 1 ? (
-                itineraryFlights.map((item, i) => (
-                  <span key={i}>
-                    {i > 0 && <span className="route-arrow"> · </span>}
-                    {item.flight?.departureAirport?.city || item.flight?.departureAirport?.iata_code || 'SGN'} ({item.flight?.departureAirport?.iata_code || item.flight?.departure_airport?.iata_code || 'SGN'})
-                    <span className="route-arrow"> ✈ </span>
-                    {item.flight?.arrivalAirport?.city || item.flight?.arrivalAirport?.iata_code || 'HAN'} ({item.flight?.arrivalAirport?.iata_code || item.flight?.arrival_airport?.iata_code || 'HAN'})
-                  </span>
-                ))
-              ) : (
-                <>
-                  <span>Điểm khởi hành: {flight?.departureAirport?.city || flight?.departureAirport?.name || 'TP. Hồ Chí Minh'} ({flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || 'SGN'})</span>
-                  <span className="route-arrow"> ✈ </span>
-                  <span>Điểm đến: {flight?.arrivalAirport?.city || flight?.arrivalAirport?.name || 'Hà Nội'} ({flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || 'HAN'})</span>
-                </>
-              )}
-            </h1>
-          </div>
-          <div className="passenger-stepper-badges" aria-label="Tiến trình đặt vé">
-            <div className="stepper-circle-step is-done" title="1. Chuyến bay">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></svg>
-            </div>
-            <div className="stepper-circle-step is-active" title="2. Hành khách">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-            </div>
-            <div className="stepper-circle-step" title="3. Dịch vụ bổ sung">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>
-            </div>
-            <div className="stepper-circle-step" title="4. Thanh toán">
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-            </div>
-          </div>
-        </div>
+        <SearchSummaryBanner
+          tripType={tripType}
+          passengerCount={passengers.length}
+          departureAirport={flight?.departureAirport}
+          arrivalAirport={flight?.arrivalAirport}
+          departureDate={flight?.departure_time}
+          returnDate={itineraryFlights[1]?.flight?.departure_time}
+          currentStep={2}
+          editUrl={expectsItinerary ? '/flights/search' : '/'}
+          editText="Chỉnh sửa tìm kiếm"
+        />
 
         <form className="passenger-checkout-layout" onSubmit={submit} noValidate>
           <div className="passenger-main-form-col">

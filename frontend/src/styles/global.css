@@ -11466,6 +11466,18 @@ code,
   transform: scale(1.08) !important;
 }
 
+.search-summary-steps .step-badge.is-done .step-circle {
+  background: #10b981 !important;
+  color: #ffffff !important;
+  border-color: #34d399 !important;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35) !important;
+}
+
+.search-summary-steps .step-badge.is-done .step-text {
+  color: #a7f3d0 !important;
+  font-weight: 700 !important;
+}
+
 .search-summary-steps .step-text {
   font-size: 0.72rem !important;
   font-weight: 700 !important;
