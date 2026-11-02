@@ -44,6 +44,7 @@ import { DesignSystemShowcasePage } from '../features/showcase/DesignSystemShowc
 import { NotificationsPage } from '../features/notifications/NotificationsPage';
 import { NotFoundPage } from '../components/NotFoundPage';
 import { ForbiddenPage } from '../components/ForbiddenPage';
+import { ScrollToTop } from '../components/ScrollToTop';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -147,6 +148,7 @@ export function AppRoutes() {
 export function AppRouter() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AppRoutes />
     </BrowserRouter>
   );
