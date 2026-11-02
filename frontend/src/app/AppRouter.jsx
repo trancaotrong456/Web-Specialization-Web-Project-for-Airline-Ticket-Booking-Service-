@@ -25,6 +25,7 @@ import {
   FlightListPage,
 } from '../features/flights/FlightManagementPages';
 import { AdminBookingsPage, BookingCreatePage, BookingDetailPage, BookingLookupPage, MyBookingsPage } from '../features/bookings/BookingPages';
+import { BookingServicesPage } from '../features/bookings/BookingServicesPage';
 import { AdminPaymentDetailPage, AdminPaymentsPage, AdminRevenuePage, PaymentInitiatePage, PaymentResultPage } from '../features/bookings/PaymentPages';
 import {
   AirlineDetailPage,
@@ -73,6 +74,7 @@ export function AppRoutes() {
       <Route path="/flights/search" element={<FlightResultsPage />} />
       <Route path="/bookings/new" element={<BookingCreatePage />} />
       <Route path="/bookings/lookup" element={<BookingLookupPage />} />
+      <Route path="/bookings/:id/services" element={<BookingServicesPage />} />
       <Route path="/bookings/:id/payment" element={<PaymentInitiatePage />} />
       <Route path="/bookings/:id" element={<BookingDetailPage />} />
       <Route path="/payments/result" element={<PaymentResultPage />} />
