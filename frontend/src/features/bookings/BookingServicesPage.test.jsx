@@ -9,7 +9,7 @@ vi.mock('../../app/AuthProvider', () => ({ useAuth: () => ({ request: mocks.requ
 
 const flight = {
   id: 17,
-  flight_number: 'VJ188',
+  flight_number: 'SF101',
   departure_airport_id: 1,
   arrival_airport_id: 2,
   departure_time: '2026-11-03T10:00:00Z',
@@ -21,7 +21,7 @@ const flight = {
 
 const bookingMock = {
   id: 88,
-  booking_code: 'VJ-888',
+  booking_code: 'SF-888',
   status: 'holding',
   total_amount: 4674781,
   flight,
@@ -35,7 +35,7 @@ describe('BookingServicesPage', () => {
     mocks.request.mockReset();
   });
 
-  it('renders Vietjet-inspired ancillary services page and navigates to payment', async () => {
+  it('renders Serene Flightways ancillary services page and navigates to payment', async () => {
     mocks.request.mockImplementation(async (path) => {
       if (path === '/bookings/88') return bookingMock;
       throw new Error(`Unexpected request ${path}`);
@@ -46,20 +46,20 @@ describe('BookingServicesPage', () => {
       <MemoryRouter initialEntries={['/bookings/88/services']}>
         <Routes>
           <Route path="/bookings/:id/services" element={<BookingServicesPage />} />
-          <Route path="/bookings/:id/payment" element={<div>Trang thanh toán Galaxy Pay</div>} />
+          <Route path="/bookings/:id/payment" element={<div>Trang thanh toán Serene Flightways</div>} />
         </Routes>
       </MemoryRouter>
     );
 
-    // Verify main headline from Vietjet design
-    expect(await screen.findByText(/Đừng quên mua hành lý, suất ăn, chọn chỗ ngồi và hơn thế nữa/i)).toBeInTheDocument();
+    // Verify main headline for Serene Flightways
+    expect(await screen.findByText(/Lựa chọn các tiện ích bổ sung cho hành trình bay trọn vẹn/i)).toBeInTheDocument();
 
     // Verify main service cards
     expect(screen.getByText('Chọn chỗ ngồi yêu thích')).toBeInTheDocument();
-    expect(screen.getByText('Chọn hành lý/Dịch vụ nối chuyến')).toBeInTheDocument();
-    expect(screen.getByText('Chọn suất ăn')).toBeInTheDocument();
-    expect(screen.getByText('Dịch vụ Taxi')).toBeInTheDocument();
-    expect(screen.getByText('Bảo hiểm du lịch Vietjet Travel Safe')).toBeInTheDocument();
+    expect(screen.getByText('Hành lý ký gửi & Tiện ích hành trình')).toBeInTheDocument();
+    expect(screen.getByText('Suất ăn ẩm thực')).toBeInTheDocument();
+    expect(screen.getByText(/Xe đưa đón sân bay/i)).toBeInTheDocument();
+    expect(screen.getByText(/Bảo hiểm hành trình/i)).toBeInTheDocument();
 
     // Verify sidebar title
     expect(screen.getByText('THÔNG TIN ĐẶT CHỖ')).toBeInTheDocument();
@@ -71,7 +71,7 @@ describe('BookingServicesPage', () => {
 
     // Should navigate to payment page
     await waitFor(() => {
-      expect(screen.getByText('Trang thanh toán Galaxy Pay')).toBeInTheDocument();
+      expect(screen.getByText('Trang thanh toán Serene Flightways')).toBeInTheDocument();
     });
   });
 });

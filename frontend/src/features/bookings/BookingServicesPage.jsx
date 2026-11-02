@@ -1,1 +1,642 @@
-﻿import { useEffect, useMemo, useState } from 'react';import { useLocation, useNavigate, useParams } from 'react-router-dom';import { useAuth } from '../../app/AuthProvider';import { AppHeader } from '../../components/AppHeader';import { AppFooter } from '../../components/AppFooter';import { LoadingView } from '../../components/LoadingView';import { Notice } from '../../components/Notice';import { money } from '../../lib/formatters';import { createBookingsApi } from './bookingsApi';import './bookingServices.css';export function BookingServicesPage() {  const { id } = useParams();  const location = useLocation();  const navigate = useNavigate();  const { user, request } = useAuth();  const api = useMemo(() => createBookingsApi(request), [request]);  const guestEmail = location.state?.guestEmail || sessionStorage.getItem(`booking_guest_email_${id}`) || '';  const [booking, setBooking] = useState(location.state?.booking || null);  const [loading, setLoading] = useState(!location.state?.booking);  const [error, setError] = useState('');  const [submitting, setSubmitting] = useState(false);  // Expanded card state to show/hide options  const [expandedCard, setExpandedCard] = useState('baggage'); // default expand baggage  // Add-on selections state  const [selectedBaggage, setSelectedBaggage] = useState('20kg'); // 400.000 VND  const [selectedMeal, setSelectedMeal] = useState('free'); // 0 VND  const [selectedTaxi, setSelectedTaxi] = useState(false); // 250.000 VND  const [selectedInsurance, setSelectedInsurance] = useState(true); // 72.000 VND  const [selectedPriority, setSelectedPriority] = useState(false); // 120.000 VND  // Accordion open/close in Sidebar  const [openPassengerAccordion, setOpenPassengerAccordion] = useState(true);  const [openOutboundAccordion, setOpenOutboundAccordion] = useState(true);  const [openInboundAccordion, setOpenInboundAccordion] = useState(true);  // Fetch booking detail if not present in location state  useEffect(() => {    if (booking) return;    let active = true;    api.bookingDetail(id, user ? undefined : guestEmail)      .then((data) => {        if (active) {          setBooking(data);          setLoading(false);        }      })      .catch((err) => {        if (active) {          setError(err?.message || 'KhĂ´ng thá»ƒ táº£i thĂ´ng tin Ä‘áº·t chá»—.');          setLoading(false);        }      });    return () => { active = false; };  }, [api, booking, guestEmail, id, user]);  const flight = booking?.flight;  const segments = booking?.itinerarySegments || [];  const outboundFlight = flight;  const inboundSegment = segments.find((s) => Number(s.leg_order) === 2);  const inboundFlight = inboundSegment?.flight;  const isRoundTrip = Boolean(inboundFlight) || booking?.trip_type === 'round_trip';  const passengerCount = Math.max(1, booking?.passengers?.length || 1);  // Calculate prices  const baseBookingAmount = Number(booking?.total_amount || 0);  const baggagePrice = selectedBaggage === '20kg' ? 400000 : selectedBaggage === '30kg' ? 550000 : selectedBaggage === '40kg' ? 700000 : 0;  const mealPrice = selectedMeal === 'combo' ? 85000 * passengerCount : 0;  const taxiPrice = selectedTaxi ? 250000 : 0;  const insurancePrice = selectedInsurance ? 72000 * passengerCount : 0;  const priorityPrice = selectedPriority ? 120000 * passengerCount : 0;  const totalAddonsPrice = baggagePrice + mealPrice + taxiPrice + insurancePrice + priorityPrice;  const grandTotal = baseBookingAmount + totalAddonsPrice;  // Flight formatting helpers  const originCode = outboundFlight?.departureAirport?.iata_code || 'SGN';  const originCity = outboundFlight?.departureAirport?.city || outboundFlight?.departureAirport?.name || 'Tp. Há»“ ChĂ­ Minh';  const destCode = outboundFlight?.arrivalAirport?.iata_code || 'HAN';  const destCity = outboundFlight?.arrivalAirport?.city || outboundFlight?.arrivalAirport?.name || 'HĂ  Ná»™i';  const formatFlightTime = (val) => {    if (!val) return '10:00';    try {      const d = new Date(val);      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });    } catch {      return '10:00';    }  };  const formatFlightDate = (val) => {    if (!val) return 'T3, 03/11/2026';    try {      const d = new Date(val);      return d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });    } catch {      return 'T3, 03/11/2026';    }  };  const handleProceedToPayment = async () => {    setSubmitting(true);    try {      // If server supports updating ancillaries, we can persist them      navigate(`/bookings/${id}/payment`, {        state: {          booking: { ...booking, total_amount: grandTotal },          guestEmail        }      });    } catch {      navigate(`/bookings/${id}/payment`, {        state: { booking, guestEmail }      });    } finally {      setSubmitting(false);    }  };  if (loading) {    return (      <div className="public-page booking-page">        <AppHeader />        <main className="booking-main">          <LoadingView label="Äang táº£i dá»‹ch vá»¥ bá»• sung cho chuyáº¿n bayâ€¦" />        </main>        <AppFooter />      </div>    );  }  return (    <div className="services-page-wrapper">      <AppHeader />      {/* 1. Header Banner Tuyáº¿n bay vĂ ng cam & Stepper 4 bÆ°á»›c */}      <div className="services-flight-banner">        <div className="services-banner-left">          <div className="services-trip-type-label">            <span>âœˆ</span>            <span>{isRoundTrip ? 'CHUYáº¾N BAY KHá»¨ Há»’I' : 'CHUYáº¾N BAY Má»˜T CHIá»€U'} | {passengerCount} NgÆ°á»i lá»›n</span>          </div>          <div className="services-route-locations">            <div className="services-location-item">              <span className="loc-dot origin" />              <span>Äiá»ƒm khá»Ÿi hĂ nh:</span>              <span className="loc-name">{originCity} ( {originCode} )</span>            </div>            <div className="services-location-item">              <span className="loc-dot dest" />              <span>Äiá»ƒm Ä‘áº¿n:</span>              <span className="loc-name">{destCity} ( {destCode} )</span>            </div>          </div>        </div>        <div className="services-stepper-badges">          <div className="services-stepper-circle is-done" title="Chá»n chuyáº¿n bay">âœˆ</div>          <div className="services-stepper-circle is-done" title="ThĂ´ng tin hĂ nh khĂ¡ch">đŸ‘¤</div>          <div className="services-stepper-circle is-active" title="Dá»‹ch vá»¥ bá»• sung">đŸ›’</div>          <div className="services-stepper-circle" title="Thanh toĂ¡n">đŸ’²</div>        </div>      </div>      {error ? (        <div style={{ maxWidth: 1240, margin: '1rem auto', padding: '0 1rem' }}>          <Notice type="error">{error}</Notice>        </div>      ) : null}      {/* 2. Container chĂ­nh: Cá»™t danh sĂ¡ch dá»‹ch vá»¥ (trĂ¡i) + Cá»™t ThĂ´ng tin Ä‘áº·t chá»— (pháº£i) */}      <div className="services-main-container">        {/* Cá»˜T TRĂI: CĂC THáºº Dá»CH Vá»¤ Bá»” TRá»¢ */}        <div>          <h2 className="services-headline">            Äá»«ng quĂªn mua hĂ nh lĂ½, suáº¥t Äƒn, chá»n chá»— ngá»“i vĂ  hÆ¡n tháº¿ ná»¯a...          </h2>          <div className="services-card-list">            {/* THáºº 1: Chá»n chá»— ngá»“i yĂªu thĂ­ch */}            <div              className={`service-item-card ${expandedCard === 'seat' ? 'is-expanded' : ''}`}              onClick={() => setExpandedCard(expandedCard === 'seat' ? '' : 'seat')}            >              <div className="service-card-left">                <div className="service-icon-box seat">đŸ’º</div>                <div className="service-info-col">                  <div className="service-title-row">                    <span className="service-main-title">Chá»n chá»— ngá»“i yĂªu thĂ­ch</span>                  </div>                  <p className="service-desc-text">HĂ£y chá»n chá»— ngá»“i yĂªu thĂ­ch cá»§a báº¡n gáº§n cá»­a sá»• hoáº·c lá»‘i Ä‘i</p>                </div>              </div>              <div className="service-card-right">                <div className="service-chevron-btn">{expandedCard === 'seat' ? 'â–²' : 'â¯'}</div>              </div>            </div>            {expandedCard === 'seat' ? (              <div className="service-expand-content">                <p className="service-desc-text">Há»‡ thá»‘ng sáº½ giá»¯ chá»— ngáº«u nhiĂªn miá»…n phĂ­ hoáº·c báº¡n cĂ³ thá»ƒ chá»n vá»‹ trĂ­ mong muá»‘n khi lĂ m thá»§ tá»¥c check-in trá»±c tuyáº¿n.</p>              </div>            ) : null}            {/* THáºº 2: Chá»n hĂ nh lĂ½/Dá»‹ch vá»¥ ná»‘i chuyáº¿n */}            <div              className={`service-item-card ${expandedCard === 'baggage' ? 'is-expanded' : ''}`}              onClick={() => setExpandedCard(expandedCard === 'baggage' ? '' : 'baggage')}            >              <div className="service-card-left">                <div className="service-icon-box baggage">đŸ§³</div>                <div className="service-info-col">                  <div className="service-title-row">                    <span className="service-main-title">Chá»n hĂ nh lĂ½/Dá»‹ch vá»¥ ná»‘i chuyáº¿n</span>                  </div>                  <p className="service-desc-text">HĂ£y lá»±a chá»n gĂ³i hĂ nh lĂ½ phĂ¹ há»£p vá»›i chuyáº¿n bay cá»§a báº¡n</p>                  <div className="service-legs-summary">                    <div className="service-leg-col">                      <span className="service-leg-title">                        {originCode} <span style={{ color: '#dc2626' }}>âœˆ</span> {destCode}                      </span>                      <span className="service-leg-detail">                        ÄĂ£ bao gá»“m 20kg hĂ nh lĂ½ kĂ½ gá»­i tiĂªu chuáº©n                      </span>                    </div>                    {isRoundTrip ? (                      <div className="service-leg-col">                        <span className="service-leg-title">                          {destCode} <span style={{ color: '#dc2626' }}>âœˆ</span> {originCode}                        </span>                        <span className="service-leg-detail">                          ÄĂ£ bao gá»“m 20kg hĂ nh lĂ½ kĂ½ gá»­i tiĂªu chuáº©n                        </span>                      </div>                    ) : null}                  </div>                </div>              </div>              <div className="service-card-right">                <span className="service-price-tag">{money(baggagePrice)}</span>                <div className="service-chevron-btn">{expandedCard === 'baggage' ? 'â–²' : 'â¯'}</div>              </div>            </div>            {expandedCard === 'baggage' ? (              <div className="service-expand-content">                <div className="service-option-list">                  <div                    className={`service-option-item ${selectedBaggage === 'none' ? 'is-selected' : ''}`}                    onClick={(e) => { e.stopPropagation(); setSelectedBaggage('none'); }}                  >                    <div className="service-option-info">                      <span className="service-option-title">Chá»‰ 7kg xĂ¡ch tay</span>                      <span className="service-option-desc">KhĂ´ng kĂ¨m hĂ nh lĂ½ kĂ½ gá»­i</span>                    </div>                    <span className="service-option-price">0 VND</span>                  </div>                  <div                    className={`service-option-item ${selectedBaggage === '20kg' ? 'is-selected' : ''}`}                    onClick={(e) => { e.stopPropagation(); setSelectedBaggage('20kg'); }}                  >                    <div className="service-option-info">                      <span className="service-option-title">GĂ³i 20kg kĂ½ gá»­i (KhuyĂªn dĂ¹ng)</span>                      <span className="service-option-desc">ÄÆ°á»£c mang dá»¥ng cá»¥ thá»ƒ thao</span>                    </div>                    <span className="service-option-price">400.000 VND</span>                  </div>                  <div                    className={`service-option-item ${selectedBaggage === '30kg' ? 'is-selected' : ''}`}                    onClick={(e) => { e.stopPropagation(); setSelectedBaggage('30kg'); }}                  >                    <div className="service-option-info">                      <span className="service-option-title">GĂ³i 30kg kĂ½ gá»­i</span>                      <span className="service-option-desc">Thoáº£i mĂ¡i mua sáº¯m quĂ  táº·ng</span>                    </div>                    <span className="service-option-price">550.000 VND</span>                  </div>                </div>              </div>            ) : null}            {/* THáºº 3: Chá»n suáº¥t Äƒn jet cafĂ© */}            <div              className={`service-item-card ${expandedCard === 'meal' ? 'is-expanded' : ''}`}              onClick={() => setExpandedCard(expandedCard === 'meal' ? '' : 'meal')}            >              <div className="service-card-left">                <div className="service-icon-box meal">đŸ±</div>                <div className="service-info-col">                  <div className="service-title-row">                    <span className="service-main-title">Chá»n suáº¥t Äƒn</span>                    <span className="service-sub-tag">jet cafĂ©</span>                  </div>                  <div className="service-legs-summary">                    <div className="service-leg-col">                      <span className="service-leg-title">                        {originCode} <span style={{ color: '#dc2626' }}>âœˆ</span> {destCode}                      </span>                      <span className="service-leg-detail">{selectedMeal === 'free' ? 'Miá»…n phĂ­ 1 suáº¥t Äƒn nĂ³ng' : 'Combo cÆ¡m nĂ³ng + thá»©c uá»‘ng'}</span>                    </div>                    {isRoundTrip ? (                      <div className="service-leg-col">                        <span className="service-leg-title">                          {destCode} <span style={{ color: '#dc2626' }}>âœˆ</span> {originCode}                        </span>                        <span className="service-leg-detail">{selectedMeal === 'free' ? 'Miá»…n phĂ­ 1 suáº¥t Äƒn nĂ³ng' : 'Combo cÆ¡m nĂ³ng + thá»©c uá»‘ng'}</span>                      </div>                    ) : null}                  </div>                </div>              </div>              <div className="service-card-right">                <span className="service-price-tag">{money(mealPrice)}</span>                <div className="service-chevron-btn">{expandedCard === 'meal' ? 'â–²' : 'â¯'}</div>              </div>            </div>            {expandedCard === 'meal' ? (              <div className="service-expand-content">                <div className="service-option-list">                  <div                    className={`service-option-item ${selectedMeal === 'free' ? 'is-selected' : ''}`}                    onClick={(e) => { e.stopPropagation(); setSelectedMeal('free'); }}                  >                    <div className="service-option-info">                      <span className="service-option-title">Suáº¥t Äƒn tiĂªu chuáº©n (Máº·c Ä‘á»‹nh)</span>                      <span className="service-option-desc">MĂ¬ xĂ o / CÆ¡m gĂ  xĂ©</span>                    </div>                    <span className="service-option-price">0 VND</span>                  </div>                  <div                    className={`service-option-item ${selectedMeal === 'combo' ? 'is-selected' : ''}`}                    onClick={(e) => { e.stopPropagation(); setSelectedMeal('combo'); }}                  >                    <div className="service-option-info">                      <span className="service-option-title">Combo Äáº·c biá»‡t jet cafĂ©</span>                      <span className="service-option-desc">CÆ¡m nĂ³ng + CĂ  phĂª sá»¯a / TrĂ  Ä‘Ă o</span>                    </div>                    <span className="service-option-price">85.000 VND</span>                  </div>                </div>              </div>            ) : null}            {/* THáºº 4: Dá»‹ch vá»¥ Taxi */}            <div              className={`service-item-card ${expandedCard === 'taxi' ? 'is-expanded' : ''}`}              onClick={() => setExpandedCard(expandedCard === 'taxi' ? '' : 'taxi')}            >              <div className="service-card-left">                <div className="service-icon-box taxi">đŸ•</div>                <div className="service-info-col">                  <div className="service-title-row">                    <span className="service-main-title">Dá»‹ch vá»¥ Taxi</span>                  </div>                  <p className="service-desc-text">ÄÆ°a Ä‘Ă³n sĂ¢n bay tiá»‡n lá»£i, tĂ i xáº¿ Ä‘Ă³n Ä‘Ăºng giá» táº¡i ga Ä‘áº¿n</p>                </div>              </div>              <div className="service-card-right">                <span className="service-price-tag">{selectedTaxi ? '250.000 VND' : 'ChÆ°a chá»n'}</span>                <div className="service-chevron-btn">{expandedCard === 'taxi' ? 'â–²' : 'â¯'}</div>              </div>            </div>            {expandedCard === 'taxi' ? (              <div className="service-expand-content">                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>                  <input                    type="checkbox"                    checked={selectedTaxi}                    onChange={(e) => setSelectedTaxi(e.target.checked)}                    style={{ width: '1.2rem', height: '1.2rem' }}                  />                  <div>                    <strong>Äáº·t xe 4 chá»— Ä‘Ă³n táº¡i sĂ¢n bay {destCity} ({destCode})</strong>                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>Äá»“ng giĂ¡ 250.000 VND vá» trung tĂ¢m thĂ nh phá»‘ trong bĂ¡n kĂ­nh 20km.</p>                  </div>                </label>              </div>            ) : null}            {/* THáºº 5: Báº£o hiá»ƒm du lá»‹ch Vietjet Travel Safe */}            <div              className={`service-item-card ${expandedCard === 'insurance' ? 'is-expanded' : ''}`}              onClick={() => setExpandedCard(expandedCard === 'insurance' ? '' : 'insurance')}            >              <div className="service-card-left">                <div className="service-icon-box insurance">đŸ›¡ï¸</div>                <div className="service-info-col">                  <div className="service-title-row">                    <span className="service-main-title">Báº£o hiá»ƒm du lá»‹ch Vietjet Travel Safe</span>                  </div>                  <div className="service-legs-summary" style={{ border: 'none', margin: 0, padding: 0 }}>                    <span className="service-leg-title">                      {originCode} <span style={{ color: '#dc2626' }}>âœˆ</span> {destCode}                    </span>                  </div>                  <p className="service-desc-text">                    Báº£o hiá»ƒm du lá»‹ch toĂ n diá»‡n. Giáº¥y chá»©ng nháº­n báº£o hiá»ƒm sáº½ Ä‘Æ°á»£c cáº¥p cĂ¹ng vĂ© mĂ¡y bay, vĂ  khĂ´ng thá»ƒ cáº¥p láº¡i sau chuyáº¿n bay.                  </p>                </div>              </div>              <div className="service-card-right">                <span className="service-price-tag">{money(insurancePrice)}</span>                <div className="service-chevron-btn">{expandedCard === 'insurance' ? 'â–²' : 'â¯'}</div>              </div>            </div>            {expandedCard === 'insurance' ? (              <div className="service-expand-content">                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>                  <input                    type="checkbox"                    checked={selectedInsurance}                    onChange={(e) => setSelectedInsurance(e.target.checked)}                    style={{ width: '1.2rem', height: '1.2rem' }}                  />                  <div>                    <strong>Báº£o hiá»ƒm Báº£o Viá»‡t Insurance (72.000 VND / hĂ nh khĂ¡ch)</strong>                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>Bá»“i thÆ°á»ng trá»… chuyáº¿n, tháº¥t láº¡c hĂ nh lĂ½ vĂ  tai náº¡n chuyáº¿n bay theo Ä‘iá»u khoáº£n báº£o hiá»ƒm.</p>                  </div>                </label>              </div>            ) : null}            {/* THáºº 6: Dá»‹ch vá»¥ theo hĂ nh khĂ¡ch (VIP / Priority) */}            <div              className={`service-item-card ${expandedCard === 'vip' ? 'is-expanded' : ''}`}              onClick={() => setExpandedCard(expandedCard === 'vip' ? '' : 'vip')}            >              <div className="service-card-left">                <div className="service-icon-box vip">đŸ‘¤</div>                <div className="service-info-col">                  <div className="service-title-row">                    <span className="service-main-title">Dá»‹ch vá»¥ theo hĂ nh khĂ¡ch</span>                    <span className="service-new-tag">New</span>                  </div>                  <p className="service-desc-text">Æ¯u tiĂªn lĂ m thá»§ tá»¥c check-in nhanh, lá»‘i Ä‘i riĂªng táº¡i cá»­a kiá»ƒm soĂ¡t an ninh</p>                </div>              </div>              <div className="service-card-right">                <span className="service-price-tag">{money(priorityPrice)}</span>                <div className="service-chevron-btn">{expandedCard === 'vip' ? 'â–²' : 'â¯'}</div>              </div>            </div>            {expandedCard === 'vip' ? (              <div className="service-expand-content">                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>                  <input                    type="checkbox"                    checked={selectedPriority}                    onChange={(e) => setSelectedPriority(e.target.checked)}                    style={{ width: '1.2rem', height: '1.2rem' }}                  />                  <div>                    <strong>Lá»‘i Ä‘i Æ°u tiĂªn Priority Pass (120.000 VND / hĂ nh khĂ¡ch)</strong>                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>KhĂ´ng cáº§n xáº¿p hĂ ng, lĂ m thá»§ tá»¥c nhanh chĂ³ng táº¡i quáº§y Æ°u tiĂªn.</p>                  </div>                </label>              </div>            ) : null}          </div>        </div>        {/* Cá»˜T PHáº¢I: THĂ”NG TIN Äáº¶T CHá»– (SIDEBAR Äá» VIETJET) */}        <div className="services-sidebar-card">          <div className="services-sidebar-header">            <span className="services-sidebar-title">THĂ”NG TIN Äáº¶T CHá»–</span>            <button className="services-detail-link-btn" type="button" onClick={() => navigate(`/bookings/${id}`)}>              Chi Tiáº¿t            </button>          </div>          {/* Accordion: ThĂ´ng tin hĂ nh khĂ¡ch */}          <div className="services-sidebar-section">            <div              className="services-accordion-header"              onClick={() => setOpenPassengerAccordion(!openPassengerAccordion)}            >              <span className="services-acc-title">ThĂ´ng tin hĂ nh khĂ¡ch</span>              <span>{openPassengerAccordion ? 'â–²' : 'â–¼'}</span>            </div>            {openPassengerAccordion ? (              <div style={{ padding: '0 1.25rem 0.85rem 1.25rem', fontSize: '0.82rem', color: '#475569' }}>                {(booking?.passengers || [{ passenger_name: 'HĂ nh khĂ¡ch 1' }]).map((p, idx) => (                  <div key={idx} style={{ padding: '0.25rem 0', display: 'flex', justifyContent: 'space-between' }}>                    <span>{idx + 1}. {p.passenger_name}</span>                    <span style={{ color: '#047857', fontWeight: 600 }}>NgÆ°á»i lá»›n</span>                  </div>                ))}              </div>            ) : null}          </div>          {/* Accordion: Chuyáº¿n Ä‘i */}          <div className="services-sidebar-section">            <div              className="services-accordion-header"              onClick={() => setOpenOutboundAccordion(!openOutboundAccordion)}            >              <span className="services-acc-title">Chuyáº¿n Ä‘i</span>              <span className="services-leg-badge">                {money(baseBookingAmount / (isRoundTrip ? 2 : 1))} <span>âœ</span>              </span>            </div>            {openOutboundAccordion ? (              <div className="services-leg-route-desc">                <span className="services-leg-route-name">                  {originCity} ({originCode}) <span style={{ color: '#dc2626' }}>âœˆ</span> {destCity} ({destCode})                </span>                <span className="services-leg-meta">                  {formatFlightDate(outboundFlight?.departure_time)} | {formatFlightTime(outboundFlight?.departure_time)} | {outboundFlight?.flight_number || 'VJ188'} | Business                </span>                <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>                  <span>GiĂ¡ vĂ©</span>                  <span>{money(Math.round(baseBookingAmount * 0.75 / (isRoundTrip ? 2 : 1)))}</span>                </div>                <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>                  <span>Thuáº¿, phĂ­</span>                  <span>{money(Math.round(baseBookingAmount * 0.25 / (isRoundTrip ? 2 : 1)))}</span>                </div>              </div>            ) : null}          </div>          {/* Accordion: Chuyáº¿n vá» (náº¿u cĂ³) */}          {isRoundTrip ? (            <div className="services-sidebar-section">              <div                className="services-accordion-header"                onClick={() => setOpenInboundAccordion(!openInboundAccordion)}              >                <span className="services-acc-title">Chuyáº¿n vá»</span>                <span className="services-leg-badge">                  {money(baseBookingAmount / 2)} <span>âœ</span>                </span>              </div>              {openInboundAccordion ? (                <div className="services-leg-route-desc">                  <span className="services-leg-route-name">                    {destCity} ({destCode}) <span style={{ color: '#dc2626' }}>âœˆ</span> {originCity} ({originCode})                  </span>                  <span className="services-leg-meta">                    {formatFlightDate(inboundFlight?.departure_time)} | {formatFlightTime(inboundFlight?.departure_time)} | {inboundFlight?.flight_number || 'VJ187'} | Business                  </span>                  <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>                    <span>GiĂ¡ vĂ©</span>                    <span>{money(Math.round(baseBookingAmount * 0.75 / 2))}</span>                  </div>                  <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>                    <span>Thuáº¿, phĂ­</span>                    <span>{money(Math.round(baseBookingAmount * 0.25 / 2))}</span>                  </div>                </div>              ) : null}            </div>          ) : null}          {/* Accordion: Dá»‹ch vá»¥ bá»• sung */}          {totalAddonsPrice > 0 ? (            <div className="services-sidebar-section">              <div className="services-accordion-header">                <span className="services-acc-title">Dá»‹ch vá»¥ bá»• sung</span>                <span className="services-leg-badge" style={{ color: '#047857' }}>                  {money(totalAddonsPrice)}                </span>              </div>              <div style={{ padding: '0 0 0.5rem 0' }}>                {baggagePrice > 0 ? (                  <div className="services-addon-item">                    <span className="addon-title">HĂ nh lĂ½ kĂ½ gá»­i ({selectedBaggage})</span>                    <span className="addon-price">{money(baggagePrice)}</span>                  </div>                ) : null}                {mealPrice > 0 ? (                  <div className="services-addon-item">                    <span className="addon-title">Suáº¥t Äƒn jet cafĂ© Ä‘áº·c biá»‡t</span>                    <span className="addon-price">{money(mealPrice)}</span>                  </div>                ) : null}                {taxiPrice > 0 ? (                  <div className="services-addon-item">                    <span className="addon-title">Dá»‹ch vá»¥ Taxi sĂ¢n bay</span>                    <span className="addon-price">{money(taxiPrice)}</span>                  </div>                ) : null}                {insurancePrice > 0 ? (                  <div className="services-addon-item">                    <span className="addon-title">Báº£o hiá»ƒm Vietjet Travel Safe</span>                    <span className="addon-price">{money(insurancePrice)}</span>                  </div>                ) : null}                {priorityPrice > 0 ? (                  <div className="services-addon-item">                    <span className="addon-title">Dá»‹ch vá»¥ Æ°u tiĂªn Priority Pass</span>                    <span className="addon-price">{money(priorityPrice)}</span>                  </div>                ) : null}              </div>            </div>          ) : null}          {/* Banner Äá» Tá»•ng Tiá»n */}          <div className="services-total-banner">            <span className="services-total-caption">Tá»•ng tiá»n</span>            <span className="services-total-amount">{money(grandTotal)}</span>          </div>        </div>      </div>      {/* 3. Bottom Bar Cá»‘ Ä‘á»‹nh: Quay láº¡i | Tá»•ng tiá»n | Äi tiáº¿p */}      <footer className="services-bottom-bar">        <button          className="services-bottom-back-btn"          type="button"          onClick={() => navigate(-1)}        >          â€¹ Quay láº¡i        </button>        <div className="services-bottom-center-total">          <span className="services-center-caption">Tá»•ng tiá»n</span>          <span className="services-center-val">            {money(grandTotal)} <small>Chi tiáº¿t â–¾</small>          </span>        </div>        <button          className="services-bottom-next-btn"          type="button"          disabled={submitting}          onClick={handleProceedToPayment}        >          <span>{submitting ? 'Äang chuyá»ƒn tiáº¿pâ€¦' : 'Äi tiáº¿p'}</span>          <span>â”</span>        </button>      </footer>    </div>  );}
+﻿import { useEffect, useMemo, useState } from 'react';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useAuth } from '../../app/AuthProvider';
+import { AppHeader } from '../../components/AppHeader';
+import { AppFooter } from '../../components/AppFooter';
+import { LoadingView } from '../../components/LoadingView';
+import { Notice } from '../../components/Notice';
+import { money } from '../../lib/formatters';
+import { createBookingsApi } from './bookingsApi';
+import './bookingServices.css';
+
+export function BookingServicesPage() {
+  const { id } = useParams();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const { user, request } = useAuth();
+  const api = useMemo(() => createBookingsApi(request), [request]);
+
+  const guestEmail = location.state?.guestEmail || sessionStorage.getItem(`booking_guest_email_${id}`) || '';
+  const [booking, setBooking] = useState(location.state?.booking || null);
+  const [loading, setLoading] = useState(!location.state?.booking);
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+
+  // Expanded card state to show/hide options
+  const [expandedCard, setExpandedCard] = useState('baggage');
+
+  // Add-on selections state
+  const [selectedBaggage, setSelectedBaggage] = useState('20kg');
+  const [selectedMeal, setSelectedMeal] = useState('standard');
+  const [selectedTaxi, setSelectedTaxi] = useState(false);
+  const [selectedInsurance, setSelectedInsurance] = useState(true);
+  const [selectedPriority, setSelectedPriority] = useState(false);
+
+  // Accordion state in Sidebar
+  const [openPassengerAccordion, setOpenPassengerAccordion] = useState(true);
+  const [openOutboundAccordion, setOpenOutboundAccordion] = useState(true);
+  const [openInboundAccordion, setOpenInboundAccordion] = useState(true);
+
+  // Fetch booking detail if not present in location state
+  useEffect(() => {
+    if (booking) return;
+    let active = true;
+    api.bookingDetail(id, user ? undefined : guestEmail)
+      .then((data) => {
+        if (active) {
+          setBooking(data);
+          setLoading(false);
+        }
+      })
+      .catch((err) => {
+        if (active) {
+          setError(err?.message || 'KhĂ´ng thá»ƒ táº£i thĂ´ng tin Ä‘áº·t chá»—.');
+          setLoading(false);
+        }
+      });
+    return () => { active = false; };
+  }, [api, booking, guestEmail, id, user]);
+
+  const flight = booking?.flight;
+  const segments = booking?.itinerarySegments || [];
+  const outboundFlight = flight;
+  const inboundSegment = segments.find((s) => Number(s.leg_order) === 2);
+  const inboundFlight = inboundSegment?.flight;
+  const isRoundTrip = Boolean(inboundFlight) || booking?.trip_type === 'round_trip';
+
+  const passengerCount = Math.max(1, booking?.passengers?.length || 1);
+
+  // Calculate prices
+  const baseBookingAmount = Number(booking?.total_amount || 0);
+
+  const baggagePrice = selectedBaggage === '20kg' ? 400000 : selectedBaggage === '30kg' ? 550000 : selectedBaggage === '40kg' ? 700000 : 0;
+  const mealPrice = selectedMeal === 'premium' ? 85000 * passengerCount : 0;
+  const taxiPrice = selectedTaxi ? 250000 : 0;
+  const insurancePrice = selectedInsurance ? 72000 * passengerCount : 0;
+  const priorityPrice = selectedPriority ? 120000 * passengerCount : 0;
+
+  const totalAddonsPrice = baggagePrice + mealPrice + taxiPrice + insurancePrice + priorityPrice;
+  const grandTotal = baseBookingAmount + totalAddonsPrice;
+
+  // Flight formatting helpers
+  const originCode = outboundFlight?.departureAirport?.iata_code || 'SGN';
+  const originCity = outboundFlight?.departureAirport?.city || outboundFlight?.departureAirport?.name || 'Tp. Há»“ ChĂ­ Minh';
+  const destCode = outboundFlight?.arrivalAirport?.iata_code || 'HAN';
+  const destCity = outboundFlight?.arrivalAirport?.city || outboundFlight?.arrivalAirport?.name || 'HĂ  Ná»™i';
+
+  const formatFlightTime = (val) => {
+    if (!val) return '10:00';
+    try {
+      const d = new Date(val);
+      return d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+    } catch {
+      return '10:00';
+    }
+  };
+
+  const formatFlightDate = (val) => {
+    if (!val) return 'T3, 03/11/2026';
+    try {
+      const d = new Date(val);
+      return d.toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+    } catch {
+      return 'T3, 03/11/2026';
+    }
+  };
+
+  const handleProceedToPayment = async () => {
+    setSubmitting(true);
+    try {
+      navigate(`/bookings/${id}/payment`, {
+        state: {
+          booking: { ...booking, total_amount: grandTotal },
+          guestEmail
+        }
+      });
+    } catch {
+      navigate(`/bookings/${id}/payment`, {
+        state: { booking, guestEmail }
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="public-page booking-page">
+        <AppHeader />
+        <main className="booking-main">
+          <LoadingView label="Äang táº£i dá»‹ch vá»¥ bá»• sung cho chuyáº¿n bayâ€¦" />
+        </main>
+        <AppFooter />
+      </div>
+    );
+  }
+
+  return (
+    <div className="services-page-wrapper">
+      <AppHeader />
+
+      {/* 1. Header Banner Tuyáº¿n bay phong cĂ¡ch Serene Flightways & Stepper 4 bÆ°á»›c */}
+      <div className="services-flight-banner">
+        <div className="services-banner-left">
+          <div className="services-trip-type-label">
+            <span>âœˆ</span>
+            <span>{isRoundTrip ? 'CHUYáº¾N BAY KHá»¨ Há»’I' : 'CHUYáº¾N BAY Má»˜T CHIá»€U'} | {passengerCount} NgÆ°á»i lá»›n</span>
+          </div>
+          <div className="services-route-locations">
+            <div className="services-location-item">
+              <span className="loc-dot origin" />
+              <span>Äiá»ƒm khá»Ÿi hĂ nh:</span>
+              <span className="loc-name">{originCity} ( {originCode} )</span>
+            </div>
+            <div className="services-location-item">
+              <span className="loc-dot dest" />
+              <span>Äiá»ƒm Ä‘áº¿n:</span>
+              <span className="loc-name">{destCity} ( {destCode} )</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="services-stepper-badges">
+          <div className="services-stepper-circle is-done" title="Chá»n chuyáº¿n bay">âœˆ</div>
+          <div className="services-stepper-circle is-done" title="ThĂ´ng tin hĂ nh khĂ¡ch">đŸ‘¤</div>
+          <div className="services-stepper-circle is-active" title="Dá»‹ch vá»¥ bá»• sung">đŸ›’</div>
+          <div className="services-stepper-circle" title="Thanh toĂ¡n">đŸ’²</div>
+        </div>
+      </div>
+
+      {error ? (
+        <div style={{ maxWidth: 1240, margin: '1rem auto', padding: '0 1rem' }}>
+          <Notice type="error">{error}</Notice>
+        </div>
+      ) : null}
+
+      {/* 2. Container chĂ­nh: Cá»™t danh sĂ¡ch dá»‹ch vá»¥ (trĂ¡i) + Cá»™t ThĂ´ng tin Ä‘áº·t chá»— (pháº£i) */}
+      <div className="services-main-container">
+        {/* Cá»˜T TRĂI: CĂC THáºº Dá»CH Vá»¤ Bá»” TRá»¢ */}
+        <div>
+          <h2 className="services-headline">
+            Lá»±a chá»n cĂ¡c tiá»‡n Ă­ch bá»• sung cho hĂ nh trĂ¬nh bay trá»n váº¹n
+          </h2>
+
+          <div className="services-card-list">
+            {/* THáºº 1: Chá»n chá»— ngá»“i yĂªu thĂ­ch */}
+            <div
+              className={`service-item-card ${expandedCard === 'seat' ? 'is-expanded' : ''}`}
+              onClick={() => setExpandedCard(expandedCard === 'seat' ? '' : 'seat')}
+            >
+              <div className="service-card-left">
+                <div className="service-icon-box seat">đŸ’º</div>
+                <div className="service-info-col">
+                  <div className="service-title-row">
+                    <span className="service-main-title">Chá»n chá»— ngá»“i yĂªu thĂ­ch</span>
+                  </div>
+                  <p className="service-desc-text">Chá»n vá»‹ trĂ­ ngá»“i thoáº£i mĂ¡i gáº§n cá»­a sá»• hoáº·c lá»‘i Ä‘i trÆ°á»›c giá» khá»Ÿi hĂ nh</p>
+                </div>
+              </div>
+              <div className="service-card-right">
+                <div className="service-chevron-btn">{expandedCard === 'seat' ? 'â–²' : 'â¯'}</div>
+              </div>
+            </div>
+            {expandedCard === 'seat' ? (
+              <div className="service-expand-content">
+                <p className="service-desc-text">Há»‡ thá»‘ng sáº½ xáº¿p gháº¿ tá»± Ä‘á»™ng hoĂ n toĂ n miá»…n phĂ­ hoáº·c báº¡n cĂ³ thá»ƒ chá»n vá»‹ trĂ­ Æ°ng Ă½ khi lĂ m thá»§ tá»¥c check-in trá»±c tuyáº¿n.</p>
+              </div>
+            ) : null}
+
+            {/* THáºº 2: Chá»n hĂ nh lĂ½ & tiá»‡n Ă­ch hĂ nh lĂ½ */}
+            <div
+              className={`service-item-card ${expandedCard === 'baggage' ? 'is-expanded' : ''}`}
+              onClick={() => setExpandedCard(expandedCard === 'baggage' ? '' : 'baggage')}
+            >
+              <div className="service-card-left">
+                <div className="service-icon-box baggage">đŸ§³</div>
+                <div className="service-info-col">
+                  <div className="service-title-row">
+                    <span className="service-main-title">HĂ nh lĂ½ kĂ½ gá»­i & Tiá»‡n Ă­ch hĂ nh trĂ¬nh</span>
+                  </div>
+                  <p className="service-desc-text">Lá»±a chá»n cĂ¡c gĂ³i hĂ nh lĂ½ kĂ½ gá»­i phĂ¹ há»£p vá»›i nhu cáº§u hĂ nh lĂ½ cá»§a báº¡n</p>
+
+                  <div className="service-legs-summary">
+                    <div className="service-leg-col">
+                      <span className="service-leg-title">
+                        {originCode} <span style={{ color: '#0f766e' }}>âœˆ</span> {destCode}
+                      </span>
+                      <span className="service-leg-detail">
+                        ÄĂ£ bao gá»“m 20kg hĂ nh lĂ½ kĂ½ gá»­i tiĂªu chuáº©n
+                      </span>
+                    </div>
+                    {isRoundTrip ? (
+                      <div className="service-leg-col">
+                        <span className="service-leg-title">
+                          {destCode} <span style={{ color: '#0f766e' }}>âœˆ</span> {originCode}
+                        </span>
+                        <span className="service-leg-detail">
+                          ÄĂ£ bao gá»“m 20kg hĂ nh lĂ½ kĂ½ gá»­i tiĂªu chuáº©n
+                        </span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <div className="service-card-right">
+                <span className="service-price-tag">{money(baggagePrice)}</span>
+                <div className="service-chevron-btn">{expandedCard === 'baggage' ? 'â–²' : 'â¯'}</div>
+              </div>
+            </div>
+            {expandedCard === 'baggage' ? (
+              <div className="service-expand-content">
+                <div className="service-option-list">
+                  <div
+                    className={`service-option-item ${selectedBaggage === 'none' ? 'is-selected' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedBaggage('none'); }}
+                  >
+                    <div className="service-option-info">
+                      <span className="service-option-title">Chá»‰ 7kg xĂ¡ch tay</span>
+                      <span className="service-option-desc">KhĂ´ng kĂ¨m hĂ nh lĂ½ kĂ½ gá»­i</span>
+                    </div>
+                    <span className="service-option-price">0 VND</span>
+                  </div>
+                  <div
+                    className={`service-option-item ${selectedBaggage === '20kg' ? 'is-selected' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedBaggage('20kg'); }}
+                  >
+                    <div className="service-option-info">
+                      <span className="service-option-title">GĂ³i 20kg kĂ½ gá»­i (KhuyĂªn dĂ¹ng)</span>
+                      <span className="service-option-desc">ÄÆ°á»£c mang dá»¥ng cá»¥ thá»ƒ thao</span>
+                    </div>
+                    <span className="service-option-price">400.000 VND</span>
+                  </div>
+                  <div
+                    className={`service-option-item ${selectedBaggage === '30kg' ? 'is-selected' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedBaggage('30kg'); }}
+                  >
+                    <div className="service-option-info">
+                      <span className="service-option-title">GĂ³i 30kg kĂ½ gá»­i</span>
+                      <span className="service-option-desc">Thoáº£i mĂ¡i mua sáº¯m quĂ  táº·ng</span>
+                    </div>
+                    <span className="service-option-price">550.000 VND</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* THáºº 3: Suáº¥t Äƒn áº©m thá»±c Serene Sky Dining */}
+            <div
+              className={`service-item-card ${expandedCard === 'meal' ? 'is-expanded' : ''}`}
+              onClick={() => setExpandedCard(expandedCard === 'meal' ? '' : 'meal')}
+            >
+              <div className="service-card-left">
+                <div className="service-icon-box meal">đŸ±</div>
+                <div className="service-info-col">
+                  <div className="service-title-row">
+                    <span className="service-main-title">Suáº¥t Äƒn áº©m thá»±c</span>
+                    <span className="service-sub-tag">Serene Sky Dining</span>
+                  </div>
+
+                  <div className="service-legs-summary">
+                    <div className="service-leg-col">
+                      <span className="service-leg-title">
+                        {originCode} <span style={{ color: '#0f766e' }}>âœˆ</span> {destCode}
+                      </span>
+                      <span className="service-leg-detail">{selectedMeal === 'standard' ? 'Suáº¥t Äƒn nháº¹ theo tiĂªu chuáº©n hĂ£ng' : 'Set áº©m thá»±c cao cáº¥p + Thá»©c uá»‘ng'}</span>
+                    </div>
+                    {isRoundTrip ? (
+                      <div className="service-leg-col">
+                        <span className="service-leg-title">
+                          {destCode} <span style={{ color: '#0f766e' }}>âœˆ</span> {originCode}
+                        </span>
+                        <span className="service-leg-detail">{selectedMeal === 'standard' ? 'Suáº¥t Äƒn nháº¹ theo tiĂªu chuáº©n hĂ£ng' : 'Set áº©m thá»±c cao cáº¥p + Thá»©c uá»‘ng'}</span>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+              <div className="service-card-right">
+                <span className="service-price-tag">{money(mealPrice)}</span>
+                <div className="service-chevron-btn">{expandedCard === 'meal' ? 'â–²' : 'â¯'}</div>
+              </div>
+            </div>
+            {expandedCard === 'meal' ? (
+              <div className="service-expand-content">
+                <div className="service-option-list">
+                  <div
+                    className={`service-option-item ${selectedMeal === 'standard' ? 'is-selected' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedMeal('standard'); }}
+                  >
+                    <div className="service-option-info">
+                      <span className="service-option-title">Suáº¥t Äƒn tiĂªu chuáº©n (Máº·c Ä‘á»‹nh)</span>
+                      <span className="service-option-desc">BĂ¡nh ngá»t / CÆ¡m nĂ³ng theo mĂ¹a</span>
+                    </div>
+                    <span className="service-option-price">0 VND</span>
+                  </div>
+                  <div
+                    className={`service-option-item ${selectedMeal === 'premium' ? 'is-selected' : ''}`}
+                    onClick={(e) => { e.stopPropagation(); setSelectedMeal('premium'); }}
+                  >
+                    <div className="service-option-info">
+                      <span className="service-option-title">Set áº©m thá»±c Serene Gourmet</span>
+                      <span className="service-option-desc">MĂ³n chĂ­nh thÆ°á»£ng háº¡ng + NÆ°á»›c Ă©p trĂ¡i cĂ¢y</span>
+                    </div>
+                    <span className="service-option-price">85.000 VND</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {/* THáºº 4: Dá»‹ch vá»¥ Ä‘Æ°a Ä‘Ă³n sĂ¢n bay Serene Transfer */}
+            <div
+              className={`service-item-card ${expandedCard === 'taxi' ? 'is-expanded' : ''}`}
+              onClick={() => setExpandedCard(expandedCard === 'taxi' ? '' : 'taxi')}
+            >
+              <div className="service-card-left">
+                <div className="service-icon-box taxi">đŸ•</div>
+                <div className="service-info-col">
+                  <div className="service-title-row">
+                    <span className="service-main-title">Xe Ä‘Æ°a Ä‘Ă³n sĂ¢n bay (Airport Transfer)</span>
+                  </div>
+                  <p className="service-desc-text">Äáº·t trÆ°á»›c xe Ä‘Æ°a Ä‘Ă³n tiá»‡n nghi, Ä‘Ă³n chuáº©n giá» táº¡i sáº£nh Ä‘áº¿n</p>
+                </div>
+              </div>
+              <div className="service-card-right">
+                <span className="service-price-tag">{selectedTaxi ? '250.000 VND' : 'ChÆ°a chá»n'}</span>
+                <div className="service-chevron-btn">{expandedCard === 'taxi' ? 'â–²' : 'â¯'}</div>
+              </div>
+            </div>
+            {expandedCard === 'taxi' ? (
+              <div className="service-expand-content">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedTaxi}
+                    onChange={(e) => setSelectedTaxi(e.target.checked)}
+                    style={{ width: '1.2rem', height: '1.2rem' }}
+                  />
+                  <div>
+                    <strong>Äáº·t xe 4 chá»— Ä‘Ă³n táº¡i sĂ¢n bay {destCity} ({destCode})</strong>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>Äá»“ng giĂ¡ 250.000 VND vá» trung tĂ¢m thĂ nh phá»‘ trong bĂ¡n kĂ­nh 20km.</p>
+                  </div>
+                </label>
+              </div>
+            ) : null}
+
+            {/* THáºº 5: Báº£o hiá»ƒm hĂ nh trĂ¬nh Serene Travel Shield */}
+            <div
+              className={`service-item-card ${expandedCard === 'insurance' ? 'is-expanded' : ''}`}
+              onClick={() => setExpandedCard(expandedCard === 'insurance' ? '' : 'insurance')}
+            >
+              <div className="service-card-left">
+                <div className="service-icon-box insurance">đŸ›¡ï¸</div>
+                <div className="service-info-col">
+                  <div className="service-title-row">
+                    <span className="service-main-title">Báº£o hiá»ƒm hĂ nh trĂ¬nh Serene Travel Shield</span>
+                  </div>
+                  <div className="service-legs-summary" style={{ border: 'none', margin: 0, padding: 0 }}>
+                    <span className="service-leg-title">
+                      {originCode} <span style={{ color: '#0f766e' }}>âœˆ</span> {destCode}
+                    </span>
+                  </div>
+                  <p className="service-desc-text">
+                    Báº£o vá»‡ toĂ n diá»‡n cho hĂ nh trĂ¬nh bay: bá»“i thÆ°á»ng hoĂ£n chuyáº¿n, tháº¥t láº¡c hĂ nh lĂ½ vĂ  há»— trá»£ y táº¿ kháº©n cáº¥p.
+                  </p>
+                </div>
+              </div>
+              <div className="service-card-right">
+                <span className="service-price-tag">{money(insurancePrice)}</span>
+                <div className="service-chevron-btn">{expandedCard === 'insurance' ? 'â–²' : 'â¯'}</div>
+              </div>
+            </div>
+            {expandedCard === 'insurance' ? (
+              <div className="service-expand-content">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedInsurance}
+                    onChange={(e) => setSelectedInsurance(e.target.checked)}
+                    style={{ width: '1.2rem', height: '1.2rem' }}
+                  />
+                  <div>
+                    <strong>GĂ³i báº£o hiá»ƒm toĂ n diá»‡n (72.000 VND / hĂ nh khĂ¡ch)</strong>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>Há»£p tĂ¡c cĂ¹ng Ä‘á»‘i tĂ¡c báº£o hiá»ƒm uy tĂ­n, cáº¥p chá»©ng nháº­n Ä‘iá»‡n tá»­ ngay sau khi Ä‘áº·t vĂ© thĂ nh cĂ´ng.</p>
+                  </div>
+                </label>
+              </div>
+            ) : null}
+
+            {/* THáºº 6: Dá»‹ch vá»¥ Æ°u tiĂªn Serene Priority & PhĂ²ng chá» */}
+            <div
+              className={`service-item-card ${expandedCard === 'vip' ? 'is-expanded' : ''}`}
+              onClick={() => setExpandedCard(expandedCard === 'vip' ? '' : 'vip')}
+            >
+              <div className="service-card-left">
+                <div className="service-icon-box vip">đŸ‘¤</div>
+                <div className="service-info-col">
+                  <div className="service-title-row">
+                    <span className="service-main-title">Dá»‹ch vá»¥ Æ°u tiĂªn & PhĂ²ng chá»</span>
+                    <span className="service-new-tag">Premium</span>
+                  </div>
+                  <p className="service-desc-text">Æ¯u tiĂªn lĂ m thá»§ tá»¥c táº¡i quáº§y thÆ°Æ¡ng gia, lá»‘i Ä‘i an ninh nhanh chĂ³ng</p>
+                </div>
+              </div>
+              <div className="service-card-right">
+                <span className="service-price-tag">{money(priorityPrice)}</span>
+                <div className="service-chevron-btn">{expandedCard === 'vip' ? 'â–²' : 'â¯'}</div>
+              </div>
+            </div>
+            {expandedCard === 'vip' ? (
+              <div className="service-expand-content">
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedPriority}
+                    onChange={(e) => setSelectedPriority(e.target.checked)}
+                    style={{ width: '1.2rem', height: '1.2rem' }}
+                  />
+                  <div>
+                    <strong>Lá»‘i Ä‘i Æ°u tiĂªn Serene Priority Pass (120.000 VND / hĂ nh khĂ¡ch)</strong>
+                    <p style={{ margin: 0, fontSize: '0.82rem', color: '#64748b' }}>KhĂ´ng cáº§n xáº¿p hĂ ng lĂ¢u, thá»§ tá»¥c nhanh chĂ³ng táº¡i quáº§y Æ°u tiĂªn riĂªng biá»‡t.</p>
+                  </div>
+                </label>
+              </div>
+            ) : null}
+          </div>
+        </div>
+
+        {/* Cá»˜T PHáº¢I: THĂ”NG TIN Äáº¶T CHá»– (SIDEBAR PHONG CĂCH SERENE FLIGHTWAYS) */}
+        <div className="services-sidebar-card">
+          <div className="services-sidebar-header">
+            <span className="services-sidebar-title">THĂ”NG TIN Äáº¶T CHá»–</span>
+            <button className="services-detail-link-btn" type="button" onClick={() => navigate(`/bookings/${id}`)}>
+              Chi Tiáº¿t
+            </button>
+          </div>
+
+          {/* Accordion: ThĂ´ng tin hĂ nh khĂ¡ch */}
+          <div className="services-sidebar-section">
+            <div
+              className="services-accordion-header"
+              onClick={() => setOpenPassengerAccordion(!openPassengerAccordion)}
+            >
+              <span className="services-acc-title">ThĂ´ng tin hĂ nh khĂ¡ch</span>
+              <span>{openPassengerAccordion ? 'â–²' : 'â–¼'}</span>
+            </div>
+            {openPassengerAccordion ? (
+              <div style={{ padding: '0 1.25rem 0.85rem 1.25rem', fontSize: '0.82rem', color: '#475569' }}>
+                {(booking?.passengers || [{ passenger_name: 'HĂ nh khĂ¡ch 1' }]).map((p, idx) => (
+                  <div key={idx} style={{ padding: '0.25rem 0', display: 'flex', justifyContent: 'space-between' }}>
+                    <span>{idx + 1}. {p.passenger_name}</span>
+                    <span style={{ color: '#0f766e', fontWeight: 600 }}>NgÆ°á»i lá»›n</span>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Accordion: Chuyáº¿n Ä‘i */}
+          <div className="services-sidebar-section">
+            <div
+              className="services-accordion-header"
+              onClick={() => setOpenOutboundAccordion(!openOutboundAccordion)}
+            >
+              <span className="services-acc-title">Chuyáº¿n Ä‘i</span>
+              <span className="services-leg-badge">
+                {money(baseBookingAmount / (isRoundTrip ? 2 : 1))} <span>âœ</span>
+              </span>
+            </div>
+            {openOutboundAccordion ? (
+              <div className="services-leg-route-desc">
+                <span className="services-leg-route-name">
+                  {originCity} ({originCode}) <span style={{ color: '#0f766e' }}>âœˆ</span> {destCity} ({destCode})
+                </span>
+                <span className="services-leg-meta">
+                  {formatFlightDate(outboundFlight?.departure_time)} | {formatFlightTime(outboundFlight?.departure_time)} | {outboundFlight?.flight_number || 'SF101'}
+                </span>
+                <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>
+                  <span>GiĂ¡ vĂ©</span>
+                  <span>{money(Math.round(baseBookingAmount * 0.75 / (isRoundTrip ? 2 : 1)))}</span>
+                </div>
+                <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>
+                  <span>Thuáº¿, phĂ­</span>
+                  <span>{money(Math.round(baseBookingAmount * 0.25 / (isRoundTrip ? 2 : 1)))}</span>
+                </div>
+              </div>
+            ) : null}
+          </div>
+
+          {/* Accordion: Chuyáº¿n vá» (náº¿u cĂ³) */}
+          {isRoundTrip ? (
+            <div className="services-sidebar-section">
+              <div
+                className="services-accordion-header"
+                onClick={() => setOpenInboundAccordion(!openInboundAccordion)}
+              >
+                <span className="services-acc-title">Chuyáº¿n vá»</span>
+                <span className="services-leg-badge">
+                  {money(baseBookingAmount / 2)} <span>âœ</span>
+                </span>
+              </div>
+              {openInboundAccordion ? (
+                <div className="services-leg-route-desc">
+                  <span className="services-leg-route-name">
+                    {destCity} ({destCode}) <span style={{ color: '#0f766e' }}>âœˆ</span> {originCity} ({originCode})
+                  </span>
+                  <span className="services-leg-meta">
+                    {formatFlightDate(inboundFlight?.departure_time)} | {formatFlightTime(inboundFlight?.departure_time)} | {inboundFlight?.flight_number || 'SF102'}
+                  </span>
+                  <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>
+                    <span>GiĂ¡ vĂ©</span>
+                    <span>{money(Math.round(baseBookingAmount * 0.75 / 2))}</span>
+                  </div>
+                  <div className="services-breakdown-row" style={{ padding: '0.35rem 0' }}>
+                    <span>Thuáº¿, phĂ­</span>
+                    <span>{money(Math.round(baseBookingAmount * 0.25 / 2))}</span>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+
+          {/* Accordion: Dá»‹ch vá»¥ bá»• sung */}
+          {totalAddonsPrice > 0 ? (
+            <div className="services-sidebar-section">
+              <div className="services-accordion-header">
+                <span className="services-acc-title">Dá»‹ch vá»¥ bá»• sung</span>
+                <span className="services-leg-badge" style={{ color: '#0f766e' }}>
+                  {money(totalAddonsPrice)}
+                </span>
+              </div>
+              <div style={{ padding: '0 0 0.5rem 0' }}>
+                {baggagePrice > 0 ? (
+                  <div className="services-addon-item">
+                    <span className="addon-title">HĂ nh lĂ½ kĂ½ gá»­i ({selectedBaggage})</span>
+                    <span className="addon-price">{money(baggagePrice)}</span>
+                  </div>
+                ) : null}
+                {mealPrice > 0 ? (
+                  <div className="services-addon-item">
+                    <span className="addon-title">áº¨m thá»±c Serene Gourmet</span>
+                    <span className="addon-price">{money(mealPrice)}</span>
+                  </div>
+                ) : null}
+                {taxiPrice > 0 ? (
+                  <div className="services-addon-item">
+                    <span className="addon-title">Xe Ä‘Æ°a Ä‘Ă³n sĂ¢n bay</span>
+                    <span className="addon-price">{money(taxiPrice)}</span>
+                  </div>
+                ) : null}
+                {insurancePrice > 0 ? (
+                  <div className="services-addon-item">
+                    <span className="addon-title">Báº£o hiá»ƒm Serene Travel Shield</span>
+                    <span className="addon-price">{money(insurancePrice)}</span>
+                  </div>
+                ) : null}
+                {priorityPrice > 0 ? (
+                  <div className="services-addon-item">
+                    <span className="addon-title">Lá»‘i Ä‘i Æ°u tiĂªn Serene Priority</span>
+                    <span className="addon-price">{money(priorityPrice)}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
+
+          {/* Banner Tá»•ng Tiá»n phong cĂ¡ch Serene */}
+          <div className="services-total-banner">
+            <span className="services-total-caption">Tá»•ng tiá»n</span>
+            <span className="services-total-amount">{money(grandTotal)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 3. Bottom Bar Cá»‘ Ä‘á»‹nh: Quay láº¡i | Tá»•ng tiá»n | Äi tiáº¿p */}
+      <footer className="services-bottom-bar">
+        <button
+          className="services-bottom-back-btn"
+          type="button"
+          onClick={() => navigate(-1)}
+        >
+          â€¹ Quay láº¡i
+        </button>
+
+        <div className="services-bottom-center-total">
+          <span className="services-center-caption">Tá»•ng tiá»n</span>
+          <span className="services-center-val">
+            {money(grandTotal)} <small>Chi tiáº¿t â–¾</small>
+          </span>
+        </div>
+
+        <button
+          className="services-bottom-next-btn"
+          type="button"
+          disabled={submitting}
+          onClick={handleProceedToPayment}
+        >
+          <span>{submitting ? 'Äang chuyá»ƒn tiáº¿pâ€¦' : 'Äi tiáº¿p'}</span>
+          <span>â”</span>
+        </button>
+      </footer>
+    </div>
+  );
+}
