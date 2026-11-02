@@ -7,6 +7,7 @@ import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { money } from '../../lib/formatters';
 import { createBookingsApi } from './bookingsApi';
+import { SearchSummaryBanner } from '../flights/FlightResultsPage';
 import './bookingServices.css';
 
 export function BookingServicesPage() {
@@ -135,31 +136,22 @@ export function BookingServicesPage() {
   }
 
   return (
-    <div className="public-page booking-page" style={{ background: '#f8fafc', minHeight: '100vh' }}>
+    <div className="public-page booking-page" style={{ background: '#f4f1ea', minHeight: '100vh' }}>
       <AppHeader />
 
-      <main className="services-unified-container">
-        {/* 1. Header Banner Tuyến bay đồng bộ với trang Đặt chỗ */}
-        <section className="services-step-header" aria-label="Thông tin tuyến bay">
-          <div className="services-step-route-info">
-            <span className="services-step-trip-badge">
-              <span>✈</span>
-              <span>{isRoundTrip ? 'CHUYẾN BAY KHỨ HỒI' : 'CHUYẾN BAY MỘT CHIỀU'} · {passengerCount} HÀNH KHÁCH</span>
-            </span>
-            <h1 className="services-step-route-title">
-              <span>{originCity} ({originCode})</span>
-              <span className="route-arrow">➔</span>
-              <span>{destCity} ({destCode})</span>
-            </h1>
-          </div>
-
-          <div className="services-stepper-badges" aria-label="Quy trình đặt vé">
-            <div className="services-stepper-step is-done" title="Bước 1: Chọn chuyến bay">✈</div>
-            <div className="services-stepper-step is-done" title="Bước 2: Thông tin hành khách">👤</div>
-            <div className="services-stepper-step is-active" title="Bước 3: Dịch vụ bổ sung">🛒</div>
-            <div className="services-stepper-step" title="Bước 4: Thanh toán">💲</div>
-          </div>
-        </section>
+      <main className="booking-main" style={{ maxWidth: 1200, margin: '0 auto', padding: '1rem' }}>
+        {/* 1. Header Banner Tuyến bay chuẩn đồng bộ 100% với trang Kết quả tìm kiếm */}
+        <SearchSummaryBanner
+          tripType={isRoundTrip ? 'round_trip' : 'one_way'}
+          passengerCount={passengerCount}
+          departureAirport={outboundFlight?.departureAirport}
+          arrivalAirport={outboundFlight?.arrivalAirport}
+          departureDate={outboundFlight?.departure_time}
+          returnDate={inboundFlight?.departure_time}
+          currentStep={3}
+          editUrl={`/bookings/${id}`}
+          editText="Xem lại đặt chỗ"
+        />
 
         {error ? (
           <div style={{ marginTop: '1rem' }}>
@@ -167,11 +159,11 @@ export function BookingServicesPage() {
           </div>
         ) : null}
 
-        {/* 2. Container chính: Cột danh sách dịch vụ (trái) + Cột Thông tin đặt chỗ (phải) */}
-        <div className="services-checkout-layout">
+        {/* 2. Layout 2 cột chuẩn: Cột dịch vụ bổ trợ bên trái + Cột Widget tóm tắt bên phải */}
+        <div className="results-layout-grid" style={{ marginTop: '1.25rem' }}>
           {/* CỘT TRÁI: CÁC THẺ DỊCH VỤ BỔ TRỢ */}
-          <section className="services-main-col">
-            <h2 className="services-page-title">
+          <section className="results-main-col">
+            <h2 className="services-page-title" style={{ color: '#0f382c', fontWeight: 800, fontSize: '1.4rem', margin: '0.25rem 0 1rem' }}>
               Lựa chọn các tiện ích bổ sung cho hành trình bay trọn vẹn
             </h2>
 
@@ -183,7 +175,7 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square seat">💺</div>
+                    <div className="service-icon-square seat" style={{ background: '#eef7f5', color: '#0f6b66' }}>💺</div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Chọn chỗ ngồi yêu thích</span>
@@ -219,7 +211,7 @@ export function BookingServicesPage() {
                       <div className="service-routes-grid">
                         <div className="service-route-col">
                           <span className="service-route-header">
-                            {originCode} <span style={{ color: '#0e3d36' }}>✈</span> {destCode}
+                            {originCode} <span style={{ color: '#0f6b66' }}>✈</span> {destCode}
                           </span>
                           <span className="service-route-detail">
                             Đã bao gồm 20kg hành lý ký gửi tiêu chuẩn
@@ -228,7 +220,7 @@ export function BookingServicesPage() {
                         {isRoundTrip ? (
                           <div className="service-route-col">
                             <span className="service-route-header">
-                              {destCode} <span style={{ color: '#0e3d36' }}>✈</span> {originCode}
+                              {destCode} <span style={{ color: '#0f6b66' }}>✈</span> {originCode}
                             </span>
                             <span className="service-route-detail">
                               Đã bao gồm 20kg hành lý ký gửi tiêu chuẩn
@@ -292,20 +284,20 @@ export function BookingServicesPage() {
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Suất ăn ẩm thực</span>
-                        <span className="service-badge-sub">Serene Sky Dining</span>
+                        <span className="service-badge-sub" style={{ color: '#0f6b66' }}>Serene Sky Dining</span>
                       </div>
 
                       <div className="service-routes-grid">
                         <div className="service-route-col">
                           <span className="service-route-header">
-                            {originCode} <span style={{ color: '#0e3d36' }}>✈</span> {destCode}
+                            {originCode} <span style={{ color: '#0f6b66' }}>✈</span> {destCode}
                           </span>
                           <span className="service-route-detail">{selectedMeal === 'standard' ? 'Suất ăn nhẹ theo tiêu chuẩn hãng' : 'Set ẩm thực cao cấp + Thức uống'}</span>
                         </div>
                         {isRoundTrip ? (
                           <div className="service-route-col">
                             <span className="service-route-header">
-                              {destCode} <span style={{ color: '#0e3d36' }}>✈</span> {originCode}
+                              {destCode} <span style={{ color: '#0f6b66' }}>✈</span> {originCode}
                             </span>
                             <span className="service-route-detail">{selectedMeal === 'standard' ? 'Suất ăn nhẹ theo tiêu chuẩn hãng' : 'Set ẩm thực cao cấp + Thức uống'}</span>
                           </div>
@@ -373,7 +365,7 @@ export function BookingServicesPage() {
                         type="checkbox"
                         checked={selectedTaxi}
                         onChange={(e) => setSelectedTaxi(e.target.checked)}
-                        style={{ width: '1.2rem', height: '1.2rem', accentColor: '#0e3d36' }}
+                        style={{ width: '1.2rem', height: '1.2rem', accentColor: '#0f6b66' }}
                       />
                       <div>
                         <strong>Đặt xe 4 chỗ đón tại sân bay {destCity} ({destCode})</strong>
@@ -398,7 +390,7 @@ export function BookingServicesPage() {
                       </div>
                       <div className="service-routes-grid" style={{ border: 'none', margin: 0, padding: 0 }}>
                         <span className="service-route-header">
-                          {originCode} <span style={{ color: '#0e3d36' }}>✈</span> {destCode}
+                          {originCode} <span style={{ color: '#0f6b66' }}>✈</span> {destCode}
                         </span>
                       </div>
                       <p className="service-card-desc">
@@ -418,7 +410,7 @@ export function BookingServicesPage() {
                         type="checkbox"
                         checked={selectedInsurance}
                         onChange={(e) => setSelectedInsurance(e.target.checked)}
-                        style={{ width: '1.2rem', height: '1.2rem', accentColor: '#0e3d36' }}
+                        style={{ width: '1.2rem', height: '1.2rem', accentColor: '#0f6b66' }}
                       />
                       <div>
                         <strong>Gói bảo hiểm toàn diện (72.000 VND / hành khách)</strong>
@@ -457,7 +449,7 @@ export function BookingServicesPage() {
                         type="checkbox"
                         checked={selectedPriority}
                         onChange={(e) => setSelectedPriority(e.target.checked)}
-                        style={{ width: '1.2rem', height: '1.2rem', accentColor: '#0e3d36' }}
+                        style={{ width: '1.2rem', height: '1.2rem', accentColor: '#0f6b66' }}
                       />
                       <div>
                         <strong>Lối đi ưu tiên Serene Priority Pass (120.000 VND / hành khách)</strong>
@@ -470,179 +462,122 @@ export function BookingServicesPage() {
             </div>
           </section>
 
-          {/* CỘT PHẢI: THÔNG TIN ĐẶT CHỖ (SIDEBAR ĐỒNG BỘ 100% VỚI TRANG ĐẶT CHỖ) */}
-          <aside className="services-summary-sidebar" aria-label="Tóm tắt thông tin đặt chỗ">
-            <div className="services-sidebar-top-bar">
-              <h2 className="services-sidebar-headline">THÔNG TIN ĐẶT CHỖ</h2>
-              <button className="services-detail-badge-btn" type="button" onClick={() => navigate(`/bookings/${id}`)}>
-                Chi Tiết
+          {/* CỘT PHẢI: BOOKING SUMMARY WIDGET ĐỒNG BỘ 100% VỚI TRANG TÌM KIẾM */}
+          <aside className="booking-summary-widget" aria-label="Thông tin đặt chỗ">
+            <div className="booking-summary-header">
+              <h3 className="booking-summary-title">THÔNG TIN ĐẶT CHỖ</h3>
+            </div>
+
+            <div className="booking-summary-body">
+              {/* Thông tin hành khách */}
+              <div className="summary-passenger-box">
+                <span className="summary-box-label">Thông tin hành khách</span>
+                <div className="summary-passenger-content">
+                  <strong>{passengerCount} Người lớn</strong>
+                </div>
+              </div>
+
+              {/* Chuyến đi */}
+              <div className="summary-leg-card is-current">
+                <div className="summary-leg-header">
+                  <span className="summary-leg-name">Chuyến đi</span>
+                  <strong className="summary-leg-price table-mono-cell tabular-nums">
+                    {money(baseBookingAmount / (isRoundTrip ? 2 : 1))}
+                  </strong>
+                </div>
+                <div className="summary-leg-route">
+                  <span className="summary-leg-city">{originCity} ({originCode})</span>
+                  <span className="summary-leg-arrow" aria-hidden="true">➔</span>
+                  <span className="summary-leg-city">{destCity} ({destCode})</span>
+                </div>
+                <div className="summary-leg-details">
+                  <div className="summary-flight-meta">
+                    <strong className="summary-flight-time">{formatFlightTime(outboundFlight?.departure_time)}</strong>
+                    <span className="summary-flight-carrier">{outboundFlight?.flight_number || 'SF101'}</span>
+                  </div>
+                </div>
+                <div className="summary-pricing-breakdown">
+                  <div className="pricing-row">
+                    <span>Giá vé:</span>
+                    <strong>{money(Math.round(baseBookingAmount * 0.75 / (isRoundTrip ? 2 : 1)))}</strong>
+                  </div>
+                  <div className="pricing-row">
+                    <span>Thuế, phí:</span>
+                    <strong>{money(Math.round(baseBookingAmount * 0.25 / (isRoundTrip ? 2 : 1)))}</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* Chuyến về (nếu có) */}
+              {isRoundTrip ? (
+                <div className="summary-leg-card is-current">
+                  <div className="summary-leg-header">
+                    <span className="summary-leg-name">Chuyến về</span>
+                    <strong className="summary-leg-price table-mono-cell tabular-nums">
+                      {money(baseBookingAmount / 2)}
+                    </strong>
+                  </div>
+                  <div className="summary-leg-route">
+                    <span className="summary-leg-city">{destCity} ({destCode})</span>
+                    <span className="summary-leg-arrow" aria-hidden="true">➔</span>
+                    <span className="summary-leg-city">{originCity} ({originCode})</span>
+                  </div>
+                  <div className="summary-leg-details">
+                    <div className="summary-flight-meta">
+                      <strong className="summary-flight-time">{formatFlightTime(inboundFlight?.departure_time)}</strong>
+                      <span className="summary-flight-carrier">{inboundFlight?.flight_number || 'SF102'}</span>
+                    </div>
+                  </div>
+                  <div className="summary-pricing-breakdown">
+                    <div className="pricing-row">
+                      <span>Giá vé:</span>
+                      <strong>{money(Math.round(baseBookingAmount * 0.75 / 2))}</strong>
+                    </div>
+                    <div className="pricing-row">
+                      <span>Thuế, phí:</span>
+                      <strong>{money(Math.round(baseBookingAmount * 0.25 / 2))}</strong>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Dịch vụ bổ sung */}
+              {totalAddonsPrice > 0 ? (
+                <div className="summary-leg-card" style={{ background: '#f0fdfa', borderColor: '#ccfbf1' }}>
+                  <div className="summary-leg-header">
+                    <span className="summary-leg-name" style={{ color: '#0f6b66' }}>Dịch vụ bổ sung</span>
+                    <strong className="summary-leg-price table-mono-cell tabular-nums" style={{ color: '#0f6b66' }}>
+                      {money(totalAddonsPrice)}
+                    </strong>
+                  </div>
+                  <div className="summary-pricing-breakdown" style={{ borderTop: 'none', paddingTop: 0 }}>
+                    {baggagePrice > 0 ? <div className="pricing-row"><span>Hành lý ({selectedBaggage}):</span><strong>{money(baggagePrice)}</strong></div> : null}
+                    {mealPrice > 0 ? <div className="pricing-row"><span>Suất ăn ẩm thực:</span><strong>{money(mealPrice)}</strong></div> : null}
+                    {taxiPrice > 0 ? <div className="pricing-row"><span>Xe đưa đón:</span><strong>{money(taxiPrice)}</strong></div> : null}
+                    {insurancePrice > 0 ? <div className="pricing-row"><span>Bảo hiểm Travel Shield:</span><strong>{money(insurancePrice)}</strong></div> : null}
+                    {priorityPrice > 0 ? <div className="pricing-row"><span>Lối đi ưu tiên:</span><strong>{money(priorityPrice)}</strong></div> : null}
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Hộp tổng tiền Teal & Amber chuẩn */}
+              <div className="summary-total-strip">
+                <span>TỔNG TIỀN</span>
+                <span className="summary-total-amount">{money(grandTotal)}</span>
+              </div>
+
+              {/* Nút Đi tiếp Amber của Serene */}
+              <button
+                type="button"
+                className="summary-continue-btn"
+                disabled={submitting}
+                onClick={handleProceedToPayment}
+              >
+                {submitting ? 'Đang chuyển tiếp…' : 'Đi tiếp ➔'}
               </button>
-            </div>
-
-            {/* Accordion: Thông tin hành khách */}
-            <div className="services-sidebar-group">
-              <div
-                className="services-acc-bar"
-                onClick={() => setOpenPassengerAccordion(!openPassengerAccordion)}
-              >
-                <span className="services-acc-label">Thông tin hành khách</span>
-                <span>{openPassengerAccordion ? '▲' : '▼'}</span>
-              </div>
-              {openPassengerAccordion ? (
-                <div style={{ padding: '0 1.25rem 0.85rem 1.25rem', fontSize: '0.82rem', color: '#475569' }}>
-                  {(booking?.passengers || [{ passenger_name: 'Hành khách 1' }]).map((p, idx) => (
-                    <div key={idx} style={{ padding: '0.25rem 0', display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{idx + 1}. {p.passenger_name}</span>
-                      <span style={{ color: '#0e3d36', fontWeight: 600 }}>Người lớn</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            {/* Accordion: Chuyến đi */}
-            <div className="services-sidebar-group">
-              <div
-                className="services-acc-bar"
-                onClick={() => setOpenOutboundAccordion(!openOutboundAccordion)}
-              >
-                <span className="services-acc-label">Chuyến đi</span>
-                <span className="services-leg-cost-tag">
-                  {money(baseBookingAmount / (isRoundTrip ? 2 : 1))} <span>✎</span>
-                </span>
-              </div>
-              {openOutboundAccordion ? (
-                <div className="services-leg-breakdown">
-                  <span className="services-leg-names">
-                    {originCity} ({originCode}) <span style={{ color: '#0e3d36' }}>✈</span> {destCity} ({destCode})
-                  </span>
-                  <span className="services-leg-submeta">
-                    {formatFlightDate(outboundFlight?.departure_time)} | {formatFlightTime(outboundFlight?.departure_time)} | {outboundFlight?.flight_number || 'SF101'}
-                  </span>
-                  <div className="services-fee-row">
-                    <span>Giá vé</span>
-                    <span>{money(Math.round(baseBookingAmount * 0.75 / (isRoundTrip ? 2 : 1)))}</span>
-                  </div>
-                  <div className="services-fee-row">
-                    <span>Thuế, phí</span>
-                    <span>{money(Math.round(baseBookingAmount * 0.25 / (isRoundTrip ? 2 : 1)))}</span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-
-            {/* Accordion: Chuyến về (nếu có) */}
-            {isRoundTrip ? (
-              <div className="services-sidebar-group">
-                <div
-                  className="services-acc-bar"
-                  onClick={() => setOpenInboundAccordion(!openInboundAccordion)}
-                >
-                  <span className="services-acc-label">Chuyến về</span>
-                  <span className="services-leg-cost-tag">
-                    {money(baseBookingAmount / 2)} <span>✎</span>
-                  </span>
-                </div>
-                {openInboundAccordion ? (
-                  <div className="services-leg-breakdown">
-                    <span className="services-leg-names">
-                      {destCity} ({destCode}) <span style={{ color: '#0e3d36' }}>✈</span> {originCity} ({originCode})
-                    </span>
-                    <span className="services-leg-submeta">
-                      {formatFlightDate(inboundFlight?.departure_time)} | {formatFlightTime(inboundFlight?.departure_time)} | {inboundFlight?.flight_number || 'SF102'}
-                    </span>
-                    <div className="services-fee-row">
-                      <span>Giá vé</span>
-                      <span>{money(Math.round(baseBookingAmount * 0.75 / 2))}</span>
-                    </div>
-                    <div className="services-fee-row">
-                      <span>Thuế, phí</span>
-                      <span>{money(Math.round(baseBookingAmount * 0.25 / 2))}</span>
-                    </div>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {/* Accordion: Dịch vụ bổ sung */}
-            {totalAddonsPrice > 0 ? (
-              <div className="services-sidebar-group">
-                <div className="services-acc-bar">
-                  <span className="services-acc-label">Dịch vụ bổ sung</span>
-                  <span className="services-leg-cost-tag">
-                    {money(totalAddonsPrice)}
-                  </span>
-                </div>
-                <div style={{ padding: '0 0 0.5rem 0' }}>
-                  {baggagePrice > 0 ? (
-                    <div className="services-addon-line">
-                      <span className="addon-name">Hành lý ký gửi ({selectedBaggage})</span>
-                      <span className="addon-cost">{money(baggagePrice)}</span>
-                    </div>
-                  ) : null}
-                  {mealPrice > 0 ? (
-                    <div className="services-addon-line">
-                      <span className="addon-name">Ẩm thực Serene Gourmet</span>
-                      <span className="addon-cost">{money(mealPrice)}</span>
-                    </div>
-                  ) : null}
-                  {taxiPrice > 0 ? (
-                    <div className="services-addon-line">
-                      <span className="addon-name">Xe đưa đón sân bay</span>
-                      <span className="addon-cost">{money(taxiPrice)}</span>
-                    </div>
-                  ) : null}
-                  {insurancePrice > 0 ? (
-                    <div className="services-addon-line">
-                      <span className="addon-name">Bảo hiểm Serene Travel Shield</span>
-                      <span className="addon-cost">{money(insurancePrice)}</span>
-                    </div>
-                  ) : null}
-                  {priorityPrice > 0 ? (
-                    <div className="services-addon-line">
-                      <span className="addon-name">Lối đi ưu tiên Serene Priority</span>
-                      <span className="addon-cost">{money(priorityPrice)}</span>
-                    </div>
-                  ) : null}
-                </div>
-              </div>
-            ) : null}
-
-            {/* Hộp Tổng Tiền phong cách đồng bộ */}
-            <div className="services-total-card-box">
-              <span className="label-total">Tổng tiền</span>
-              <span className="val-total">{money(grandTotal)}</span>
             </div>
           </aside>
         </div>
-
-        {/* 3. Bottom Bar Cố định: Quay lại | Tổng tiền | Đi tiếp */}
-        <footer className="services-bottom-action-bar">
-          <button
-            className="button-back"
-            type="button"
-            onClick={() => navigate(-1)}
-          >
-            ‹ Quay lại
-          </button>
-
-          <div className="services-bottom-next-group">
-            <div className="services-bottom-price-stack">
-              <span>Tổng tiền thanh toán</span>
-              <strong>{money(grandTotal)}</strong>
-            </div>
-
-            <button
-              className="button-continue"
-              type="button"
-              disabled={submitting}
-              onClick={handleProceedToPayment}
-            >
-              <span>{submitting ? 'Đang chuyển tiếp…' : 'Đi tiếp'}</span>
-              <span>➔</span>
-            </button>
-          </div>
-        </footer>
       </main>
 
       <AppFooter />

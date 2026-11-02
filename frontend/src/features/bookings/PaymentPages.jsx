@@ -22,6 +22,7 @@ import {
 } from '../../lib/dateUtils';
 import { isSafeCheckoutUrl } from './paymentQr';
 import { PaymentQr } from './PaymentQr.jsx';
+import { SearchSummaryBanner } from '../flights/FlightResultsPage';
 import './bookingServices.css';
 
 const time = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
@@ -149,35 +150,25 @@ export function PaymentInitiatePage() {
 
   const originCode = booking?.flight?.departureAirport?.iata_code || 'SGN';
   const originCity = booking?.flight?.departureAirport?.city || booking?.flight?.departureAirport?.name || 'Tp. Hồ Chí Minh';
-  const destCode = booking?.flight?.arrivalAirport?.iata_code || 'HAN';
-  const destCity = booking?.flight?.arrivalAirport?.city || booking?.flight?.arrivalAirport?.name || 'Hà Nội';
   const isRoundTrip = additionalSegments.length > 0 || booking?.trip_type === 'round_trip';
   const passengerCount = Math.max(1, booking?.passengers?.length || 1);
 
   return <PaymentShell>
-    <div className="services-step-header" aria-label="Thông tin tuyến bay">
-      <div className="services-step-route-info">
-        <span className="services-step-trip-badge">
-          <span>✈</span>
-          <span>{isRoundTrip ? 'CHUYẾN BAY KHỨ HỒI' : 'CHUYẾN BAY MỘT CHIỀU'} · {passengerCount} HÀNH KHÁCH</span>
-        </span>
-        <h1 className="services-step-route-title">
-          <span>{originCity} ({originCode})</span>
-          <span className="route-arrow">➔</span>
-          <span>{destCity} ({destCode})</span>
-        </h1>
-      </div>
-      <div className="services-stepper-badges" aria-label="Quy trình đặt vé">
-        <div className="services-stepper-step is-done" title="Bước 1: Chọn chuyến bay">✈</div>
-        <div className="services-stepper-step is-done" title="Bước 2: Thông tin hành khách">👤</div>
-        <div className="services-stepper-step is-done" title="Bước 3: Dịch vụ bổ sung">🛒</div>
-        <div className="services-stepper-step is-active" title="Bước 4: Thanh toán">💲</div>
-      </div>
-    </div>
+    <SearchSummaryBanner
+      tripType={isRoundTrip ? 'round_trip' : 'one_way'}
+      passengerCount={passengerCount}
+      departureAirport={booking?.flight?.departureAirport}
+      arrivalAirport={booking?.flight?.arrivalAirport}
+      departureDate={booking?.flight?.departure_time}
+      returnDate={additionalSegments[0]?.flight?.departure_time}
+      currentStep={4}
+      editUrl={`/bookings/${id}/services`}
+      editText="Chọn lại dịch vụ"
+    />
 
-    <div className="services-checkout-layout">
+    <div className="results-layout-grid" style={{ marginTop: '1.25rem' }}>
       {/* CỘT TRÁI: ĐỒNG HỒ ĐẾM NGƯỢC & PHƯƠNG THỨC THANH TOÁN */}
-      <section className="services-main-col">
+      <section className="results-main-col">
         <HoldCountdown expiresAt={booking?.hold_expires_at} onExpired={reloadBooking} />
         {isBookingExpired ? <Notice type="warning">Đặt chỗ đã hết hạn giữ chỗ. Bạn vui lòng tìm chuyến bay mới để tiếp tục đặt vé. <Link className="button button-primary" style={{ display: 'inline-block', marginTop: '8px' }} to="/">Tìm chuyến bay khác</Link></Notice> : null}
         {state.error ? <Notice type="error">{state.error}</Notice> : null}
@@ -213,7 +204,7 @@ export function PaymentInitiatePage() {
               </div>
 
               <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-                <button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'} style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#0f172a', fontWeight: 800, padding: '0.85rem 2.25rem', border: 'none', borderRadius: '0.55rem', cursor: 'pointer' }}>
+                <button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'} style={{ background: 'linear-gradient(135deg, #e8a33d 0%, #d97706 100%)', color: '#ffffff', fontWeight: 800, padding: '0.85rem 2.25rem', border: 'none', borderRadius: '0.55rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(232, 163, 61, 0.35)' }}>
                   {state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}
                 </button>
                 {booking?.status !== 'holding' ? <p className="field-hint" style={{ margin: 0 }}>Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}
@@ -225,57 +216,70 @@ export function PaymentInitiatePage() {
         </div>
       </section>
 
-      {/* CỘT PHẢI: SIDEBAR THÔNG TIN ĐẶT CHỖ ĐỒNG BỘ */}
-      <aside className="services-summary-sidebar" aria-label="Tóm tắt thông tin đặt chỗ">
-        <div className="services-sidebar-top-bar">
-          <h2 className="services-sidebar-headline">THÔNG TIN ĐẶT CHỖ</h2>
-          <Link className="services-detail-badge-btn" to={`/bookings/${id}`} state={{ guestEmail }} style={{ textDecoration: 'none' }}>
-            Chi Tiết
-          </Link>
+      {/* CỘT PHẢI: BOOKING SUMMARY WIDGET ĐỒNG BỘ CHUẨN */}
+      <aside className="booking-summary-widget" aria-label="Tóm tắt thông tin đặt chỗ">
+        <div className="booking-summary-header">
+          <h3 className="booking-summary-title">THÔNG TIN ĐẶT CHỖ</h3>
         </div>
 
-        <div style={{ padding: '1rem 1.25rem' }}>
-          <dl className="booking-facts">
-            <div><dt>Mã đặt chỗ</dt><dd className="table-mono-cell">{booking?.booking_code || `#${id}`}</dd></div>
-            <div><dt>Chặng đầu</dt><dd className="table-mono-cell">{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div>
-            <div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div>
-            <div><dt>Số hành khách</dt><dd className="table-mono-cell">{booking?.passengers?.length || '—'}</dd></div>
-            <div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{time(booking?.hold_expires_at)}</dd></div>
-          </dl>
-
-          {additionalSegments.length ? (
-            <div style={{ marginTop: '1rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.75rem' }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.5rem', color: '#1e293b' }}>Các chặng tiếp theo</h3>
-              <ol className="booking-itinerary-summary">
-                {[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => (
-                  <li key={segment.id}>
-                    <div>
-                      <strong className="table-mono-cell">{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong>
-                      <span>{time(segment.flight?.departure_time)}</span>
-                    </div>
-                  </li>
-                ))}
-              </ol>
+        <div className="booking-summary-body">
+          <div className="summary-passenger-box">
+            <span className="summary-box-label">Thông tin hành khách</span>
+            <div className="summary-passenger-content">
+              <strong>{passengerCount} Người lớn</strong>
             </div>
-          ) : null}
+          </div>
 
-          {booking?.ancillaries?.length ? (
-            <div style={{ marginTop: '1rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.75rem' }}>
-              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.5rem', color: '#1e293b' }}>Dịch vụ bổ sung</h3>
-              <ul style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.82rem', color: '#475569' }}>
-                {booking.ancillaries.map((line) => (
-                  <li key={line.id} style={{ marginBottom: '0.35rem' }}>
-                    {line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · {line.service_name_snapshot} × {line.quantity}: <span className="table-mono-cell">{money(line.line_total_snapshot)}</span>
-                  </li>
-                ))}
-              </ul>
+          <div className="summary-leg-card is-current">
+            <div className="summary-leg-header">
+              <span className="summary-leg-name">Chi tiết đặt chỗ</span>
+              <Link to={`/bookings/${id}`} state={{ guestEmail }} style={{ fontSize: '0.8rem', color: '#0f6b66', fontWeight: 700, textDecoration: 'none' }}>
+                Chi Tiết ➔
+              </Link>
             </div>
-          ) : null}
-        </div>
 
-        <div className="services-total-card-box">
-          <span className="label-total">Tổng thanh toán</span>
-          <span className="val-total">{money(booking?.total_amount)}</span>
+            <dl className="booking-facts" style={{ margin: 0, padding: 0 }}>
+              <div><dt>Mã đặt chỗ</dt><dd className="table-mono-cell">{booking?.booking_code || `#${id}`}</dd></div>
+              <div><dt>Chặng đầu</dt><dd className="table-mono-cell">{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div>
+              <div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div>
+              <div><dt>Số hành khách</dt><dd className="table-mono-cell">{booking?.passengers?.length || '—'}</dd></div>
+              <div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{time(booking?.hold_expires_at)}</dd></div>
+            </dl>
+
+            {additionalSegments.length ? (
+              <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, margin: '0 0 0.35rem', color: '#1e293b' }}>Các chặng tiếp theo</h4>
+                <ol className="booking-itinerary-summary" style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                  {[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => (
+                    <li key={segment.id}>
+                      <div>
+                        <strong className="table-mono-cell">{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong>
+                        <span>{time(segment.flight?.departure_time)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+
+            {booking?.ancillaries?.length ? (
+              <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, margin: '0 0 0.35rem', color: '#1e293b' }}>Dịch vụ bổ sung</h4>
+                <ul style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#475569' }}>
+                  {booking.ancillaries.map((line) => (
+                    <li key={line.id} style={{ marginBottom: '0.25rem' }}>
+                      {line.passenger?.passenger_name || 'Hành khách'} · {line.service_name_snapshot} × {line.quantity}: <span className="table-mono-cell">{money(line.line_total_snapshot)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="summary-total-strip">
+            <span>TỔNG TIỀN</span>
+            <span className="summary-total-amount">{money(booking?.total_amount)}</span>
+          </div>
         </div>
       </aside>
     </div>
