@@ -37,7 +37,7 @@ describe('BookingServicesPage', () => {
 
   it('renders Serene Flightways ancillary services page and navigates to payment', async () => {
     mocks.request.mockImplementation(async (path) => {
-      if (path === '/bookings/88') return bookingMock;
+      if (path.startsWith('/bookings/88')) return bookingMock;
       throw new Error(`Unexpected request ${path}`);
     });
 
