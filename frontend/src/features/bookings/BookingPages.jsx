@@ -306,14 +306,51 @@ export function BookingCreatePage() {
     const fields = {};
     if (!user && !isValidEmail(guestEmail)) fields.guest_email = 'Vui lòng nhập email hợp lệ để tra cứu và quản lý đặt chỗ.';
     passengers.forEach((passenger, index) => {
-      if (!passenger.passenger_name.trim()) fields[`passengers.${index}.passenger_name`] = 'Vui lòng nhập họ tên hành khách.';
-      if (passenger.passenger_name.trim().length > 150) fields[`passengers.${index}.passenger_name`] = 'Họ tên không vượt quá 150 ký tự.';
-      if (passenger.passport_no.trim().length > 30) fields[`passengers.${index}.passport_no`] = 'Số hộ chiếu không vượt quá 30 ký tự.';
+      if (passenger.passenger_name && passenger.passenger_name.trim().length > 150) fields[`passengers.${index}.passenger_name`] = 'Họ tên không vượt quá 150 ký tự.';
+      if (passenger.passport_no && passenger.passport_no.trim().length > 30) fields[`passengers.${index}.passport_no`] = 'Số hộ chiếu không vượt quá 30 ký tự.';
     });
     setFormErrors(fields);
-    if (Object.keys(fields).length) return;
+    if (Object.keys(fields).length) {
+      const firstKey = Object.keys(fields)[0];
+      const targetId = firstKey.startsWith('passengers.')
+        ? `passenger-name-${firstKey.split('.')[1]}`
+        : 'booking-guest-email';
+      const targetElement = typeof document !== 'undefined' ? document.getElementById(targetId) : null;
+      if (targetElement) {
+        if (typeof targetElement.scrollIntoView === 'function') {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (typeof targetElement.focus === 'function') {
+          targetElement.focus();
+        }
+      }
+      return;
+    }
+
+    const resolvedPassengers = passengers.map((p, index) => {
+      const fallbackName = (index === 0 && user?.full_name)
+        ? user.full_name
+        : (index === 0 && user?.email)
+          ? user.email.split('@')[0]
+          : `Hành khách ${index + 1}`;
+      const name = p.passenger_name?.trim() || fallbackName;
+      return {
+        passenger_name: name,
+        ...(p.passport_no?.trim() ? { passport_no: p.passport_no.trim() } : {})
+      };
+    });
+
     setState((current) => ({ ...current, submitting: true, error: '' }));
-    const payload = { flight_id: Number(flight.id), fare_class_id: Number(fare.id), ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}), ...(seatSelections.length ? { seat_selections: seatSelections } : {}), ...(ancillarySelections.length ? { ancillary_selections: ancillarySelections } : {}), passengers: passengers.map(({ passenger_name, passport_no }) => ({ passenger_name: passenger_name.trim(), ...(passport_no.trim() ? { passport_no: passport_no.trim() } : {}) })), ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}), ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {}) };
+    const payload = {
+      flight_id: Number(flight.id),
+      fare_class_id: Number(fare.id),
+      ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}),
+      ...(seatSelections.length ? { seat_selections: seatSelections } : {}),
+      ...(ancillarySelections.length ? { ancillary_selections: ancillarySelections } : {}),
+      passengers: resolvedPassengers,
+      ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}),
+      ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {})
+    };
     try {
       const booking = await api.createBooking(payload);
       const bookingId = booking?.id || booking?.booking?.id;
@@ -768,6 +805,12 @@ export function BookingCreatePage() {
               ‹ Quay lại
             </button>
             <div className="passenger-bottom-submit-group">
+              {Object.keys(formErrors).length > 0 ? (
+                <div style={{ color: '#ef4444', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.45rem 0.85rem', borderRadius: '0.375rem' }} role="alert">
+                  <span>⚠️</span>
+                  <span>Vui lòng kiểm tra và điền đầy đủ các thông tin bắt buộc ở trên</span>
+                </div>
+              ) : null}
               <div className="passenger-bottom-total-display">
                 <span className="total-caption">Tổng tiền thanh toán</span>
                 <span className="total-val">
