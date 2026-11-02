@@ -1,21 +1,22 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   SERENE FLIGHTWAYS — DỊCH VỤ BỔ SUNG (VIETJET AIR ANCILLARIES INSPIRATION)
+   SERENE FLIGHTWAYS — DỊCH VỤ BỔ SUNG & TIỆN ÍCH HÀNH TRÌNH
+   Thương hiệu hàng không cao cấp Serene Flightways (Teal & Amber Gold)
    ═══════════════════════════════════════════════════════════════════════ */
 
 .services-page-wrapper {
-  background-color: #f1f5f9;
+  background-color: #f8fafc;
   min-height: 100vh;
-  padding-bottom: 90px;
+  padding-bottom: 95px;
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1e293b;
 }
 
-/* Header tuyến bay màu vàng cam rực rỡ đặc trưng Vietjet */
+/* Header tuyến bay phong cách Serene Flightways */
 .services-flight-banner {
-  background: linear-gradient(135deg, #e11b22 0%, #d91b22 60%, #b91319 100%);
+  background: linear-gradient(135deg, #0a4946 0%, #0f6b66 60%, #155e58 100%);
   color: #ffffff;
   padding: 1.15rem 2rem;
-  box-shadow: 0 4px 16px rgba(225, 27, 34, 0.25);
+  box-shadow: 0 4px 16px rgba(10, 73, 70, 0.25);
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -66,11 +67,11 @@
 }
 
 .services-location-item .loc-dot.dest {
-  background-color: #10b981;
+  background-color: #34d399;
 }
 
 .services-location-item .loc-name {
-  color: #fef08a;
+  color: #ffffff;
   font-weight: 700;
 }
 
@@ -92,8 +93,8 @@
   font-size: 0.95rem;
   font-weight: 700;
   color: #ffffff;
-  background: rgba(255, 255, 255, 0.2);
-  border: 1.5px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  border: 1.5px solid rgba(255, 255, 255, 0.3);
   transition: all 0.25s ease;
 }
 
@@ -105,7 +106,7 @@
 .services-stepper-circle.is-active {
   background: #f59e0b;
   border-color: #fef08a;
-  color: #111827;
+  color: #0f172a;
   font-weight: 800;
   transform: scale(1.1);
   box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
@@ -128,14 +129,13 @@
   }
 }
 
-/* Tiêu đề trang uốn lượn phong cách Vietjet */
+/* Tiêu đề trang phong cách thanh lịch Serene Flightways */
 .services-headline {
-  color: #047857;
+  color: #0f6b66;
   font-size: 1.35rem;
   font-weight: 800;
   margin-top: 0;
   margin-bottom: 1.25rem;
-  font-style: italic;
   letter-spacing: -0.01em;
   display: flex;
   align-items: center;
@@ -172,8 +172,8 @@
 }
 
 .service-item-card.is-expanded {
-  border-color: #f59e0b;
-  box-shadow: 0 6px 20px rgba(245, 158, 11, 0.12);
+  border-color: #0f6b66;
+  box-shadow: 0 6px 20px rgba(15, 107, 102, 0.12);
 }
 
 .service-card-left {
@@ -184,19 +184,19 @@
 }
 
 .service-icon-box {
-  width: 58px;
-  height: 58px;
+  width: 56px;
+  height: 56px;
   border-radius: 12px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 1.75rem;
+  font-size: 1.65rem;
 }
 
 .service-icon-box.seat {
-  background: #fee2e2;
-  color: #dc2626;
+  background: #ccfbf1;
+  color: #0f766e;
 }
 
 .service-icon-box.baggage {
@@ -206,22 +206,22 @@
 
 .service-icon-box.meal {
   background: #ffedd5;
-  color: #ea580c;
+  color: #c2410c;
 }
 
 .service-icon-box.taxi {
-  background: #fef9c3;
-  color: #ca8a04;
+  background: #e0f2fe;
+  color: #0284c7;
 }
 
 .service-icon-box.insurance {
-  background: #fee2e2;
-  color: #e11b22;
+  background: #ecfdf5;
+  color: #059669;
 }
 
 .service-icon-box.vip {
-  background: #fef3c7;
-  color: #b45309;
+  background: #fae8ff;
+  color: #9333ea;
 }
 
 .service-info-col {
@@ -244,14 +244,14 @@
 }
 
 .service-sub-tag {
-  color: #dc2626;
+  color: #0f766e;
   font-weight: 800;
   font-style: italic;
   font-size: 0.95rem;
 }
 
 .service-new-tag {
-  background: #ea580c;
+  background: #0f766e;
   color: #ffffff;
   font-size: 0.68rem;
   font-weight: 800;
@@ -310,7 +310,7 @@
 .service-price-tag {
   font-size: 1.12rem;
   font-weight: 800;
-  color: #dc2626;
+  color: #0f766e;
   text-align: right;
   white-space: nowrap;
 }
@@ -390,12 +390,12 @@
 .service-option-price {
   font-size: 0.95rem;
   font-weight: 800;
-  color: #dc2626;
+  color: #0f766e;
   white-space: nowrap;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
-   SIDEBAR THÔNG TIN ĐẶT CHỖ (MÀU ĐỎ VIETJET)
+   SIDEBAR THÔNG TIN ĐẶT CHỖ (MÀU NGỌC BÍCH SERENE FLIGHTWAYS)
    ═══════════════════════════════════════════════════════════════════════ */
 
 .services-sidebar-card {
@@ -408,7 +408,7 @@
 }
 
 .services-sidebar-header {
-  background: #dc2626;
+  background: #0f6b66;
   color: #ffffff;
   padding: 0.85rem 1.25rem;
   display: flex;
@@ -425,7 +425,7 @@
 
 .services-detail-link-btn {
   background: #f59e0b;
-  color: #1e293b;
+  color: #0f172a;
   font-size: 0.75rem;
   font-weight: 800;
   padding: 0.25rem 0.65rem;
@@ -468,7 +468,7 @@
 .services-leg-badge {
   font-size: 0.9rem;
   font-weight: 800;
-  color: #dc2626;
+  color: #0f766e;
   display: flex;
   align-items: center;
   gap: 0.35rem;
@@ -512,23 +512,23 @@
   align-items: center;
   justify-content: space-between;
   font-size: 0.82rem;
-  background: #fffbeb;
-  border-top: 1px dashed #fde68a;
+  background: #f0fdfa;
+  border-top: 1px dashed #99f6e4;
 }
 
 .services-addon-item .addon-title {
   font-weight: 700;
-  color: #92400e;
+  color: #115e59;
 }
 
 .services-addon-item .addon-price {
   font-weight: 800;
-  color: #dc2626;
+  color: #0f766e;
 }
 
-/* Banner đỏ Tổng tiền to */
+/* Banner Tổng tiền Serene Flightways */
 .services-total-banner {
-  background: #dc2626;
+  background: #0a4946;
   color: #ffffff;
   padding: 1.15rem 1.5rem;
   display: flex;
@@ -546,6 +546,7 @@
   font-size: 1.35rem;
   font-weight: 900;
   letter-spacing: -0.01em;
+  color: #fef08a;
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -601,7 +602,7 @@
 .services-center-val {
   font-size: 1.25rem;
   font-weight: 900;
-  color: #0f172a;
+  color: #0a4946;
 }
 
 .services-center-val small {
@@ -613,7 +614,7 @@
 
 .services-bottom-next-btn {
   padding: 0.85rem 2.5rem;
-  background: #f59e0b;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   color: #0f172a;
   border: none;
   border-radius: 0.6rem;
@@ -628,7 +629,7 @@
 }
 
 .services-bottom-next-btn:hover {
-  background: #d97706;
+  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
   color: #ffffff;
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(217, 119, 6, 0.4);
