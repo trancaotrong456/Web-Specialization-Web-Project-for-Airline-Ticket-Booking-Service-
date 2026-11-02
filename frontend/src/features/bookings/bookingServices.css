@@ -1,37 +1,39 @@
 /* ═══════════════════════════════════════════════════════════════════════
    SERENE FLIGHTWAYS — DỊCH VỤ BỔ SUNG & TIỆN ÍCH HÀNH TRÌNH
-   Thương hiệu hàng không cao cấp Serene Flightways (Teal & Amber Gold)
+   Đồng bộ 100% phong cách thiết kế Serene Flightways (Teal #0e3d36 & Amber #f59e0b)
    ═══════════════════════════════════════════════════════════════════════ */
 
-.services-page-wrapper {
-  background-color: #f8fafc;
-  min-height: 100vh;
-  padding-bottom: 95px;
+.services-unified-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 5rem;
   font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
   color: #1e293b;
 }
 
-/* Header tuyến bay phong cách Serene Flightways */
-.services-flight-banner {
-  background: linear-gradient(135deg, #0a4946 0%, #0f6b66 60%, #155e58 100%);
+/* ── 1. Header Banner Tuyến bay đồng bộ với trang Đặt chỗ ── */
+.services-step-header {
+  background: linear-gradient(135deg, #0e3d36 0%, #164e46 60%, #1d5f55 100%);
   color: #ffffff;
-  padding: 1.15rem 2rem;
-  box-shadow: 0 4px 16px rgba(10, 73, 70, 0.25);
+  padding: 1.15rem 1.75rem;
+  border-radius: 0.75rem 0.75rem 0 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1.5rem;
+  box-shadow: 0 4px 14px rgba(14, 61, 54, 0.2);
 }
 
-.services-banner-left {
+.services-step-route-info {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
+  min-width: 0;
 }
 
-.services-trip-type-label {
-  font-size: 0.82rem;
-  font-weight: 800;
+.services-step-trip-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: #fef08a;
@@ -40,42 +42,25 @@
   gap: 0.5rem;
 }
 
-.services-route-locations {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 1.25rem;
-  font-size: 0.95rem;
-  font-weight: 600;
-}
-
-.services-location-item {
+.services-step-route-title {
   display: flex;
   align-items: center;
-  gap: 0.35rem;
-}
-
-.services-location-item .loc-dot {
-  width: 9px;
-  height: 9px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
-.services-location-item .loc-dot.origin {
-  background-color: #f59e0b;
-}
-
-.services-location-item .loc-dot.dest {
-  background-color: #34d399;
-}
-
-.services-location-item .loc-name {
+  gap: 0.75rem;
+  font-size: 1.15rem;
+  font-weight: 800;
   color: #ffffff;
-  font-weight: 700;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-/* Stepper tròn 4 bước */
+.services-step-route-title .route-arrow {
+  color: #fde047;
+  font-size: 1.1rem;
+}
+
+/* Stepper tròn 4 bước đồng bộ */
 .services-stepper-badges {
   display: flex;
   align-items: center;
@@ -83,193 +68,191 @@
   flex-shrink: 0;
 }
 
-.services-stepper-circle {
-  width: 2.25rem;
-  height: 2.25rem;
-  border-radius: 50%;
+.services-stepper-step {
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.95rem;
-  font-weight: 700;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 50%;
+  font-size: 1rem;
   color: #ffffff;
   background: rgba(255, 255, 255, 0.15);
   border: 1.5px solid rgba(255, 255, 255, 0.3);
   transition: all 0.25s ease;
 }
 
-.services-stepper-circle.is-done {
+.services-stepper-step.is-done {
   background: #10b981;
-  border-color: #34d399;
+  border-color: #10b981;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
 }
 
-.services-stepper-circle.is-active {
+.services-stepper-step.is-active {
   background: #f59e0b;
   border-color: #fef08a;
   color: #0f172a;
   font-weight: 800;
   transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.4);
+  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
 }
 
-/* Container chính 2 cột */
-.services-main-container {
-  max-width: 1240px;
-  margin: 1.75rem auto;
-  padding: 0 1rem;
+/* ── 2. Layout 2 cột: Cột dịch vụ bên trái, Sidebar bên phải ── */
+.services-checkout-layout {
   display: grid;
-  grid-template-columns: 1fr 390px;
-  gap: 1.75rem;
+  grid-template-columns: minmax(0, 1.85fr) minmax(320px, 1.15fr);
+  gap: 1.5rem;
   align-items: start;
+  margin-top: 1.25rem;
 }
 
-@media (max-width: 1024px) {
-  .services-main-container {
-    grid-template-columns: 1fr;
-  }
+.services-main-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  min-width: 0;
 }
 
-/* Tiêu đề trang phong cách thanh lịch Serene Flightways */
-.services-headline {
-  color: #0f6b66;
+.services-page-title {
   font-size: 1.35rem;
   font-weight: 800;
-  margin-top: 0;
-  margin-bottom: 1.25rem;
-  letter-spacing: -0.01em;
+  color: #0f172a;
+  margin: 0.25rem 0 0.5rem;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-/* Danh sách thẻ dịch vụ */
-.services-card-list {
+/* ── 3. Danh sách thẻ dịch vụ bo góc, viền và shadow đồng bộ ── */
+.services-cards-wrapper {
   display: flex;
   flex-direction: column;
   gap: 1.15rem;
 }
 
-.service-item-card {
+.service-vj-card {
   background: #ffffff;
-  border-radius: 0.85rem;
-  border: 1px solid #e2e8f0;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  cursor: pointer;
+}
+
+.service-vj-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.service-vj-card.is-expanded {
+  border-color: #0e3d36;
+  box-shadow: 0 4px 16px rgba(14, 61, 54, 0.1);
+}
+
+.service-card-main-row {
   padding: 1.25rem 1.5rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 1.25rem;
-  cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  position: relative;
-  overflow: hidden;
 }
 
-.service-item-card:hover {
-  border-color: #cbd5e1;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
-  transform: translateY(-2px);
-}
-
-.service-item-card.is-expanded {
-  border-color: #0f6b66;
-  box-shadow: 0 6px 20px rgba(15, 107, 102, 0.12);
-}
-
-.service-card-left {
+.service-card-left-group {
   display: flex;
   align-items: flex-start;
   gap: 1.25rem;
   flex: 1;
 }
 
-.service-icon-box {
-  width: 56px;
-  height: 56px;
-  border-radius: 12px;
+.service-icon-square {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-size: 1.65rem;
+  font-size: 1.55rem;
 }
 
-.service-icon-box.seat {
-  background: #ccfbf1;
-  color: #0f766e;
+.service-icon-square.seat {
+  background: #e6f4f1;
+  color: #0e3d36;
 }
 
-.service-icon-box.baggage {
+.service-icon-square.baggage {
   background: #fef3c7;
   color: #d97706;
 }
 
-.service-icon-box.meal {
+.service-icon-square.meal {
   background: #ffedd5;
   color: #c2410c;
 }
 
-.service-icon-box.taxi {
+.service-icon-square.taxi {
   background: #e0f2fe;
   color: #0284c7;
 }
 
-.service-icon-box.insurance {
+.service-icon-square.insurance {
   background: #ecfdf5;
   color: #059669;
 }
 
-.service-icon-box.vip {
+.service-icon-square.vip {
   background: #fae8ff;
   color: #9333ea;
 }
 
-.service-info-col {
+.service-text-group {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
   flex: 1;
 }
 
-.service-title-row {
+.service-title-container {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: 0.65rem;
 }
 
-.service-main-title {
-  font-size: 1.08rem;
-  font-weight: 800;
+.service-card-heading {
+  font-size: 1.05rem;
+  font-weight: 750;
   color: #0f172a;
 }
 
-.service-sub-tag {
-  color: #0f766e;
+.service-badge-sub {
+  color: #0e3d36;
   font-weight: 800;
   font-style: italic;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
 }
 
-.service-new-tag {
-  background: #0f766e;
+.service-badge-new {
+  background: #0e3d36;
   color: #ffffff;
   font-size: 0.68rem;
   font-weight: 800;
   padding: 0.15rem 0.45rem;
   border-radius: 4px;
   text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
-.service-desc-text {
-  font-size: 0.88rem;
+.service-card-desc {
+  font-size: 0.86rem;
   color: #64748b;
-  line-height: 1.4;
+  line-height: 1.45;
   margin: 0;
 }
 
-/* Hiển thị chi tiết chặng trong thẻ */
-.service-legs-summary {
+/* Lưới hiển thị các chặng trong thẻ */
+.service-routes-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
@@ -278,44 +261,44 @@
   border-top: 1px dashed #e2e8f0;
 }
 
-.service-leg-col {
+.service-route-col {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
-.service-leg-title {
-  font-size: 0.85rem;
-  font-weight: 700;
+.service-route-header {
+  font-size: 0.84rem;
+  font-weight: 750;
   color: #1e293b;
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.service-leg-detail {
+.service-route-detail {
   font-size: 0.78rem;
   color: #64748b;
   line-height: 1.35;
 }
 
-/* Phần giá và chevron bên phải thẻ */
-.service-card-right {
+/* Cột giá & chevron bên phải thẻ */
+.service-card-action-group {
   display: flex;
   align-items: center;
   gap: 1.25rem;
   flex-shrink: 0;
 }
 
-.service-price-tag {
-  font-size: 1.12rem;
+.service-price-highlight {
+  font-size: 1.08rem;
   font-weight: 800;
-  color: #0f766e;
+  color: #0e3d36;
   text-align: right;
   white-space: nowrap;
 }
 
-.service-chevron-btn {
+.service-toggle-icon {
   width: 2rem;
   height: 2rem;
   border-radius: 50%;
@@ -323,16 +306,16 @@
   align-items: center;
   justify-content: center;
   color: #94a3b8;
+  font-size: 0.85rem;
   transition: all 0.2s ease;
 }
 
-.service-item-card:hover .service-chevron-btn {
+.service-vj-card:hover .service-toggle-icon {
   color: #0f172a;
-  transform: translateX(3px);
 }
 
-/* Khối nội dung khi mở rộng một thẻ dịch vụ để chọn */
-.service-expand-content {
+/* Nội dung khi mở rộng thẻ */
+.service-expanded-panel {
   background: #f8fafc;
   border-top: 1px solid #e2e8f0;
   padding: 1.25rem 1.5rem;
@@ -341,13 +324,13 @@
   gap: 1rem;
 }
 
-.service-option-list {
+.service-options-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
   gap: 0.85rem;
 }
 
-.service-option-item {
+.service-option-box {
   background: #ffffff;
   border: 1.5px solid #cbd5e1;
   border-radius: 0.6rem;
@@ -360,70 +343,69 @@
   transition: all 0.2s ease;
 }
 
-.service-option-item:hover {
-  border-color: #0f766e;
+.service-option-box:hover {
+  border-color: #0e3d36;
 }
 
-.service-option-item.is-selected {
-  border-color: #0f766e;
-  background: #f0fdf4;
-  box-shadow: 0 0 0 1px #0f766e;
+.service-option-box.is-selected {
+  border-color: #0e3d36;
+  background: #f0fdfa;
+  box-shadow: 0 0 0 1px #0e3d36;
 }
 
-.service-option-info {
+.service-option-text {
   display: flex;
   flex-direction: column;
   gap: 0.2rem;
 }
 
-.service-option-title {
-  font-size: 0.9rem;
+.service-option-name {
+  font-size: 0.88rem;
   font-weight: 700;
   color: #0f172a;
 }
 
-.service-option-desc {
+.service-option-note {
   font-size: 0.75rem;
   color: #64748b;
 }
 
-.service-option-price {
-  font-size: 0.95rem;
+.service-option-cost {
+  font-size: 0.92rem;
   font-weight: 800;
-  color: #0f766e;
+  color: #0e3d36;
   white-space: nowrap;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   SIDEBAR THÔNG TIN ĐẶT CHỖ (MÀU NGỌC BÍCH SERENE FLIGHTWAYS)
-   ═══════════════════════════════════════════════════════════════════════ */
-
-.services-sidebar-card {
+/* ── 4. Sidebar Thông tin hành trình đồng bộ 100% với trang Đặt chỗ ── */
+.services-summary-sidebar {
   background: #ffffff;
-  border-radius: 0.85rem;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
   overflow: hidden;
   position: sticky;
-  top: 1.5rem;
+  top: 1.25rem;
 }
 
-.services-sidebar-header {
-  background: #0f6b66;
+.services-sidebar-top-bar {
+  background: #0e3d36;
   color: #ffffff;
-  padding: 0.85rem 1.25rem;
+  padding: 0.95rem 1.35rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
-.services-sidebar-title {
-  font-size: 1rem;
+.services-sidebar-headline {
+  font-size: 0.98rem;
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
+  margin: 0;
 }
 
-.services-detail-link-btn {
+.services-detail-badge-btn {
   background: #f59e0b;
   color: #0f172a;
   font-size: 0.75rem;
@@ -435,17 +417,16 @@
   transition: background 0.2s;
 }
 
-.services-detail-link-btn:hover {
+.services-detail-badge-btn:hover {
   background: #d97706;
   color: #ffffff;
 }
 
-/* Accordion sections trong sidebar */
-.services-sidebar-section {
+.services-sidebar-group {
   border-bottom: 1px solid #f1f5f9;
 }
 
-.services-accordion-header {
+.services-acc-bar {
   padding: 0.85rem 1.25rem;
   display: flex;
   align-items: center;
@@ -455,58 +436,53 @@
   transition: background 0.2s;
 }
 
-.services-accordion-header:hover {
+.services-acc-bar:hover {
   background: #f8fafc;
 }
 
-.services-acc-title {
-  font-size: 0.9rem;
+.services-acc-label {
+  font-size: 0.88rem;
   font-weight: 700;
   color: #1e293b;
 }
 
-.services-leg-badge {
+.services-leg-cost-tag {
   font-size: 0.9rem;
   font-weight: 800;
-  color: #0f766e;
+  color: #0e3d36;
   display: flex;
   align-items: center;
   gap: 0.35rem;
 }
 
-.services-leg-route-desc {
-  padding: 0 1.25rem 0.85rem 1.25rem;
+.services-leg-breakdown {
+  padding: 0 1.25rem 0.85rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
 }
 
-.services-leg-route-name {
+.services-leg-names {
   font-size: 0.85rem;
   font-weight: 700;
   color: #0f172a;
 }
 
-.services-leg-meta {
+.services-leg-submeta {
   font-size: 0.75rem;
   color: #64748b;
 }
 
-.services-breakdown-row {
+.services-fee-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0.45rem 1.25rem;
+  padding: 0.35rem 0;
   font-size: 0.82rem;
   color: #475569;
 }
 
-.services-breakdown-row.highlight {
-  font-weight: 700;
-  color: #0f172a;
-}
-
-.services-addon-item {
+.services-addon-line {
   padding: 0.65rem 1.25rem;
   display: flex;
   align-items: center;
@@ -516,121 +492,159 @@
   border-top: 1px dashed #99f6e4;
 }
 
-.services-addon-item .addon-title {
+.services-addon-line .addon-name {
   font-weight: 700;
-  color: #115e59;
+  color: #0e3d36;
 }
 
-.services-addon-item .addon-price {
+.services-addon-line .addon-cost {
   font-weight: 800;
-  color: #0f766e;
+  color: #0e3d36;
 }
 
-/* Banner Tổng tiền Serene Flightways */
-.services-total-banner {
-  background: #0a4946;
+/* Hộp tổng tiền cuối sidebar đồng bộ */
+.services-total-card-box {
+  background: #0e3d36;
   color: #ffffff;
-  padding: 1.15rem 1.5rem;
+  padding: 1.15rem 1.35rem;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  margin-top: 0.25rem;
 }
 
-.services-total-caption {
+.services-total-card-box .label-total {
   font-size: 0.95rem;
-  font-weight: 700;
+  font-weight: 800;
   text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #ffffff;
 }
 
-.services-total-amount {
-  font-size: 1.35rem;
+.services-total-card-box .val-total {
+  font-size: 1.45rem;
   font-weight: 900;
-  letter-spacing: -0.01em;
   color: #fef08a;
+  font-variant-numeric: tabular-nums;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════
-   BOTTOM BAR CỐ ĐỊNH (QUAY LẠI | TỔNG TIỀN | ĐI TIẾP)
-   ═══════════════════════════════════════════════════════════════════════ */
-
-.services-bottom-bar {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 74px;
+/* ── 5. Thanh Bottom Action Bar đồng bộ 100% với trang Đặt chỗ ── */
+.services-bottom-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   background: #ffffff;
   border-top: 1px solid #e2e8f0;
-  box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.08);
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 2rem;
-  z-index: 50;
+  padding: 1.25rem 1.5rem;
+  border-radius: 0 0 0.75rem 0.75rem;
+  margin-top: 1.5rem;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
 }
 
-.services-bottom-back-btn {
-  padding: 0.65rem 1.5rem;
-  border-radius: 0.5rem;
+.services-bottom-action-bar .button-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.5rem;
   border: 1.5px solid #cbd5e1;
+  border-radius: 0.55rem;
   background: #ffffff;
   color: #475569;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.2s ease;
+  text-decoration: none;
 }
 
-.services-bottom-back-btn:hover {
-  background: #f1f5f9;
-  color: #0f172a;
+.services-bottom-action-bar .button-back:hover {
   border-color: #94a3b8;
+  color: #0f172a;
+  background: #f8fafc;
 }
 
-.services-bottom-center-total {
+.services-bottom-next-group {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.services-bottom-price-stack {
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-end;
+  gap: 0.15rem;
 }
 
-.services-center-caption {
+.services-bottom-price-stack span {
   font-size: 0.78rem;
-  color: #64748b;
   font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
 }
 
-.services-center-val {
-  font-size: 1.25rem;
+.services-bottom-price-stack strong {
+  font-size: 1.35rem;
   font-weight: 900;
-  color: #0a4946;
+  color: #0f172a;
+  font-variant-numeric: tabular-nums;
 }
 
-.services-center-val small {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: #64748b;
-  margin-left: 0.35rem;
-}
-
-.services-bottom-next-btn {
-  padding: 0.85rem 2.5rem;
+.services-bottom-action-bar .button-continue {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 2.25rem;
+  border: none;
+  border-radius: 0.55rem;
   background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
   color: #0f172a;
-  border: none;
-  border-radius: 0.6rem;
   font-size: 1.05rem;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.35);
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 14px rgba(245, 158, 11, 0.35);
 }
 
-.services-bottom-next-btn:hover {
+.services-bottom-action-bar .button-continue:hover:not(:disabled) {
   background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
   color: #ffffff;
   transform: translateY(-1px);
-  box-shadow: 0 6px 16px rgba(217, 119, 6, 0.4);
+  box-shadow: 0 6px 18px rgba(217, 119, 6, 0.45);
+}
+
+.services-bottom-action-bar .button-continue:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+@media (max-width: 960px) {
+  .services-checkout-layout {
+    grid-template-columns: 1fr;
+  }
+  .services-step-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .services-stepper-badges {
+    align-self: flex-start;
+  }
+  .services-routes-grid {
+    grid-template-columns: 1fr;
+  }
+  .services-bottom-action-bar {
+    flex-direction: column-reverse;
+    gap: 1rem;
+    align-items: stretch;
+  }
+  .services-bottom-next-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .services-bottom-price-stack {
+    align-items: center;
+  }
 }
