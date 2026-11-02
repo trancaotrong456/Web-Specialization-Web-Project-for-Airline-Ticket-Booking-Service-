@@ -22,6 +22,7 @@ import {
 } from '../../lib/dateUtils';
 import { isSafeCheckoutUrl } from './paymentQr';
 import { PaymentQr } from './PaymentQr.jsx';
+import './bookingServices.css';
 
 const time = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const rowsOf = (result) => Array.isArray(result) ? result : result?.data || [];
@@ -146,14 +147,138 @@ export function PaymentInitiatePage() {
   
   const isBookingExpired = expired || booking?.status === 'expired';
 
-  return <PaymentShell><Heading title="Thanh toán đặt chỗ" description="Chọn cổng thanh toán khả dụng cho đặt chỗ đang giữ." actions={<Link className="button button-outline" to={`/bookings/${id}`} state={{ guestEmail }}>Chi tiết đặt chỗ</Link>} />
-    <HoldCountdown expiresAt={booking?.hold_expires_at} onExpired={reloadBooking} />
-    {isBookingExpired ? <Notice type="warning">Đặt chỗ đã hết hạn giữ chỗ. Bạn vui lòng tìm chuyến bay mới để tiếp tục đặt vé. <Link className="button button-primary" style={{ display: 'inline-block', marginTop: '8px' }} to="/">Tìm chuyến bay khác</Link></Notice> : null}
-    {state.error ? <Notice type="error">{state.error}</Notice> : null}
-    <div className="payment-layout"><section className="surface-card booking-panel"><h2>Tóm tắt</h2><dl className="booking-facts"><div><dt>Mã đặt chỗ</dt><dd className="table-mono-cell">{booking?.booking_code || `#${id}`}</dd></div><div><dt>Chặng đầu</dt><dd className="table-mono-cell">{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div><div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div><div><dt>Số hành khách</dt><dd className="table-mono-cell">{booking?.passengers?.length || '—'}</dd></div><div><dt>Thành tiền</dt><dd><strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(booking?.total_amount)}</strong></dd></div><div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{time(booking?.hold_expires_at)}</dd></div></dl>{additionalSegments.length ? <><h3>Các chặng tiếp theo</h3><ol className="booking-itinerary-summary">{[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => <li key={segment.id}><div><strong className="table-mono-cell">{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong><span>{time(segment.flight?.departure_time)}</span></div></li>)}</ol></> : null}{booking?.ancillaries?.length ? <><h3>Dịch vụ bổ sung</h3><ul>{booking.ancillaries.map((line) => <li key={line.id}>{line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · {line.service_name_snapshot} × {line.quantity}: <span className="table-mono-cell">{money(line.line_total_snapshot)}</span></li>)}</ul></> : null}</section>
-        <section className="surface-card booking-panel"><h2>Phương thức thanh toán</h2><form onSubmit={startPayment}><div className="payment-method-options"><label className={method === 'vnpay' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => { idempotencyKey.current = null; setMethod('vnpay'); }} /><span><strong>VNPay</strong><small>Cổng thanh toán sandbox của đồ án.</small></span></label><label className={method === 'payos' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => { idempotencyKey.current = null; setMethod('payos'); }} /><span><strong>payOS · VietQR</strong><small>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small></span></label></div><button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}>{state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}</button>{booking?.status !== 'holding' ? <p className="field-hint">Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}</form>
-        {state.result ? <div className="payment-qr-result"><Notice>Kiểm tra thông tin đích chuyển trước khi thao tác. Thanh toán chỉ được xác nhận từ trạng thái hệ thống.</Notice>{state.result.qr_code ? <PaymentQr value={state.result.qr_code} /> : null}{isSafeCheckoutUrl(state.result.payment_url) ? <a className="button button-primary" href={state.result.payment_url} target="_blank" rel="noreferrer">Mở trang thanh toán payOS</a> : null}{!state.result.qr_code && !isSafeCheckoutUrl(state.result.payment_url) ? <p role="status" className="field-hint">Chưa có mã QR hoặc liên kết thanh toán khả dụng. Vui lòng thử lại sau.</p> : null}<p>Mã giao dịch: <code>{state.result.transaction_ref || '—'}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
-      </section></div>
+  const originCode = booking?.flight?.departureAirport?.iata_code || 'SGN';
+  const originCity = booking?.flight?.departureAirport?.city || booking?.flight?.departureAirport?.name || 'Tp. Hồ Chí Minh';
+  const destCode = booking?.flight?.arrivalAirport?.iata_code || 'HAN';
+  const destCity = booking?.flight?.arrivalAirport?.city || booking?.flight?.arrivalAirport?.name || 'Hà Nội';
+  const isRoundTrip = additionalSegments.length > 0 || booking?.trip_type === 'round_trip';
+  const passengerCount = Math.max(1, booking?.passengers?.length || 1);
+
+  return <PaymentShell>
+    <div className="services-step-header" aria-label="Thông tin tuyến bay">
+      <div className="services-step-route-info">
+        <span className="services-step-trip-badge">
+          <span>✈</span>
+          <span>{isRoundTrip ? 'CHUYẾN BAY KHỨ HỒI' : 'CHUYẾN BAY MỘT CHIỀU'} · {passengerCount} HÀNH KHÁCH</span>
+        </span>
+        <h1 className="services-step-route-title">
+          <span>{originCity} ({originCode})</span>
+          <span className="route-arrow">➔</span>
+          <span>{destCity} ({destCode})</span>
+        </h1>
+      </div>
+      <div className="services-stepper-badges" aria-label="Quy trình đặt vé">
+        <div className="services-stepper-step is-done" title="Bước 1: Chọn chuyến bay">✈</div>
+        <div className="services-stepper-step is-done" title="Bước 2: Thông tin hành khách">👤</div>
+        <div className="services-stepper-step is-done" title="Bước 3: Dịch vụ bổ sung">🛒</div>
+        <div className="services-stepper-step is-active" title="Bước 4: Thanh toán">💲</div>
+      </div>
+    </div>
+
+    <div className="services-checkout-layout">
+      {/* CỘT TRÁI: ĐỒNG HỒ ĐẾM NGƯỢC & PHƯƠNG THỨC THANH TOÁN */}
+      <section className="services-main-col">
+        <HoldCountdown expiresAt={booking?.hold_expires_at} onExpired={reloadBooking} />
+        {isBookingExpired ? <Notice type="warning">Đặt chỗ đã hết hạn giữ chỗ. Bạn vui lòng tìm chuyến bay mới để tiếp tục đặt vé. <Link className="button button-primary" style={{ display: 'inline-block', marginTop: '8px' }} to="/">Tìm chuyến bay khác</Link></Notice> : null}
+        {state.error ? <Notice type="error">{state.error}</Notice> : null}
+
+        <div className="service-vj-card" style={{ cursor: 'default' }}>
+          <div className="service-card-main-row" style={{ borderBottom: '1px solid #e2e8f0' }}>
+            <div className="service-card-left-group">
+              <div className="service-icon-square meal" style={{ background: '#e6f4f1', color: '#0e3d36' }}>💳</div>
+              <div className="service-text-group">
+                <span className="service-card-heading">Phương thức thanh toán trực tuyến</span>
+                <p className="service-card-desc">Cổng thanh toán bảo mật Serene Pay · Hỗ trợ thanh toán nhanh qua mã QR và Thẻ ngân hàng</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: '1.25rem 1.5rem' }}>
+            <form onSubmit={startPayment}>
+              <div className="payment-method-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <label className={method === 'vnpay' ? 'is-selected' : ''} style={{ border: method === 'vnpay' ? '2px solid #0e3d36' : '1.5px solid #cbd5e1', borderRadius: '0.65rem', padding: '1rem', cursor: 'pointer', background: method === 'vnpay' ? '#f0fdfa' : '#ffffff', transition: 'all 0.2s' }}>
+                  <input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => { idempotencyKey.current = null; setMethod('vnpay'); }} style={{ accentColor: '#0e3d36' }} />
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>VNPay</strong>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: '0.25rem' }}>Cổng thanh toán sandbox của đồ án (Hỗ trợ Thẻ ATM / Visa / QR).</small>
+                  </span>
+                </label>
+                <label className={method === 'payos' ? 'is-selected' : ''} style={{ border: method === 'payos' ? '2px solid #0e3d36' : '1.5px solid #cbd5e1', borderRadius: '0.65rem', padding: '1rem', cursor: 'pointer', background: method === 'payos' ? '#f0fdfa' : '#ffffff', transition: 'all 0.2s' }}>
+                  <input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => { idempotencyKey.current = null; setMethod('payos'); }} style={{ accentColor: '#0e3d36' }} />
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>payOS · VietQR</strong>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: '0.25rem' }}>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small>
+                  </span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'} style={{ background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)', color: '#0f172a', fontWeight: 800, padding: '0.85rem 2.25rem', border: 'none', borderRadius: '0.55rem', cursor: 'pointer' }}>
+                  {state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}
+                </button>
+                {booking?.status !== 'holding' ? <p className="field-hint" style={{ margin: 0 }}>Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}
+              </div>
+            </form>
+
+            {state.result ? <div className="payment-qr-result" style={{ marginTop: '1.5rem' }}><Notice>Kiểm tra thông tin đích chuyển trước khi thao tác. Thanh toán chỉ được xác nhận từ trạng thái hệ thống.</Notice>{state.result.qr_code ? <PaymentQr value={state.result.qr_code} /> : null}{isSafeCheckoutUrl(state.result.payment_url) ? <a className="button button-primary" href={state.result.payment_url} target="_blank" rel="noreferrer" style={{ marginTop: '0.75rem', display: 'inline-block' }}>Mở trang thanh toán payOS</a> : null}{!state.result.qr_code && !isSafeCheckoutUrl(state.result.payment_url) ? <p role="status" className="field-hint">Chưa có mã QR hoặc liên kết thanh toán khả dụng. Vui lòng thử lại sau.</p> : null}<p>Mã giao dịch: <code>{state.result.transaction_ref || '—'}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()} style={{ marginTop: '0.75rem' }}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
+          </div>
+        </div>
+      </section>
+
+      {/* CỘT PHẢI: SIDEBAR THÔNG TIN ĐẶT CHỖ ĐỒNG BỘ */}
+      <aside className="services-summary-sidebar" aria-label="Tóm tắt thông tin đặt chỗ">
+        <div className="services-sidebar-top-bar">
+          <h2 className="services-sidebar-headline">THÔNG TIN ĐẶT CHỖ</h2>
+          <Link className="services-detail-badge-btn" to={`/bookings/${id}`} state={{ guestEmail }} style={{ textDecoration: 'none' }}>
+            Chi Tiết
+          </Link>
+        </div>
+
+        <div style={{ padding: '1rem 1.25rem' }}>
+          <dl className="booking-facts">
+            <div><dt>Mã đặt chỗ</dt><dd className="table-mono-cell">{booking?.booking_code || `#${id}`}</dd></div>
+            <div><dt>Chặng đầu</dt><dd className="table-mono-cell">{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div>
+            <div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div>
+            <div><dt>Số hành khách</dt><dd className="table-mono-cell">{booking?.passengers?.length || '—'}</dd></div>
+            <div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{time(booking?.hold_expires_at)}</dd></div>
+          </dl>
+
+          {additionalSegments.length ? (
+            <div style={{ marginTop: '1rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.75rem' }}>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.5rem', color: '#1e293b' }}>Các chặng tiếp theo</h3>
+              <ol className="booking-itinerary-summary">
+                {[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => (
+                  <li key={segment.id}>
+                    <div>
+                      <strong className="table-mono-cell">{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong>
+                      <span>{time(segment.flight?.departure_time)}</span>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          ) : null}
+
+          {booking?.ancillaries?.length ? (
+            <div style={{ marginTop: '1rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.75rem' }}>
+              <h3 style={{ fontSize: '0.9rem', fontWeight: 700, margin: '0 0 0.5rem', color: '#1e293b' }}>Dịch vụ bổ sung</h3>
+              <ul style={{ paddingLeft: '1.25rem', margin: 0, fontSize: '0.82rem', color: '#475569' }}>
+                {booking.ancillaries.map((line) => (
+                  <li key={line.id} style={{ marginBottom: '0.35rem' }}>
+                    {line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · {line.service_name_snapshot} × {line.quantity}: <span className="table-mono-cell">{money(line.line_total_snapshot)}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+
+        <div className="services-total-card-box">
+          <span className="label-total">Tổng thanh toán</span>
+          <span className="val-total">{money(booking?.total_amount)}</span>
+        </div>
+      </aside>
+    </div>
   </PaymentShell>;
 }
 
