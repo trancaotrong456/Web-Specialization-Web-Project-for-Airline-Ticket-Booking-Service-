@@ -356,7 +356,7 @@ export function BookingCreatePage() {
       const bookingId = booking?.id || booking?.booking?.id;
       if (!bookingId) throw new Error('Máy chủ không trả về mã đặt chỗ.');
       if (!user) sessionStorage.setItem(emailKey(bookingId), guestEmail.trim().toLowerCase());
-      navigate(`/bookings/${bookingId}/payment`, { state: { booking, guestEmail: !user ? guestEmail.trim().toLowerCase() : '' } });
+      navigate(`/bookings/${bookingId}/services`, { state: { booking, guestEmail: !user ? guestEmail.trim().toLowerCase() : '' } });
     } catch (error) { setState((current) => ({ ...current, submitting: false, error: errText(error, 'Không thể tạo yêu cầu đặt chỗ.'), fields: errorFields(error) })); }
   };
 
