@@ -760,51 +760,58 @@ export function BookingCreatePage() {
             </div>
           </aside>
 
-          <div className="passenger-bottom-actions" style={{ gridColumn: '1 / -1' }}>
-            <button
-              type="button"
-              className="button-back"
-              onClick={() => {
-                if (itineraryFlights.length > 1) {
-                  navigate(-1);
-                } else {
-                  setState((curr) => ({ ...curr, stage: 'fare' }));
-                }
-              }}
-            >
-              ‹ Quay lại
-            </button>
-            <div className="passenger-bottom-submit-group">
-              {Object.keys(formErrors).length > 0 ? (
-                <div style={{ color: '#ef4444', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.45rem 0.85rem', borderRadius: '0.375rem' }} role="alert">
-                  <span>⚠️</span>
-                  <span>Vui lòng kiểm tra và điền đầy đủ các thông tin bắt buộc ở trên</span>
-                </div>
-              ) : null}
-              <div className="passenger-bottom-total-display">
-                <span className="total-caption">Tổng tiền thanh toán</span>
-                <span className="total-val">
-                  {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
-                </span>
-              </div>
+          <div className="passenger-bottom-actions">
+            <div className="passenger-bottom-actions-container">
               <button
-                className="button button-primary"
-                type="submit"
-                disabled={state.submitting}
-                style={{
-                  background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-                  color: '#0f172a',
-                  fontWeight: 800,
-                  fontSize: '1rem',
-                  padding: '0.85rem 1.75rem',
-                  border: 'none',
-                  borderRadius: '0.55rem',
-                  boxShadow: '0 4px 14px rgba(217, 119, 6, 0.35)',
-                  cursor: 'pointer'
+                type="button"
+                className="button-back"
+                onClick={() => {
+                  if (itineraryFlights.length > 1) {
+                    navigate(-1);
+                  } else {
+                    setState((curr) => ({ ...curr, stage: 'fare' }));
+                  }
                 }}
               >
-                {state.submitting ? 'Đang tạo đặt chỗ…' : 'Tạo đặt chỗ và tiếp tục thanh toán'}
+                ‹ Quay lại
               </button>
+              <div className="passenger-bottom-submit-group">
+                {Object.keys(formErrors).length > 0 ? (
+                  <div style={{ color: '#ef4444', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.45rem 0.85rem', borderRadius: '0.375rem' }} role="alert">
+                    <span>⚠️</span>
+                    <span>Vui lòng kiểm tra và điền đầy đủ các thông tin bắt buộc ở trên</span>
+                  </div>
+                ) : null}
+                <div className="passenger-bottom-total-display">
+                  <span className="total-caption">Tổng tiền thanh toán</span>
+                  <span className="total-val">
+                    {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
+                  </span>
+                </div>
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={state.submitting}
+                  aria-label={state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp (Tạo đặt chỗ)'}
+                  style={{
+                    background: 'linear-gradient(135deg, #0a4946 0%, #073533 100%)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '1.05rem',
+                    padding: '0.85rem 2.25rem',
+                    border: 'none',
+                    borderRadius: '0.5rem',
+                    boxShadow: '0 4px 14px rgba(10, 73, 70, 0.35)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp'}</span>
+                  <span aria-hidden="true">➔</span>
+                </button>
+              </div>
             </div>
           </div>
         </form>
