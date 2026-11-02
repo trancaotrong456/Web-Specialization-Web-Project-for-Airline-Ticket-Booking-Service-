@@ -102,6 +102,7 @@
   gap: 1.5rem;
   align-items: start;
   margin-top: 1.25rem;
+  padding-bottom: 6.5rem;
 }
 
 .passenger-main-form-col {
@@ -481,17 +482,28 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 6. Thanh Bottom Action Bar ── */
+/* ── 6. Thanh Bottom Action Bar Cố định (Fixed Bottom Bar theo Ảnh 3) ── */
 .passenger-bottom-actions {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: #ffffff;
+  border-top: 1px solid #e2e8f0;
+  padding: 0.95rem 1.5rem;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
+  margin-top: 0;
+  border-radius: 0;
+}
+
+.passenger-bottom-actions-container {
+  max-width: 1200px;
+  width: 100%;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #ffffff;
-  border-top: 1px solid #e2e8f0;
-  padding: 1.25rem 1.5rem;
-  border-radius: 0 0 0.75rem 0.75rem;
-  margin-top: 1.5rem;
-  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.03);
 }
 
 .passenger-bottom-actions .button-back {
