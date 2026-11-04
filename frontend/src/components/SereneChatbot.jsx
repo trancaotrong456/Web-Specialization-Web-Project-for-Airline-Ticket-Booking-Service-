@@ -4,7 +4,7 @@ import './sereneChatbot.css';
 const INITIAL_GREETING = {
   id: 'msg-welcome',
   sender: 'bot',
-  text: `Xin chào Quý khách! Em là **Trợ lý AI của Serene Flightways** ✈️.
+  text: `Xin chào Quý khách! Em là **Trợ Lý Ảo của Serene Flightways** ✈️.
 
 Em được huấn luyện trực tiếp từ **Sổ tay Quy chế & Chính sách Hành khách 2026**. Quý khách có thể hỏi em về:
 • 🧳 **Hành lý:** Xách tay 7kg, ký gửi, chất lỏng, pin sạc
@@ -90,7 +90,13 @@ export function SereneChatbot() {
   const [messages, setMessages] = useState(() => {
     try {
       const saved = sessionStorage.getItem('serene_chat_history');
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id === 'msg-welcome') {
+          parsed[0].text = INITIAL_GREETING.text;
+        }
+        return parsed;
+      }
     } catch {}
     return [INITIAL_GREETING];
   });
@@ -103,7 +109,7 @@ export function SereneChatbot() {
   useEffect(() => {
     try {
       sessionStorage.setItem('serene_chat_history', JSON.stringify(messages));
-    } catch {}
+    } catch { }
   }, [messages]);
 
   useEffect(() => {
@@ -127,9 +133,9 @@ export function SereneChatbot() {
                 setSuggestions(data.data.suggestions);
               }
             })
-            .catch(() => {});
+            .catch(() => { });
         }
-      } catch {}
+      } catch { }
     }
     return () => {
       isMounted = false;
@@ -200,7 +206,7 @@ export function SereneChatbot() {
     setMessages([INITIAL_GREETING]);
     try {
       sessionStorage.removeItem('serene_chat_history');
-    } catch {}
+    } catch { }
   };
 
   return (
@@ -212,7 +218,7 @@ export function SereneChatbot() {
             <div className="serene-chatbot-header-info">
               <span className="serene-chatbot-avatar-mark" aria-hidden="true">✈</span>
               <div className="serene-chatbot-title-box">
-                <span id="chatbot-heading" className="serene-chatbot-title">Serene AI Assistant</span>
+                <span id="chatbot-heading" className="serene-chatbot-title">Trợ Lý Ảo Serene</span>
                 <span className="serene-chatbot-status">
                   <span className="serene-chatbot-status-dot" />
                   Trực tuyến • Sổ tay Quy định 2026
