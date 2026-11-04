@@ -134,6 +134,8 @@ async function cleanupTrackedFixtures() {
     ...discoveredBookings.map(({ id }) => id),
   ])];
   if (bookingIds.length > 0) {
+    if (models.Notification) await models.Notification.destroy({ where: { user_id: { [Op.in]: await models.Booking.findAll({ where: { id: bookingIds }, attributes: ['user_id'], raw: true }).then((rows) => rows.map((row) => row.user_id).filter(Boolean)) } }, force: true });
+    if (models.NotificationOutbox) await models.NotificationOutbox.destroy({ where: { aggregate_id: bookingIds }, force: true });
     if (models.PaymentGatewayOperation) {
       const paymentIds = await models.Payment.findAll({ where: { booking_id: bookingIds }, attributes: ['id'], raw: true });
       const operationPaymentIds = paymentIds.map(({ id }) => id);
