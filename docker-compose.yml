@@ -58,6 +58,7 @@ services:
       PAYOS_CHECKSUM_KEY: ${PAYOS_CHECKSUM_KEY:-}
       # Browser return/cancel URLs target the frontend SPA result route.
       PAYOS_RETURN_URL: ${PAYOS_RETURN_URL:-http://localhost:5173/payments/result}
+      ELASTICSEARCH_NODE: http://elasticsearch:9200
       PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5173/payments/result}
       DISABLE_CRON: ${DISABLE_CRON:-false}
       RESEND_API_KEY: ""
@@ -102,6 +103,18 @@ services:
       - "5173:80"
     depends_on:
       - api
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
 volumes:
   mysql_data:
   demo_bootstrap_state:
+  es_data:
