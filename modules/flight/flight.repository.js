@@ -28,20 +28,16 @@ class SequelizeFlightRepository {
     if (min_seats) {
       // Match BookingRepository.countReservedFareSeats: count distinct passengers
       // on active bookings, including every itinerary segment for this fare.
-      const segmentJoin = this.BookingSegment
-        ? 'LEFT JOIN `booking_segments` AS `reserved_segment` ON `reserved_segment`.`booking_id` = `reserved_booking`.`id`'
-        : '';
-      const segmentFare = this.BookingSegment
-        ? ' OR `reserved_segment`.`fare_class_id` = `fareClasses`.`id`'
+      const segmentCount = this.BookingSegment
+        ? ' + COALESCE((SELECT COUNT(DISTINCT `seg_p`.`id`) FROM `booking_segments` AS `seg_s` JOIN `bookings` AS `seg_b` ON `seg_b`.`id` = `seg_s`.`booking_id` JOIN `booking_passengers` AS `seg_p` ON `seg_p`.`booking_id` = `seg_b`.`id` WHERE `seg_s`.`fare_class_id` = `fareClasses`.`id` AND `seg_b`.`status` IN (\'holding\', \'pending_payment\', \'confirmed\')), 0)'
         : '';
       const remainingQuota = Sequelize.literal([
         '(`fareClasses`.`seat_quota` - (',
-        'SELECT COUNT(DISTINCT `reserved_passenger`.`id`)',
+        'COALESCE((SELECT COUNT(DISTINCT `reserved_passenger`.`id`)',
         'FROM `booking_passengers` AS `reserved_passenger`',
         'JOIN `bookings` AS `reserved_booking` ON `reserved_booking`.`id` = `reserved_passenger`.`booking_id`',
-        segmentJoin,
-        "WHERE `reserved_booking`.`status` IN ('holding', 'pending_payment', 'confirmed')",
-        `AND (\`reserved_booking\`.\`fare_class_id\` = \`fareClasses\`.\`id\`${segmentFare})`,
+        "WHERE `reserved_booking`.`fare_class_id` = `fareClasses`.`id` AND `reserved_booking`.`status` IN ('holding', 'pending_payment', 'confirmed')), 0)",
+        segmentCount,
         '))',
       ].join(' '));
       fareWhere[this.Op.or] = [
