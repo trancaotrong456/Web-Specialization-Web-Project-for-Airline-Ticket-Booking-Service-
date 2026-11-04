@@ -17,6 +17,9 @@ function renderDashboard(role = 'admin') {
   const fetchImpl = vi.fn(async (url) => {
     if (url.endsWith('/auth/refresh-token')) return success({ accessToken: `${role}-access` });
     if (url.endsWith('/auth/me')) return success({ id: 4, email: `${role}@example.com`, role: { name: role } });
+    if (url.includes('/payments/revenue')) return success({ total_revenue: 12500000 });
+    if (url.includes('/bookings/admin/all')) return success({ pagination: { total: 42 }, data: [] });
+    if (url.includes('/flights')) return success({ data: [{ departure_time: new Date(Date.now() + 3600000).toISOString(), total_seats: 100, available_seats: 40 }] });
     throw new Error(`Unexpected request: ${url}`);
   });
   render(
@@ -62,7 +65,7 @@ describe('admin dashboard navigation shell', () => {
     const icons = [...navigation.querySelectorAll('svg[data-sidebar-icon]')];
 
     expect(icons.map((icon) => icon.getAttribute('data-sidebar-icon'))).toEqual([
-      'overview', 'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions',
+      'overview', 'users', 'roles', 'airlines', 'airports', 'flights', 'bookings', 'payments', 'promotions', 'seats', 'ancillaries',
     ]);
     expect(icons.every((icon) => icon.getAttribute('aria-hidden') === 'true')).toBe(true);
   });
@@ -89,7 +92,13 @@ describe('admin dashboard navigation shell', () => {
     ]) {
       expect(main.getByRole('link', { name: new RegExp(name) })).toHaveAttribute('href', href);
     }
-    expect(screen.queryByText(/doanh thu hôm nay|chuyến bay đang bay|hoàn thành nhiệm vụ/i)).not.toBeInTheDocument();
+    expect(await screen.findByText('Doanh thu hôm nay')).toBeInTheDocument();
+    expect(screen.getByText('Doanh thu tháng này')).toBeInTheDocument();
+    expect(screen.getByText('Khởi hành trong 24 giờ')).toBeInTheDocument();
+    expect(screen.getByText('100 chuyến gần nhất')).toBeInTheDocument();
+    expect(await screen.findByText(/Tỉ lệ ghế đã đặt hoặc đang giữ:/)).toBeInTheDocument();
+    expect(screen.getByText('Đặt chỗ theo trạng thái')).toBeInTheDocument();
+    expect(screen.queryByText(/chuyến bay đang bay|hoàn thành nhiệm vụ/i)).not.toBeInTheDocument();
     expect(document.querySelector('.admin-dashboard-route')).not.toBeInTheDocument();
     const sidebar = screen.getByRole('navigation', { name: 'Các khu vực quản trị' });
     expect(within(sidebar).getByRole('link', { name: /Tổng quan/ })).toHaveAttribute('aria-current', 'page');
@@ -157,7 +166,7 @@ describe('admin dashboard navigation shell', () => {
 
     const dialog = await screen.findByRole('dialog', { name: 'Điều hướng quản trị' });
     const close = within(dialog).getByRole('button', { name: 'Đóng điều hướng quản trị' });
-    const promotionLink = within(dialog).getByRole('link', { name: /Khuyến mại/ });
+    const lastLink = within(dialog).getByRole('link', { name: /Dịch vụ bổ trợ/ });
     const dashboardLink = within(dialog).getByRole('link', { name: /Tổng quan/ });
     expect(close).toHaveFocus();
     expect(dialog).toHaveAttribute('aria-modal', 'true');
@@ -168,7 +177,7 @@ describe('admin dashboard navigation shell', () => {
     expect(close).toHaveFocus();
 
     await user.keyboard('{Shift>}{Tab}{/Shift}');
-    expect(promotionLink).toHaveFocus();
+    expect(lastLink).toHaveFocus();
     await user.tab();
     expect(close).toHaveFocus();
     await user.tab();

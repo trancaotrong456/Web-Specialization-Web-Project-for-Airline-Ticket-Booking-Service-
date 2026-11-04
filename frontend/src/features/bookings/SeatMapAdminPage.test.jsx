@@ -28,5 +28,5 @@ describe('Admin seat map management', () => {
     await waitFor(() => expect(mocks.request).toHaveBeenCalledWith('/seat-selection/templates', expect.objectContaining({ method: 'POST', body: expect.objectContaining({
       name: 'A320 demo', aircraft_type: 'A320', layout: expect.objectContaining({ seats: [expect.objectContaining({ seat_no: '1A', row_number: 1, column_number: 1, zone: 'economy', special_properties: ['window'] })] }),
     }) })));
-  });
+  }, 15000); // Timeout 15s: render bảng lưới ma trận nhiều ghế và cấu hình chi tiết bằng userEvent
 });

@@ -38,7 +38,7 @@ export function ForgotPasswordPage() {
       eyebrow="Khôi phục tài khoản"
       title="Quên mật khẩu"
       description="Nhập email đã đăng ký để nhận hướng dẫn đặt lại mật khẩu."
-      visualHeadline="Lấy lại quyền truy cập, tiếp tục hành trình."
+      visualHeadline="Khôi phục mật khẩu tài khoản"
       visualDescription="Nhập email đã đăng ký để nhận hướng dẫn khôi phục mật khẩu."
     >
       <Notice type={message.startsWith('Nếu email') ? 'success' : 'error'}>{message}</Notice>

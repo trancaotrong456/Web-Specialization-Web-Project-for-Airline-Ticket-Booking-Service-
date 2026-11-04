@@ -33,7 +33,10 @@ function createBookingMaintenanceJob({ cron, bookingService, paymentService, met
             const delivered = await notificationWorker.runBatch(25);
             if (delivered > 0) logger.log(`[Notifications] Processed ${delivered} outbox event(s)`);
           } catch (error) {
-            logger.error('[Notifications] Outbox delivery job failed:', error.message);
+            const diagnostic = environment.NODE_ENV === 'test'
+              ? (error.stack || error.message)
+              : error.message;
+            logger.error('[Notifications] Outbox delivery job failed:', diagnostic);
           }
         }
         await metricsCollector?.refresh?.();

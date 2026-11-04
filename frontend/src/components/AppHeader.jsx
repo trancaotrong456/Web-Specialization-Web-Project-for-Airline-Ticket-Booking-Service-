@@ -1,8 +1,95 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
-import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../app/AuthProvider';
 import './adminSidebar.css';
 import { NotificationBell } from '../features/notifications/NotificationBell';
+import { getServerTimeOffset } from '../lib/apiClient';
+
+export function HoldingReminderBanner({ request, authenticated, user, currentPath }) {
+  const [holdingBooking, setHoldingBooking] = useState(null);
+  const [serverNow, setServerNow] = useState(() => Date.now() + (getServerTimeOffset() || 0));
+  const lastFetchRef = useRef(0);
+
+  // Chỉ kích hoạt với vai trò khách hàng (customer/user), không kích hoạt với admin hoặc staff
+  const isCustomer = authenticated && user && user.role !== 'admin' && user.role !== 'staff';
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setServerNow(Date.now() + (getServerTimeOffset() || 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    if (!isCustomer || !request) {
+      setHoldingBooking(null);
+      return undefined;
+    }
+
+    let active = true;
+    const fetchHolding = async () => {
+      lastFetchRef.current = Date.now();
+      try {
+        const res = await request('/bookings/my-bookings?status=holding&limit=5');
+        if (!active) return;
+        const list = Array.isArray(res?.data) ? res.data : [];
+        const now = Date.now() + (getServerTimeOffset() || 0);
+        const valid = list.find((b) => b.status === 'holding' && b.hold_expires_at && new Date(b.hold_expires_at).getTime() > now);
+        setHoldingBooking(valid || null);
+      } catch {
+        if (active) setHoldingBooking(null);
+      }
+    };
+
+    // Khi đổi trang, chỉ gọi nếu lần gọi trước đã cách ít nhất 60 giây hoặc chưa từng gọi
+    const elapsed = Date.now() - lastFetchRef.current;
+    if (elapsed >= 60000 || lastFetchRef.current === 0) {
+      void fetchHolding();
+    }
+
+    // Tần suất định kỳ tối đa mỗi 60 giây
+    const interval = setInterval(() => {
+      void fetchHolding();
+    }, 60000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
+  }, [isCustomer, request, currentPath]);
+
+  if (!holdingBooking || !holdingBooking.hold_expires_at) return null;
+
+  // Ẩn dải nhắc trên chính trang thanh toán của đơn đặt chỗ đó
+  if (currentPath === `/bookings/${holdingBooking.id}/payment`) return null;
+
+  const diffMs = Math.max(0, new Date(holdingBooking.hold_expires_at).getTime() - serverNow);
+  if (diffMs <= 0) return null;
+
+  const minutes = Math.floor(diffMs / 60000);
+  const seconds = Math.floor((diffMs % 60000) / 1000);
+  const formattedTime = `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+  return (
+    <div className="holding-reminder-banner" role="alert" aria-live="polite">
+      <div className="holding-reminder-container">
+        <div className="holding-reminder-info">
+          <span className="holding-reminder-icon" aria-hidden="true">⏱</span>
+          <span>
+            Bạn có đơn đặt chỗ <strong>{holdingBooking.booking_code || `#${holdingBooking.id}`}</strong> đang giữ chỗ.
+            Thời gian còn lại: <strong className="table-mono-cell tabular-nums">{formattedTime}</strong>
+          </span>
+        </div>
+        <Link
+          className="holding-reminder-action"
+          to={`/bookings/${holdingBooking.id}/payment`}
+        >
+          Thanh toán ngay →
+        </Link>
+      </div>
+    </div>
+  );
+}
 
 const sidebarIcons = {
   overview: <><path d="m3 10 9-7 9 7" /><path d="M5 9v11h14V9" /><path d="M9 20v-6h6v6" /></>,
@@ -14,6 +101,8 @@ const sidebarIcons = {
   bookings: <><rect x="5" y="4" width="14" height="17" rx="2" /><path d="M9 4V3h6v1m-6 6h6m-6 4h6m-6 4h4" /></>,
   payments: <><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3 9h18m-14 5h4" /></>,
   promotions: <><path d="m20.6 13.4-7.2 7.2a2 2 0 0 1-2.8 0l-7.2-7.2a2 2 0 0 1 0-2.8l7.2-7.2A2 2 0 0 1 12 3h7a2 2 0 0 1 2 2v7a2 2 0 0 1-.4 1.4Z" /><circle cx="16" cy="8" r="1" /></>,
+  seats: <><rect x="5" y="3" width="14" height="7" rx="2" /><path d="M5 10v4h14v-4m-11 4v7m8-7v7M4 21h16" /></>,
+  ancillaries: <><rect x="4" y="7" width="16" height="13" rx="2" /><path d="M9 7V5a3 3 0 0 1 6 0v2M8 12h8m-8 4h5" /></>,
 };
 
 function AdminSidebarIcon({ name }) {
@@ -21,7 +110,7 @@ function AdminSidebarIcon({ name }) {
 }
 
 export function AppHeader() {
-  const { user, status, logout } = useAuth();
+  const { user, status, logout, request } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -38,10 +127,12 @@ export function AppHeader() {
   const routeFocusPendingRef = useRef(false);
   const lastPathnameRef = useRef(location.pathname);
   const previousNarrowRef = useRef(narrow);
-  const isAdminArea = user?.role === 'admin' && location.pathname.startsWith('/admin');
+  const isAdmin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+  const isOperationsArea = (isAdmin || isStaff) && location.pathname.startsWith('/admin');
 
   useEffect(() => {
-    if (isAdminArea) {
+    if (isOperationsArea) {
       document.body.classList.add('has-admin-sidebar');
     } else {
       document.body.classList.remove('has-admin-sidebar');
@@ -49,10 +140,10 @@ export function AppHeader() {
     return () => {
       document.body.classList.remove('has-admin-sidebar');
     };
-  }, [isAdminArea]);
+  }, [isOperationsArea]);
 
   useEffect(() => {
-    if (isAdminArea && adminSidebarCollapsed) {
+    if (isOperationsArea && adminSidebarCollapsed) {
       document.body.classList.add('admin-sidebar-collapsed');
     } else {
       document.body.classList.remove('admin-sidebar-collapsed');
@@ -60,7 +151,7 @@ export function AppHeader() {
     return () => {
       document.body.classList.remove('admin-sidebar-collapsed');
     };
-  }, [isAdminArea, adminSidebarCollapsed]);
+  }, [isOperationsArea, adminSidebarCollapsed]);
 
   useEffect(() => {
     setAccountMenuOpen(false);
@@ -71,11 +162,19 @@ export function AppHeader() {
     const closeAccountMenuOutside = (event) => {
       if (!accountMenuRef.current?.contains(event.target)) setAccountMenuOpen(false);
     };
+    const handleEscapeKey = (event) => {
+      if (event.key === 'Escape') {
+        setAccountMenuOpen(false);
+        accountMenuRef.current?.querySelector('.account-menu-trigger')?.focus();
+      }
+    };
     document.addEventListener('pointerdown', closeAccountMenuOutside);
     document.addEventListener('focusin', closeAccountMenuOutside);
+    document.addEventListener('keydown', handleEscapeKey);
     return () => {
       document.removeEventListener('pointerdown', closeAccountMenuOutside);
       document.removeEventListener('focusin', closeAccountMenuOutside);
+      document.removeEventListener('keydown', handleEscapeKey);
     };
   }, [accountMenuOpen]);
 
@@ -89,6 +188,13 @@ export function AppHeader() {
     { label: 'Đặt chỗ', to: '/admin/bookings', icon: 'bookings' },
     { label: 'Thanh toán', to: '/admin/payments', icon: 'payments' },
     { label: 'Khuyến mại', to: '/admin/promotions', icon: 'promotions' },
+    { label: 'Sơ đồ ghế', to: '/admin/seat-maps', icon: 'seats' },
+    { label: 'Dịch vụ bổ trợ', to: '/admin/ancillaries', icon: 'ancillaries' },
+  ];
+
+  const staffLinks = [
+    { label: 'Chuyến bay', to: '/admin/flights', icon: 'flights' },
+    { label: 'Đặt chỗ', to: '/admin/bookings', icon: 'bookings' },
   ];
 
   useEffect(() => {
@@ -242,32 +348,35 @@ export function AppHeader() {
   const authenticated = status === 'authenticated';
 
   return <>
-    <header className={`app-header ${user?.role === 'admin' ? 'app-header-admin' : ''} ${isAdminArea ? 'app-header-admin-area' : ''}`}>
+    <header className={`app-header ${(isAdmin || isStaff) ? 'app-header-admin' : ''} ${isOperationsArea ? 'app-header-admin-area' : ''}`}>
       <NavLink className="app-brand" to="/" aria-label="Serene Flightways - Trang chủ">
         <span className="app-brand-mark" aria-hidden="true">✈</span>
-        <span><strong>Serene Flightways</strong><small>{isAdminArea ? 'Airline Operations' : 'Airline Booking'}</small></span>
+        <span><strong>Serene Flightways</strong><small>{isOperationsArea ? (isStaff ? 'Operations Portal' : 'Airline Operations') : 'Airline Booking'}</small></span>
       </NavLink>
-      {!isAdminArea ? <button ref={toggleRef} hidden={!narrow} className="menu-toggle" type="button" aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} aria-expanded={menuOpen} aria-controls="account-navigation" onClick={() => setMenuOpen((value) => !value)}><span aria-hidden="true">☰</span></button> : null}
-      {!isAdminArea ? <nav id="account-navigation" hidden={narrow && !menuOpen} className={`app-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Điều hướng tài khoản">
-        <NavLink end to="/" onClick={() => setMenuOpen(false)}>Trang chủ</NavLink>
-        <NavLink to="/bookings/lookup" onClick={() => setMenuOpen(false)}>Tra cứu đặt chỗ</NavLink>
-        {authenticated ? <>
-          <NavLink to="/bookings/my" onClick={() => setMenuOpen(false)}>Đặt chỗ của tôi</NavLink>
-          <NavLink to="/profile" onClick={() => setMenuOpen(false)}>Hồ sơ</NavLink>
-          <NavLink to="/profile/security" onClick={() => setMenuOpen(false)}>Bảo mật</NavLink>
-          {user?.role === 'staff' ? <>
-            <NavLink to="/admin/flights" onClick={() => setMenuOpen(false)}>Vận hành chuyến bay</NavLink>
-            <NavLink to="/admin/bookings" onClick={() => setMenuOpen(false)}>Đặt chỗ vận hành</NavLink>
-          </> : null}
+      {!isOperationsArea ? <button ref={toggleRef} hidden={!narrow} className="menu-toggle" type="button" aria-label={menuOpen ? 'Đóng menu' : 'Mở menu'} aria-expanded={menuOpen} aria-controls="account-navigation" onClick={() => setMenuOpen((value) => !value)}><span aria-hidden="true">☰</span></button> : null}
+      {!isOperationsArea ? <nav id="account-navigation" hidden={narrow && !menuOpen} className={`app-nav ${menuOpen ? 'is-open' : ''}`} aria-label="Điều hướng tài khoản">
+        {isStaff ? <>
+          <NavLink to="/admin/flights" onClick={() => setMenuOpen(false)}>Chuyến bay</NavLink>
+          <NavLink to="/admin/bookings" onClick={() => setMenuOpen(false)}>Đặt chỗ</NavLink>
         </> : <>
-          <NavLink className="guest-nav-entry" to="/login" onClick={() => setMenuOpen(false)}>Đăng nhập</NavLink>
-          <NavLink className="guest-nav-entry" to="/register" onClick={() => setMenuOpen(false)}>Đăng ký</NavLink>
+          <NavLink end to="/" onClick={() => setMenuOpen(false)}>Trang chủ</NavLink>
+          <NavLink to="/bookings/lookup" onClick={() => setMenuOpen(false)}>Tra cứu đặt chỗ</NavLink>
+          {authenticated ? <>
+            <NavLink to="/bookings/my" onClick={() => setMenuOpen(false)}>Đặt chỗ của tôi</NavLink>
+            {narrow ? <>
+              <NavLink to="/profile" onClick={() => setMenuOpen(false)}>Hồ sơ</NavLink>
+              <NavLink to="/profile/security" onClick={() => setMenuOpen(false)}>Bảo mật</NavLink>
+            </> : null}
+          </> : <>
+            <NavLink className="guest-nav-entry" to="/login" onClick={() => setMenuOpen(false)}>Đăng nhập</NavLink>
+            <NavLink className="guest-nav-entry" to="/register" onClick={() => setMenuOpen(false)}>Đăng ký</NavLink>
+          </>}
         </>}
       </nav> : null}
-      {isAdminArea && narrow ? <button ref={adminSidebarToggleRef} className="admin-sidebar-trigger" type="button" aria-label={adminSidebarOpen ? 'Đóng điều hướng quản trị' : 'Mở điều hướng quản trị'} aria-expanded={adminSidebarOpen} aria-controls="admin-sidebar-navigation" onClick={() => setAdminSidebarOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="admin-sidebar-trigger-label">Quản trị</span></button> : null}
+      {isOperationsArea && narrow ? <button ref={adminSidebarToggleRef} className="admin-sidebar-trigger" type="button" aria-label={adminSidebarOpen ? 'Đóng điều hướng quản trị' : 'Mở điều hướng quản trị'} aria-expanded={adminSidebarOpen} aria-controls="admin-sidebar-navigation" onClick={() => setAdminSidebarOpen((open) => !open)}><span aria-hidden="true">☰</span><span className="admin-sidebar-trigger-label">{isStaff ? 'Vận hành' : 'Quản trị'}</span></button> : null}
       {authenticated ? <div className="account-actions">
-        <NotificationBell />
-        {isAdminArea ? <span className="admin-header-avatar" aria-hidden="true">{(user?.full_name || user?.email || 'A').trim().charAt(0).toUpperCase()}</span> : null}
+        {!isOperationsArea ? <NotificationBell /> : null}
+        {isOperationsArea ? <span className="admin-header-avatar" aria-hidden="true">{(user?.full_name || user?.email || 'A').trim().charAt(0).toUpperCase()}</span> : null}
         <div ref={accountMenuRef} className={`account-menu ${accountMenuOpen ? 'is-open' : ''}`} onMouseEnter={() => setAccountMenuOpen(true)} onKeyDown={(event) => {
           if (event.key === 'Escape') {
             setAccountMenuOpen(false);
@@ -278,26 +387,30 @@ export function AppHeader() {
             <span>{user?.full_name || user?.email}</span><span className="account-menu-chevron" aria-hidden="true">▾</span>
           </button>
           {accountMenuOpen ? <div className="account-menu-dropdown" id="account-actions-menu" role="menu">
-            {user?.role === 'admin' ? <NavLink role="menuitem" to="/admin" onClick={() => setAccountMenuOpen(false)}>Vào trang quản trị</NavLink> : null}
+            <NavLink role="menuitem" to="/profile" onClick={() => setAccountMenuOpen(false)}>Hồ sơ</NavLink>
+            <NavLink role="menuitem" to="/profile/security" onClick={() => setAccountMenuOpen(false)}>Bảo mật</NavLink>
+            {isAdmin ? <NavLink role="menuitem" to="/admin" onClick={() => setAccountMenuOpen(false)}>Vào trang quản trị</NavLink> : null}
+            {isStaff ? <NavLink role="menuitem" to="/admin/flights" onClick={() => setAccountMenuOpen(false)}>Khu vực vận hành</NavLink> : null}
             <button className="account-menu-logout" role="menuitem" type="button" onClick={handleLogout}>Đăng xuất</button>
           </div> : null}
         </div>
       </div> : <div className="account-actions guest-actions"><NavLink className="header-login" to="/login">Đăng nhập</NavLink><NavLink className="button button-secondary header-register" to="/register">Đăng ký</NavLink></div>}
     </header>
-    {isAdminArea ? <>
+    <HoldingReminderBanner request={request} authenticated={authenticated} user={user} currentPath={location.pathname} />
+    {isOperationsArea ? <>
       {narrow && adminSidebarOpen ? <button className="admin-sidebar-scrim" type="button" tabIndex={-1} aria-hidden="true" onClick={() => closeAdminSidebar()} /> : null}
-      <aside ref={adminSidebarRef} id="admin-sidebar-navigation" className={`app-admin-sidebar ${adminSidebarCollapsed ? 'is-collapsed' : ''} ${adminSidebarOpen ? 'is-open' : ''}`} aria-label="Điều hướng quản trị" aria-hidden={narrow && !adminSidebarOpen} role={narrow && adminSidebarOpen ? 'dialog' : undefined} aria-modal={narrow && adminSidebarOpen ? 'true' : undefined}>
-        {narrow && adminSidebarOpen ? <button className="admin-sidebar-close" type="button" onClick={() => closeAdminSidebar()} aria-label="Đóng điều hướng quản trị">Đóng <span aria-hidden="true">×</span></button> : null}
-        <div className="admin-sidebar-heading"><span className="admin-sidebar-kicker">WORKSPACE</span><strong>Quản trị</strong></div>
-        <nav aria-label="Các khu vực quản trị">
-          {adminLinks.map(({ label, to, icon, end }) => <NavLink key={to} end={end} to={to} onClick={() => {
+      <aside ref={adminSidebarRef} id="admin-sidebar-navigation" className={`app-admin-sidebar ${adminSidebarCollapsed ? 'is-collapsed' : ''} ${adminSidebarOpen ? 'is-open' : ''}`} aria-label={isStaff ? 'Điều hướng vận hành' : 'Điều hướng quản trị'} aria-hidden={narrow && !adminSidebarOpen} role={narrow && adminSidebarOpen ? 'dialog' : undefined} aria-modal={narrow && adminSidebarOpen ? 'true' : undefined}>
+        {narrow && adminSidebarOpen ? <button className="admin-sidebar-close" type="button" onClick={() => closeAdminSidebar()} aria-label={isStaff ? 'Đóng điều hướng vận hành' : 'Đóng điều hướng quản trị'}>Đóng <span aria-hidden="true">×</span></button> : null}
+        <div className="admin-sidebar-heading"><span className="admin-sidebar-kicker">WORKSPACE</span><strong>{isStaff ? 'Vận hành' : 'Quản trị'}</strong></div>
+        <nav aria-label={isStaff ? 'Các khu vực vận hành' : 'Các khu vực quản trị'}>
+          {(isStaff ? staffLinks : adminLinks).map(({ label, to, icon, end }) => <NavLink key={to} end={end} to={to} onClick={() => {
             if (narrow && adminSidebarOpen) {
               routeFocusPendingRef.current = true;
               closeAdminSidebar({ restoreTrigger: false });
             }
           }} title={adminSidebarCollapsed ? label : undefined} aria-label={adminSidebarCollapsed ? label : undefined}><AdminSidebarIcon name={icon} /><span className="admin-sidebar-label">{label}</span></NavLink>)}
         </nav>
-        {!narrow ? <button className="admin-sidebar-collapse" type="button" aria-label={adminSidebarCollapsed ? 'Mở rộng điều hướng quản trị' : 'Thu gọn điều hướng quản trị'} aria-expanded={!adminSidebarCollapsed} onClick={() => setAdminSidebarCollapsed((collapsed) => !collapsed)}><span aria-hidden="true">{adminSidebarCollapsed ? '»' : '«'}</span><span className="admin-sidebar-label">{adminSidebarCollapsed ? 'Mở rộng' : 'Thu gọn menu'}</span></button> : null}
+        {!narrow ? <button className="admin-sidebar-collapse" type="button" aria-label={adminSidebarCollapsed ? (isStaff ? 'Mở rộng điều hướng vận hành' : 'Mở rộng điều hướng quản trị') : (isStaff ? 'Thu gọn điều hướng vận hành' : 'Thu gọn điều hướng quản trị')} aria-expanded={!adminSidebarCollapsed} onClick={() => setAdminSidebarCollapsed((collapsed) => !collapsed)}><span aria-hidden="true">{adminSidebarCollapsed ? '»' : '«'}</span><span className="admin-sidebar-label">{adminSidebarCollapsed ? 'Mở rộng' : 'Thu gọn menu'}</span></button> : null}
       </aside>
     </> : null}
   </>;

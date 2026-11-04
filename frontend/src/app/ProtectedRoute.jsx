@@ -10,7 +10,11 @@ export function ProtectedRoute() {
   }
 
   if (status !== 'authenticated') {
-    return <Navigate to="/login" replace state={{ from: location }} />;
+    let isExpired = false;
+    try {
+      isExpired = sessionStorage.getItem('airline_session_expired') === '1';
+    } catch {}
+    return <Navigate to="/login" replace state={{ from: location, sessionExpired: isExpired }} />;
   }
 
   return <Outlet />;

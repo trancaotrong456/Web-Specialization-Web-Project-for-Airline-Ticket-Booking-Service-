@@ -7,7 +7,11 @@ import { Field } from '../../components/Field';
 import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
+import { StatusBadge } from '../../components/StatusBadge';
+import { isTodayVn, isoToVnDateTimeInput, vnDateTimeInputToIso } from '../../lib/dateUtils';
+import { maskPassport, escapeCsvCell } from '../../lib/formatters';
 import { createFlightManagementApi } from './flightManagementApi';
+import './passengerManifest.css';
 import { FlightCalendarView } from './FlightCalendarView';
 
 const statusLabels = { scheduled: 'Theo lịch', delayed: 'Hoãn chuyến', boarding: 'Đang lên máy bay', departed: 'Đã khởi hành', arrived: 'Đã đến nơi', cancelled: 'Đã hủy', completed: 'Hoàn tất' };
@@ -26,14 +30,8 @@ const getErrorFields = (error) => {
   return source;
 };
 const errorMessage = (error, fallback) => error?.message || fallback;
-const localDateTime = (value) => {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-  return local.toISOString().slice(0, 16);
-};
-const isoDateTime = (value) => new Date(value).toISOString();
+const localDateTime = (value) => isoToVnDateTimeInput(value);
+const isoDateTime = (value) => vnDateTimeInputToIso(value);
 
 function ManagementShell({ children }) {
   return <div className="admin-page flight-management-page"><AppHeader />{children}</div>;
@@ -106,6 +104,274 @@ function FlightFacts({ flight }) {
   </dl>;
 }
 
+const ALLOWED_QUICK_TRANSITIONS = {
+  scheduled: [
+    { next: 'boarding', label: 'Lên máy bay', needReason: false },
+    { next: 'delayed', label: 'Hoãn chuyến', needReason: true },
+    { next: 'cancelled', label: 'Hủy chuyến', needReason: true },
+  ],
+  delayed: [
+    { next: 'boarding', label: 'Lên máy bay', needReason: false },
+    { next: 'cancelled', label: 'Hủy chuyến', needReason: true },
+  ],
+  boarding: [
+    { next: 'departed', label: 'Cất cánh', needReason: false },
+    { next: 'cancelled', label: 'Hủy chuyến', needReason: true },
+  ],
+  departed: [
+    { next: 'arrived', label: 'Đến nơi', needReason: false },
+  ],
+};
+
+export function PassengerManifestModal({ flight, onClose }) {
+  const { request, user } = useAuth();
+  const isAdmin = user?.role === 'admin';
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [bookings, setBookings] = useState([]);
+  const [includeHolding, setIncludeHolding] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 1, bookingsCount: 0 });
+
+  const fetchAllBookings = useCallback(async (holding) => {
+    setLoading(true);
+    setError('');
+    setProgress({ current: 1, total: 1, bookingsCount: 0 });
+    let page = 1;
+    let totalPages = 1;
+    let collected = [];
+    const MAX_PAGES = 30; // Chặn an toàn tối đa 30 trang
+
+    try {
+      while (page <= totalPages && page <= MAX_PAGES) {
+        setProgress((prev) => ({ ...prev, current: page, total: totalPages }));
+        const statusParam = holding ? '' : '&status=confirmed';
+        const url = `/bookings/admin/all?flight_id=${flight.id}&limit=50&page=${page}${statusParam}`;
+        const res = await request(url);
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        collected = [...collected, ...rows];
+        totalPages = Math.max(1, Number(res?.pagination?.totalPages || 1));
+        setProgress({ current: page, total: totalPages, bookingsCount: collected.length });
+        if (page >= totalPages || rows.length === 0) break;
+        page++;
+      }
+      const filtered = holding
+        ? collected.filter((b) => ['confirmed', 'holding', 'pending_payment'].includes(b.status))
+        : collected.filter((b) => b.status === 'confirmed');
+      setBookings(filtered);
+    } catch (err) {
+      setError(err.message || 'Không thể tải toàn bộ danh sách hành khách.');
+    } finally {
+      setLoading(false);
+    }
+  }, [flight.id, request]);
+
+  useEffect(() => {
+    void fetchAllBookings(includeHolding);
+  }, [fetchAllBookings, includeHolding]);
+
+  const passengers = useMemo(() => {
+    const list = [];
+    bookings.forEach((b) => {
+      (b.passengers || []).forEach((p) => {
+        list.push({
+          id: p.id,
+          booking_code: b.booking_code,
+          passenger_name: p.passenger_name,
+          passport_no: p.passport_no || '',
+          seat_no: p.seat_no || '—',
+          fare_class: b.fareClass?.class_name || 'Phổ thông',
+          booking_status: b.status,
+          contact: b.user?.email || b.guest_email || '—',
+        });
+      });
+    });
+    return list;
+  }, [bookings]);
+
+  const exportCsv = () => {
+    const BOM = '\uFEFF';
+    const headers = [
+      'STT',
+      'Mã đặt chỗ',
+      'Họ tên hành khách',
+      'Hộ chiếu/CCCD (che 3 số cuối)',
+      'Số ghế',
+      'Hạng vé',
+      'Trạng thái đặt chỗ',
+      'Email liên hệ',
+    ];
+    const rows = [
+      headers.map(escapeCsvCell).join(','),
+      ...passengers.map((p, idx) => [
+        idx + 1,
+        p.booking_code,
+        p.passenger_name,
+        maskPassport(p.passport_no), // CSV luôn luôn che số hộ chiếu
+        p.seat_no,
+        p.fare_class,
+        statusLabels[p.booking_status] || p.booking_status,
+        p.contact,
+      ].map(escapeCsvCell).join(',')),
+    ];
+    const blob = new Blob([BOM + rows.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `danh_sach_hanh_khach_chuyen_${flight.id}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  return (
+    <div className="dialog-backdrop passenger-manifest-backdrop" role="dialog" aria-modal="true" aria-labelledby="manifest-title">
+      <section className="confirm-dialog passenger-manifest-dialog manifest-dialog-shell">
+        <header className="manifest-header" style={{ marginBottom: '1rem', borderBottom: '1px solid var(--color-border)', paddingBottom: '0.75rem' }}>
+          <div>
+            <span className="eyebrow">DANH SÁCH HÀNH KHÁCH (MANIFEST)</span>
+            <h2 id="manifest-title" style={{ margin: '0.25rem 0' }}>Chuyến bay #{flight.id} ({carrierName(flight)})</h2>
+            <p style={{ margin: 0, color: 'var(--color-muted, #64748b)', fontSize: '0.9rem' }}>
+              {airportName(flight.departureAirport)} → {airportName(flight.arrivalAirport)} · Khởi hành: {displayTime(flight.departure_time)}
+            </p>
+          </div>
+        </header>
+
+        <div className="manifest-toolbar">
+          <div className="manifest-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            <button type="button" className="button button-secondary" onClick={handlePrint} disabled={loading || passengers.length === 0}>
+              In danh sách
+            </button>
+            <button type="button" className="button button-primary" onClick={exportCsv} disabled={loading || passengers.length === 0}>
+              Xuất CSV (BOM UTF-8)
+            </button>
+          </div>
+
+          <label className="manifest-filter-toggle">
+            <input
+              type="checkbox"
+              checked={includeHolding}
+              onChange={(e) => setIncludeHolding(e.target.checked)}
+              disabled={loading}
+            />
+            <span>Xem cả đơn giữ chỗ (holding & pending_payment)</span>
+          </label>
+        </div>
+
+        {loading ? (
+          <div className="manifest-loading-progress" role="status">
+            Đang tải dữ liệu: trang {progress.current} / {progress.total} (đã nạp {progress.bookingsCount} đơn đặt chỗ)…
+          </div>
+        ) : (
+          <div style={{ marginBottom: '1rem' }}>
+            <small className="manifest-note" style={{ display: 'block', color: 'var(--color-muted, #64748b)', fontSize: '0.85rem' }}>
+              Đã nạp {bookings.length} đơn đặt chỗ · {passengers.length} hành khách (trên {progress.total} trang API) · {includeHolding ? 'Bao gồm đơn xác nhận và các đơn đang giữ chỗ (holding, pending_payment)' : 'Chỉ đơn đã xác nhận (confirmed)'}.
+            </small>
+            <small style={{ display: 'block', color: 'var(--color-muted, #64748b)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+              * Che số giấy tờ chỉ áp dụng ở giao diện.
+            </small>
+          </div>
+        )}
+
+        {error ? (
+          <Notice type="error">{error}</Notice>
+        ) : !loading && passengers.length === 0 ? (
+          <div className="empty-state">
+            <p>Chưa có hành khách nào phù hợp với bộ lọc trên chuyến bay này.</p>
+          </div>
+        ) : (
+          <div className="table-wrap manifest-table-wrap">
+            <table aria-label="Bảng danh sách hành khách">
+              <thead>
+                <tr>
+                  <th>STT</th>
+                  <th>Mã đặt chỗ</th>
+                  <th>Họ tên hành khách</th>
+                  <th>Hộ chiếu/CCCD</th>
+                  <th>Ghế</th>
+                  <th>Hạng vé</th>
+                  <th>Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody>
+                {passengers.map((p, index) => (
+                  <tr key={`${p.id}-${index}`}>
+                    <td>{index + 1}</td>
+                    <td><strong>{p.booking_code}</strong></td>
+                    <td>{p.passenger_name}</td>
+                    <td>
+                      {isAdmin ? (
+                        <>
+                          <span className="passport-unmasked table-mono-cell">{p.passport_no || '—'}</span>
+                          <span className="passport-masked-print table-mono-cell">{maskPassport(p.passport_no)}</span>
+                        </>
+                      ) : (
+                        <code className="table-mono-cell">{maskPassport(p.passport_no)}</code>
+                      )}
+                    </td>
+                    <td><strong className="table-mono-cell">{p.seat_no}</strong></td>
+                    <td>{p.fare_class}</td>
+                    <td><StatusBadge status={p.booking_status} /></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        <div className="dialog-actions" style={{ marginTop: '1.5rem', borderTop: '1px solid var(--color-border)', paddingTop: '1rem' }}>
+          <button type="button" className="button button-outline" onClick={onClose}>
+            Đóng
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function QuickStatusDialog({ flight, nextStatus, onClose, onConfirm, pending, error }) {
+  const [reason, setReason] = useState('');
+  const needReason = ['delayed', 'cancelled'].includes(nextStatus);
+
+  return (
+    <div className="dialog-backdrop" role="dialog" aria-modal="true" aria-labelledby="quick-status-title">
+      <section className="confirm-dialog" style={{ maxWidth: '480px', width: '100%' }}>
+        <h2 id="quick-status-title">Cập nhật trạng thái chuyến #{flight.id}</h2>
+        <p>
+          Chuyển từ <strong>{statusLabels[flight.status] || flight.status}</strong> sang <strong>{statusLabels[nextStatus] || nextStatus}</strong>.
+        </p>
+        {needReason ? (
+          <Field
+            id="quick-status-reason"
+            label="Lý do chuyển trạng thái (bắt buộc)"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            required
+            maxLength={500}
+            placeholder="Ví dụ: Thời tiết xấu, bảo dưỡng máy bay…"
+          />
+        ) : null}
+        {error ? <Notice type="error">{error}</Notice> : null}
+        <div className="dialog-actions" style={{ marginTop: '1rem' }}>
+          <button type="button" className="button button-outline" onClick={onClose} disabled={pending}>
+            Hủy
+          </button>
+          <button
+            type="button"
+            className={`button ${nextStatus === 'cancelled' ? 'button-danger' : 'button-primary'}`}
+            disabled={pending || (needReason && !reason.trim())}
+            onClick={() => void onConfirm(reason)}
+          >
+            {pending ? 'Đang cập nhật…' : 'Xác nhận cập nhật'}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 export function FlightListPage() {
   const api = useManagementApi();
   const { user } = useAuth();
@@ -115,6 +381,11 @@ export function FlightListPage() {
   const status = params.get('status') || '';
   const viewMode = params.get('view') || 'table';
   const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
+  const [noticeMsg, setNoticeMsg] = useState('');
+  const [selectedManifestFlight, setSelectedManifestFlight] = useState(null);
+  const [quickStatusTarget, setQuickStatusTarget] = useState(null); // { flight, nextStatus }
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+  const [quickStatusError, setQuickStatusError] = useState('');
 
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
@@ -142,19 +413,96 @@ export function FlightListPage() {
   });
 
   const admin = user?.role === 'admin';
+  const isStaff = user?.role === 'staff';
+
+  // Với vai trò staff: hiển thị chuyến bay hôm nay lên đầu bảng
+  const sortedRows = useMemo(() => {
+    if (!isStaff) return state.rows;
+    const today = [];
+    const others = [];
+    state.rows.forEach((item) => {
+      if (isTodayVn(item.departure_time)) {
+        today.push(item);
+      } else {
+        others.push(item);
+      }
+    });
+    return [...today, ...others];
+  }, [state.rows, isStaff]);
+
+  // Chọn đường gọi theo vai trò ngay từ đầu: admin dùng updateFlightStatus (PATCH), staff dùng updateFlight (PUT)
+  const handleQuickStatusTransition = async (flight, nextStatus) => {
+    const allowed = ALLOWED_QUICK_TRANSITIONS[flight.status] || [];
+    const target = allowed.find((a) => a.next === nextStatus);
+    if (!target) return;
+    if (target.needReason) {
+      setQuickStatusTarget({ flight, nextStatus });
+      setQuickStatusError('');
+      return;
+    }
+    setUpdatingStatus(true);
+    setNoticeMsg('');
+    try {
+      const payload = { status: nextStatus };
+      if (admin) {
+        await api.updateFlightStatus(flight.id, payload);
+      } else {
+        await api.updateFlight(flight.id, payload);
+      }
+      setNoticeMsg(`Đã cập nhật trạng thái chuyến #${flight.id} thành "${statusLabels[nextStatus]}".`);
+      await load();
+    } catch (err) {
+      setState((cur) => ({ ...cur, error: errorMessage(err, 'Không thể cập nhật trạng thái.') }));
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
+  const handleConfirmQuickStatus = async (reason) => {
+    if (!quickStatusTarget) return;
+    const { flight, nextStatus } = quickStatusTarget;
+    setUpdatingStatus(true);
+    setQuickStatusError('');
+    try {
+      const payload = { status: nextStatus, reason: reason.trim() || undefined };
+      if (admin) {
+        await api.updateFlightStatus(flight.id, payload);
+      } else {
+        await api.updateFlight(flight.id, payload);
+      }
+      setQuickStatusTarget(null);
+      setNoticeMsg(`Đã cập nhật trạng thái chuyến #${flight.id} thành "${statusLabels[nextStatus]}".`);
+      await load();
+    } catch (err) {
+      setQuickStatusError(errorMessage(err, 'Không thể cập nhật trạng thái.'));
+    } finally {
+      setUpdatingStatus(false);
+    }
+  };
+
   if (state.loading) return <ManagementShell><LoadingView label="Đang tải danh sách chuyến bay…" /></ManagementShell>;
 
   return (
     <ManagementShell>
       <PageFrame
-        title="Quản lý chuyến bay"
-        description="Theo dõi lịch khai thác và thông tin từng chuyến bay."
+        title={isStaff ? 'Bảng điều khiển khai thác chuyến bay' : 'Quản lý chuyến bay'}
+        description={isStaff ? 'Theo dõi lịch bay hôm nay, cập nhanh trạng thái và quản lý danh sách hành khách.' : 'Theo dõi lịch khai thác và thông tin từng chuyến bay.'}
         actions={admin ? <Link className="button button-primary" to="/admin/flights/new">Tạo chuyến bay</Link> : null}
       >
+        {noticeMsg ? <Notice type="success">{noticeMsg}</Notice> : null}
         {state.error ? (
           <ErrorState message={state.error} onRetry={() => void load()} />
         ) : (
           <section className="surface-card admin-card">
+            {isStaff ? (
+              <div style={{ marginBottom: '1rem', padding: '0.65rem 1rem', background: 'var(--color-surface-subtle, #f8fafc)', borderRadius: '0.5rem', border: '1px solid var(--color-border)' }}>
+                <span className="eyebrow" style={{ color: '#087656' }}>CHẾ ĐỘ VẬN HÀNH NHÂN VIÊN</span>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.9rem' }}>
+                  Các chuyến bay trong ngày hôm nay được ưu tiên hiển thị lên đầu. Nhân viên có thể cập nhật nhanh trạng thái theo quy định và xem/xuất danh sách hành khách (Manifest).
+                </p>
+              </div>
+            ) : null}
+
             <div className="flight-filter-bar" style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: '0.75rem' }}>
               <div className="flight-view-switcher" role="tablist" aria-label="Chế độ hiển thị chuyến bay">
                 <button
@@ -225,7 +573,7 @@ export function FlightListPage() {
                 />
               </div>
             ) : (
-              state.rows.length === 0 ? (
+              sortedRows.length === 0 ? (
                 <div className="empty-state">
                   <h2>Chưa có chuyến bay phù hợp</h2>
                   <p>Thay đổi bộ lọc trạng thái hoặc kiểm tra lại sau.</p>
@@ -241,49 +589,116 @@ export function FlightListPage() {
                           <th>Khởi hành</th>
                           <th>Ghế</th>
                           <th>Trạng thái</th>
+                          <th>Vận hành</th>
                           <th>Chi tiết</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {state.rows.map((item) => (
-                          <tr key={item.id}>
-                            <td>
-                              <strong>{carrierName(item)}</strong>
-                              <small>Mã chuyến #{item.id}</small>
-                            </td>
-                            <td>{item.departureAirport?.iata_code || '—'} → {item.arrivalAirport?.iata_code || '—'}</td>
-                            <td>{displayTime(item.departure_time)}</td>
-                            <td>{item.available_seats ?? '—'} / {item.total_seats ?? '—'}</td>
-                            <td><FlightStatusBadge status={item.status} /></td>
-                            <td><Link to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></td>
-                          </tr>
-                        ))}
+                        {sortedRows.map((item) => {
+                          const isToday = isTodayVn(item.departure_time);
+                          const quickTransitions = ALLOWED_QUICK_TRANSITIONS[item.status] || [];
+                          return (
+                            <tr key={item.id} className={isToday && isStaff ? 'flight-today-row' : ''}>
+                              <td>
+                                <strong>{carrierName(item)}</strong>
+                                <small>
+                                  Mã chuyến #{item.id}
+                                  {isToday ? <span className="flight-today-badge">Hôm nay</span> : null}
+                                </small>
+                              </td>
+                              <td>{item.departureAirport?.iata_code || '—'} → {item.arrivalAirport?.iata_code || '—'}</td>
+                              <td>{displayTime(item.departure_time)}</td>
+                              <td>{item.available_seats ?? '—'} / {item.total_seats ?? '—'}</td>
+                              <td><FlightStatusBadge status={item.status} /></td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '0.35rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="button button-outline"
+                                    style={{ padding: '0.2rem 0.5rem', fontSize: '0.8rem' }}
+                                    onClick={() => setSelectedManifestFlight(item)}
+                                  >
+                                    Hành khách
+                                  </button>
+                                  {(isStaff || admin) && quickTransitions.length > 0 ? (
+                                    <div style={{ display: 'inline-flex', gap: '0.25rem' }}>
+                                      {quickTransitions.slice(0, 2).map((t) => (
+                                        <button
+                                          key={t.next}
+                                          type="button"
+                                          className="button button-secondary"
+                                          style={{ padding: '0.2rem 0.45rem', fontSize: '0.78rem' }}
+                                          disabled={updatingStatus}
+                                          onClick={() => void handleQuickStatusTransition(item, t.next)}
+                                        >
+                                          → {t.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  ) : null}
+                                </div>
+                              </td>
+                              <td><Link to={`/admin/flights/${item.id}`}>Xem chi tiết</Link></td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
+
                   <div className="flight-card-list">
-                    {state.rows.map((item) => (
-                      <article className="flight-card" key={item.id}>
-                        <div className="flight-card-top">
-                          <div>
-                            <span className="eyebrow">CHUYẾN #{item.id}</span>
-                            <h2>{carrierName(item)}</h2>
+                    {sortedRows.map((item) => {
+                      const isToday = isTodayVn(item.departure_time);
+                      const quickTransitions = ALLOWED_QUICK_TRANSITIONS[item.status] || [];
+                      return (
+                        <article className="flight-card" key={item.id}>
+                          <div className="flight-card-top">
+                            <div>
+                              <span className="eyebrow">
+                                CHUYẾN #{item.id}
+                                {isToday ? ' · HÔM NAY' : ''}
+                              </span>
+                              <h2>{carrierName(item)}</h2>
+                            </div>
+                            <FlightStatusBadge status={item.status} />
                           </div>
-                          <FlightStatusBadge status={item.status} />
-                        </div>
-                        <p className="flight-card-route">
-                          <strong>{item.departureAirport?.iata_code || '—'}</strong>
-                          <span aria-hidden="true">→</span>
-                          <strong>{item.arrivalAirport?.iata_code || '—'}</strong>
-                        </p>
-                        <div className="flight-card-meta">
-                          <span>{displayTime(item.departure_time)}</span>
-                          <span>{item.available_seats ?? '—'} / {item.total_seats ?? '—'} ghế</span>
-                        </div>
-                        <Link className="button button-outline" to={`/admin/flights/${item.id}`}>Xem chi tiết</Link>
-                      </article>
-                    ))}
+                          <p className="flight-card-route">
+                            <strong>{item.departureAirport?.iata_code || '—'}</strong>
+                            <span aria-hidden="true">→</span>
+                            <strong>{item.arrivalAirport?.iata_code || '—'}</strong>
+                          </p>
+                          <div className="flight-card-meta">
+                            <span>{displayTime(item.departure_time)}</span>
+                            <span>{item.available_seats ?? '—'} / {item.total_seats ?? '—'} ghế</span>
+                          </div>
+                          <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                            <button
+                              type="button"
+                              className="button button-outline"
+                              onClick={() => setSelectedManifestFlight(item)}
+                            >
+                              Xem hành khách
+                            </button>
+                            {(isStaff || admin) && quickTransitions.length > 0 ? (
+                              quickTransitions.slice(0, 2).map((t) => (
+                                <button
+                                  key={t.next}
+                                  type="button"
+                                  className="button button-secondary"
+                                  disabled={updatingStatus}
+                                  onClick={() => void handleQuickStatusTransition(item, t.next)}
+                                >
+                                  Chuyển: {t.label}
+                                </button>
+                              ))
+                            ) : null}
+                            <Link className="button button-outline" to={`/admin/flights/${item.id}`}>Xem chi tiết</Link>
+                          </div>
+                        </article>
+                      );
+                    })}
                   </div>
+
                   <Pagination
                     page={state.pagination?.page || page}
                     totalPages={Math.max(1, state.pagination?.totalPages || 1)}
@@ -294,6 +709,24 @@ export function FlightListPage() {
             )}
           </section>
         )}
+
+        {selectedManifestFlight ? (
+          <PassengerManifestModal
+            flight={selectedManifestFlight}
+            onClose={() => setSelectedManifestFlight(null)}
+          />
+        ) : null}
+
+        {quickStatusTarget ? (
+          <QuickStatusDialog
+            flight={quickStatusTarget.flight}
+            nextStatus={quickStatusTarget.nextStatus}
+            onClose={() => setQuickStatusTarget(null)}
+            onConfirm={handleConfirmQuickStatus}
+            pending={updatingStatus}
+            error={quickStatusError}
+          />
+        ) : null}
       </PageFrame>
     </ManagementShell>
   );
@@ -306,6 +739,7 @@ export function FlightDetailPage() {
   const api = useManagementApi();
   const { loading, data: flight, error, reload } = useFlight(id);
   const [dialog, setDialog] = useState('');
+  const [manifestOpen, setManifestOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const [action, setAction] = useState({ pending: false, error: '' });
   const admin = user?.role === 'admin';
@@ -330,13 +764,18 @@ export function FlightDetailPage() {
     <div className="flight-detail-layout">
       <section className="surface-card admin-card"><div className="flight-section-heading"><div><span className="eyebrow">TỔNG QUAN</span><h2>{carrierName(flight)}</h2></div><FlightStatusBadge status={flight.status} /></div><FlightFacts flight={flight} />
         {action.error ? <Notice type="error">{action.error}</Notice> : null}
-        <div className="flight-detail-actions">{staffOrAdmin ? <button className="button button-secondary" type="button" disabled={flight.status === 'cancelled'} onClick={() => { setAction({ pending: false, error: '' }); setDialog('cancel'); }}>Hủy chuyến bay</button> : null}{admin ? <button className="button button-danger" type="button" onClick={() => { setAction({ pending: false, error: '' }); setDialog('delete'); }}>Xóa chuyến bay</button> : null}</div>
+        <div className="flight-detail-actions" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+          <button type="button" className="button button-outline" onClick={() => setManifestOpen(true)}>Danh sách hành khách (Manifest)</button>
+          {staffOrAdmin ? <button className="button button-secondary" type="button" disabled={flight.status === 'cancelled'} onClick={() => { setAction({ pending: false, error: '' }); setDialog('cancel'); }}>Hủy chuyến bay</button> : null}
+          {admin ? <button className="button button-danger" type="button" onClick={() => { setAction({ pending: false, error: '' }); setDialog('delete'); }}>Xóa chuyến bay</button> : null}
+        </div>
       </section>
       {admin ? <FlightStatusPanel flight={flight} api={api} onUpdated={reload} /> : null}
       <section className="surface-card admin-card flight-fares-card"><div className="flight-section-heading"><div><span className="eyebrow">HẠNG VÉ</span><h2>Hạng vé chuyến bay</h2></div><Link className="button button-outline" to={`/admin/flights/${flight.id}/fare-classes`}>Xem danh sách</Link></div>
         {fareClasses.length ? <div className="fare-class-list">{fareClasses.map((fare) => <article className="fare-class-row" key={fare.id}><div><strong>{fare.class_name}</strong><small>{fare.seat_quota ?? '—'} ghế phân bổ</small></div><strong>{money(fare.price)}</strong></article>)}</div> : <div className="empty-state compact-empty"><h3>Chưa có hạng vé</h3><p>Danh sách hạng vé của chuyến bay này đang trống.</p></div>}
       </section>
     </div>
+    {manifestOpen ? <PassengerManifestModal flight={flight} onClose={() => setManifestOpen(false)} /> : null}
     {dialog === 'cancel' ? <div className="dialog-backdrop" role="presentation"><section className="confirm-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-flight-title"><h2 id="cancel-flight-title">Xác nhận hủy chuyến bay</h2><p>Chuyến bay được giữ lại trong hệ thống; booking hiện có không tự động bị hủy hoặc hoàn tiền.</p><Field id="cancel-flight-reason" label="Lý do hủy chuyến" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} required /><RouteError error={action.error} fallback="Không thể hủy chuyến bay." /><div className="dialog-actions"><button className="button button-outline" type="button" disabled={action.pending} onClick={() => setDialog('')}>Quay lại</button><button className="button button-danger" type="button" disabled={action.pending || !cancelReason.trim()} onClick={() => void perform('cancel')}>{action.pending ? 'Đang xử lý…' : 'Xác nhận hủy chuyến'}</button></div></section></div> : null}
     <ConfirmDialog open={dialog === 'delete'} title="Xác nhận xóa chuyến bay" description="Chỉ xóa khi chuyến bay chưa có lịch sử đặt vé. Xóa là thao tác riêng, không tự động chuyển thành hủy chuyến." confirmLabel="Xóa chuyến bay" danger pending={action.pending} onConfirm={() => void perform('delete')} onCancel={() => setDialog('')} />
   </PageFrame></ManagementShell>;
@@ -360,7 +799,7 @@ function FlightStatusPanel({ flight, api, onUpdated }) {
   const setValue = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
   const submit = async (event) => {
     event.preventDefault(); setSaving(true); setError(''); setSaved(false);
-    const toIso = (value) => value ? new Date(value).toISOString() : null;
+    const toIso = (value) => value ? vnDateTimeInputToIso(value) : null;
     try {
       const result = await api.updateFlightStatus(flight.id, {
         status: form.status,

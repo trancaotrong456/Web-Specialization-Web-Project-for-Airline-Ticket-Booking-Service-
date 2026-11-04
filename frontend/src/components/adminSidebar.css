@@ -48,12 +48,16 @@
   .admin-page .flight-management-main,
   .admin-dashboard-page .admin-dashboard-main,
   .booking-admin-main,
+  .seat-map-admin-main,
+  .ancillaries-admin-main,
   body.has-admin-sidebar .admin-main,
   body.has-admin-sidebar .admin-dashboard-main,
   body.has-admin-sidebar .catalog-main,
   body.has-admin-sidebar .promotion-main,
   body.has-admin-sidebar .flight-management-main,
   body.has-admin-sidebar .booking-admin-main,
+  body.has-admin-sidebar .seat-map-admin-main,
+  body.has-admin-sidebar .ancillaries-admin-main,
   body.has-admin-sidebar .booking-main,
   body:has(.app-admin-sidebar) .admin-main,
   body:has(.app-admin-sidebar) .admin-dashboard-main,
@@ -61,6 +65,8 @@
   body:has(.app-admin-sidebar) .promotion-main,
   body:has(.app-admin-sidebar) .flight-management-main,
   body:has(.app-admin-sidebar) .booking-admin-main,
+  body:has(.app-admin-sidebar) .seat-map-admin-main,
+  body:has(.app-admin-sidebar) .ancillaries-admin-main,
   body:has(.app-admin-sidebar) .booking-main {
     width: min(calc(100% - 21.5rem), 78rem) !important;
     max-width: 78rem !important;
@@ -74,6 +80,8 @@
   body.admin-sidebar-collapsed .promotion-main,
   body.admin-sidebar-collapsed .flight-management-main,
   body.admin-sidebar-collapsed .booking-admin-main,
+  body.admin-sidebar-collapsed .seat-map-admin-main,
+  body.admin-sidebar-collapsed .ancillaries-admin-main,
   body.admin-sidebar-collapsed .booking-main,
   body:has(.app-admin-sidebar.is-collapsed) .admin-main,
   body:has(.app-admin-sidebar.is-collapsed) .admin-dashboard-main,
@@ -81,6 +89,8 @@
   body:has(.app-admin-sidebar.is-collapsed) .promotion-main,
   body:has(.app-admin-sidebar.is-collapsed) .flight-management-main,
   body:has(.app-admin-sidebar.is-collapsed) .booking-admin-main,
+  body:has(.app-admin-sidebar.is-collapsed) .seat-map-admin-main,
+  body:has(.app-admin-sidebar.is-collapsed) .ancillaries-admin-main,
   body:has(.app-admin-sidebar.is-collapsed) .booking-main {
     width: min(calc(100% - 7.5rem), 78rem) !important;
     max-width: 78rem !important;

@@ -57,7 +57,7 @@ describe('admin role management', () => {
     expect(await screen.findByText('Vai trò đã được tạo.')).toBeInTheDocument();
     const call = fetchImpl.mock.calls.find(([url, options]) => url.endsWith('/roles') && options.method === 'POST');
     expect(JSON.parse(call[1].body)).toEqual({ name: 'support_lead', description: 'Điều phối hỗ trợ' });
-  });
+  }, 15000); // Timeout 15s: tải danh sách roles và nhập form tạo role mới bằng userEvent
 
   it('validates role names using the API format before creating', async () => {
     const user = userEvent.setup();

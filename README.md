@@ -2,7 +2,7 @@
 
 ## Local Docker demo setup
 
-Requirements: Docker Desktop with a local context, Node.js 20+, and npm. The shared sample data and demo accounts are committed fixtures; members do not need to hand-enter seed data or passwords.
+Requirements: Docker Desktop with a local context, Node.js 20+ (pinned in `.nvmrc` and `package.json` engines), and npm. The shared sample data and demo accounts are committed fixtures; members do not need to hand-enter seed data or passwords. Run `nvm use` if using nvm.
 
 ### Safe `docker.env` migration
 

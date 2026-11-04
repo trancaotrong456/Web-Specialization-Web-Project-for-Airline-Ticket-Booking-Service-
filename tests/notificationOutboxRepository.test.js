@@ -36,3 +36,25 @@ test('outbox completion is conditional on the current lease to prevent stale wor
   assert.deepEqual(result, [0]);
   assert.deepEqual(update[1].where, { id: 5, status: 'processing', lease_token: 'lease-current' });
 });
+
+test('outbox completion rejects a claimed event without its primary key before Sequelize update', async () => {
+  let updates = 0;
+  const repository = new SequelizeNotificationOutboxRepository({
+    NotificationOutbox: { update: async () => { updates += 1; } }, sequelize: {}, Op: {},
+  });
+  await assert.rejects(repository.saveClaimed({ status: 'processed' }, 'lease'), (error) => error.code === 'OUTBOX_ID_MISSING');
+  assert.equal(updates, 0);
+});
+
+test('outbox completion uses a Sequelize-like dataValues/get id when direct id is absent', async () => {
+  let update;
+  const repository = new SequelizeNotificationOutboxRepository({
+    NotificationOutbox: { update: async (...args) => { update = args; return [1]; } }, sequelize: {}, Op: {},
+  });
+  const event = {
+    dataValues: { id: 77, status: 'processed' },
+    get: (key) => key === 'id' ? 77 : { ...event.dataValues },
+  };
+  await repository.saveClaimed(event, 'lease-current');
+  assert.equal(update[1].where.id, 77);
+});
