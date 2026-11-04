@@ -566,19 +566,34 @@ export function BookingServicesPage() {
                 <span className="summary-total-amount">{money(grandTotal)}</span>
               </div>
 
-              {/* Nút Đi tiếp Amber của Serene */}
-              <button
-                type="button"
-                className="summary-continue-btn"
-                disabled={submitting}
-                onClick={handleProceedToPayment}
-              >
-                {submitting ? 'Đang chuyển tiếp…' : 'Đi tiếp ➔'}
-              </button>
+
             </div>
           </aside>
         </div>
       </main>
+
+      {/* Thanh Bottom Action Bar Cố định (Fixed Bottom Bar đồng bộ theo Ảnh 1) */}
+      <div className="passenger-bottom-actions">
+        <div className="passenger-bottom-actions-container">
+          <Link to="/bookings/new" className="button-back">
+            ‹ Quay lại
+          </Link>
+          <div className="passenger-bottom-submit-group">
+            <div className="passenger-bottom-total-display">
+              <span>Tổng tiền thanh toán</span>
+              <strong>{money(grandTotal)}</strong>
+            </div>
+            <button
+              type="button"
+              className="button-continue"
+              disabled={submitting}
+              onClick={handleProceedToPayment}
+            >
+              {submitting ? 'Đang chuyển tiếp…' : 'Đi tiếp ➔'}
+            </button>
+          </div>
+        </div>
+      </div>
 
       <AppFooter />
     </div>
