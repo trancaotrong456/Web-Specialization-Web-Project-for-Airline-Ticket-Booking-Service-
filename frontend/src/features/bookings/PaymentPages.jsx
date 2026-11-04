@@ -283,6 +283,28 @@ export function PaymentInitiatePage() {
         </div>
       </aside>
     </div>
+
+    {/* Thanh Bottom Action Bar Cố định (Đồng bộ theo Ảnh 2 & 4) */}
+    <div className="passenger-bottom-actions">
+      <div className="passenger-bottom-actions-container">
+        <Link to={`/bookings/${id}/services`} state={{ guestEmail, booking }} className="button-back">
+          ‹ Quay lại
+        </Link>
+        <div className="passenger-bottom-submit-group">
+          <Link to={`/bookings/${id}/services`} state={{ guestEmail, booking }} className="button-add-more">
+            + Mua Thêm
+          </Link>
+          <button
+            type="button"
+            className="button-continue"
+            disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}
+            onClick={startPayment}
+          >
+            {state.submitting ? 'Đang kết nối…' : 'Thanh toán ➔'}
+          </button>
+        </div>
+      </div>
+    </div>
   </PaymentShell>;
 }
 

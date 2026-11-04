@@ -616,3 +616,29 @@
     align-items: center;
   }
 }
+
+
+.passenger-bottom-actions .button-add-more {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.85rem 1.85rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
+}
+
+.passenger-bottom-actions .button-add-more:hover {
+  background: linear-gradient(135deg, #15803d 0%, #166534 100%);
+  color: #ffffff;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(21, 128, 61, 0.45);
+}
