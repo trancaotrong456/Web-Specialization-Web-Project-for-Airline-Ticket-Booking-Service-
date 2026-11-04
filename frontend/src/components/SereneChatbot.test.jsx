@@ -46,7 +46,7 @@ describe('SereneChatbot Component', () => {
     const launcher = screen.getByRole('button', { name: /Mở Trợ lý Hàng không AI/i });
     fireEvent.click(launcher);
 
-    expect(screen.getByText('Serene AI Assistant')).toBeDefined();
+    expect(screen.getByText('Trợ Lý Ảo Serene')).toBeDefined();
     expect(screen.getByPlaceholderText(/Hỏi về hành lý, vé, hoàn hủy, check-in.../i)).toBeDefined();
   });
 
