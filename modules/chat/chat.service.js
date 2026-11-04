@@ -33,7 +33,6 @@ class ChatService {
       let score = 0;
       const lowerQuery = query.toLowerCase();
       const lowerTitle = doc.title.toLowerCase();
-      const lowerContent = doc.content.toLowerCase();
 
       // Keyword boost
       if (Array.isArray(doc.keywords)) {
@@ -71,12 +70,86 @@ class ChatService {
   }
 
   /**
-   * Sinh câu trả lời tổng hợp dựa trên ngữ cảnh đã trích xuất từ tài liệu PDF
+   * Tích hợp gọi trực tiếp OpenAI API hoặc Gemini API nếu người dùng cung cấp API Key
+   */
+  async callLlmIfConfigured({ message, context, history = [] }) {
+    const openaiKey = process.env.OPENAI_API_KEY;
+    const geminiKey = process.env.GEMINI_API_KEY;
+
+    if (openaiKey) {
+      try {
+        const response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${openaiKey}`
+          },
+          body: JSON.stringify({
+            model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+            messages: [
+              {
+                role: 'system',
+                content: `Bạn là Trợ Lý Ảo thông minh của hãng hàng không Serene Flightways. Hãy trả lời thân thiện, lịch sự bằng tiếng Việt theo phong cách tiếp viên hàng không chuyên nghiệp. Hãy sử dụng thông tin quy chế chính thức sau đây để trả lời câu hỏi của hành khách:\n\n${context}`
+              },
+              ...history.slice(-6).map((h) => ({
+                role: h.sender === 'user' ? 'user' : 'assistant',
+                content: h.text || ''
+              })),
+              { role: 'user', content: message }
+            ],
+            temperature: 0.3
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const content = data.choices?.[0]?.message?.content;
+          if (content) return content;
+        }
+      } catch (_err) {
+        // Fallback to local RAG generator
+      }
+    }
+
+    if (geminiKey) {
+      try {
+        const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+        const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${geminiKey}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: `Bạn là Trợ Lý Ảo thông minh của hãng hàng không Serene Flightways. Dựa vào thông tin quy chế hành khách chính thức sau:\n\n${context}\n\nHãy trả lời câu hỏi của hành khách một cách chu đáo, lịch sự và chuyên nghiệp bằng tiếng Việt: ${message}`
+                  }
+                ]
+              }
+            ]
+          })
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (text) return text;
+        }
+      } catch (_err) {
+        // Fallback to local RAG generator
+      }
+    }
+
+    return null;
+  }
+
+  /**
+   * Sinh câu trả lời tổng hợp dựa trên ngữ cảnh đã trích xuất từ tài liệu PDF (Local RAG Synthesizer)
    */
   generateAnswer(query, relevantDocs) {
     if (!query || typeof query !== 'string' || query.trim() === '') {
       return {
-        answer: 'Xin chào! Em là Trợ lý AI của Serene Flightways. Quý khách vui lòng đặt câu hỏi về quy định hành lý, đặt vé, chính sách hoàn hủy hoặc thủ tục bay ạ!',
+        answer: 'Xin chào! Em là Trợ Lý Ảo của Serene Flightways. Quý khách vui lòng đặt câu hỏi về quy định hành lý, đặt vé, chính sách hoàn hủy hoặc thủ tục bay ạ!',
         citations: []
       };
     }
@@ -86,7 +159,7 @@ class ChatService {
     // Lời chào hỏi cơ bản
     if (['xin chào', 'chào bạn', 'hello', 'hi', 'alo', 'chào em', 'chào bot'].includes(lowerQuery)) {
       return {
-        answer: `Xin chào Quý khách! Em là Trợ lý AI chuyên hỗ trợ thông tin hành khách của **Serene Flightways**.\n
+        answer: `Xin chào Quý khách! Em là Trợ Lý Ảo chuyên hỗ trợ thông tin hành khách của **Serene Flightways**.\n
 Quý khách có thể hỏi em bất kỳ thông tin nào về:
 - 🧳 **Quy định hành lý** (xách tay, ký gửi, chất lỏng, pin sạc)
 - ⏱️ **Chính sách giữ chỗ 15 phút** & các phương thức thanh toán
@@ -140,12 +213,37 @@ Quý khách vui lòng liên hệ trực tiếp Tổng đài Chăm sóc Khách h�
    */
   async processMessage({ message, history = [] }) {
     const relevantDocs = this.retrieveRelevantChunks(message, 2);
-    const { answer, citations } = this.generateAnswer(message, relevantDocs);
+
+    const citations = relevantDocs.map((doc) => ({
+      id: doc.id,
+      title: doc.title,
+      section: doc.section,
+      page: doc.page,
+      source: doc.source
+    }));
+
+    const contextText = relevantDocs.map((d) => `[${d.section} - Trang ${d.page}]: ${d.content}`).join('\n\n');
+
+    // Ưu tiên gọi LLM (OpenAI / Gemini) nếu người dùng đã cấu hình API Key
+    const llmAnswer = await this.callLlmIfConfigured({ message, context: contextText, history });
+    if (llmAnswer) {
+      return {
+        success: true,
+        message: llmAnswer,
+        citations,
+        source: 'llm',
+        timestamp: new Date().toISOString()
+      };
+    }
+
+    // Nếu chưa cấu hình LLM API Key, tự động dùng RAG Synthesizer nội bộ
+    const { answer } = this.generateAnswer(message, relevantDocs);
 
     return {
       success: true,
       message: answer,
       citations,
+      source: 'local-rag',
       timestamp: new Date().toISOString()
     };
   }

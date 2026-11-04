@@ -34,7 +34,7 @@ test('ChatService - processMessage handles greetings', async () => {
   const service = new ChatService();
   const result = await service.processMessage({ message: 'Xin chào' });
   assert.equal(result.success, true);
-  assert.ok(result.message.includes('Trợ lý AI'));
+  assert.ok(result.message.includes('Trợ Lý Ảo'));
 });
 
 test('ChatController - returns badRequest on empty message', async () => {
