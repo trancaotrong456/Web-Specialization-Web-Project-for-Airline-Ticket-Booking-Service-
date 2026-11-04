@@ -1,4 +1,4 @@
-/* Serene Flightways AI Chatbot - Luxury Airline Theme */
+/* Serene Flightways AI Chatbot - Đồng bộ 100% Brand Identity */
 
 .serene-chatbot-container {
   position: fixed;
@@ -8,15 +8,17 @@
   font-family: inherit;
 }
 
-/* Floating Launcher Button */
+/* ========================================================
+   1. FLOATING LAUNCHER BUTTON (Đồng bộ Brand Mark Trang Chủ)
+   ======================================================== */
 .serene-chatbot-launcher {
   position: relative;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #0e3d36 0%, #175249 100%);
-  border: 2px solid #f59e0b;
-  box-shadow: 0 8px 24px rgba(14, 61, 54, 0.4), 0 2px 6px rgba(245, 158, 11, 0.3);
+  width: 58px;
+  height: 58px;
+  border-radius: 16px; /* Vuông bo góc chuẩn phong cách Serene Flightways */
+  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
+  border: 1.5px solid rgba(245, 158, 11, 0.6);
+  box-shadow: 0 10px 25px -4px rgba(7, 91, 73, 0.4), 0 4px 12px rgba(245, 158, 11, 0.25);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -28,69 +30,74 @@
 
 .serene-chatbot-launcher:hover {
   transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 12px 30px rgba(14, 61, 54, 0.5), 0 4px 12px rgba(245, 158, 11, 0.4);
-  border-color: #fbbf24;
+  box-shadow: 0 14px 32px rgba(7, 91, 73, 0.5), 0 6px 16px rgba(245, 158, 11, 0.35);
+  border-color: #f59e0b;
 }
 
 .serene-chatbot-launcher:active {
-  transform: translateY(0) scale(0.98);
+  transform: translateY(0) scale(0.97);
 }
 
-.serene-chatbot-launcher-icon {
-  width: 28px;
-  height: 28px;
-  fill: #fbbf24;
+.serene-chatbot-launcher-mark {
+  font-size: 1.65rem;
+  line-height: 1;
+  color: #f5c76b;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  display: inline-block;
+  transform: rotate(-10deg);
   transition: transform 0.3s ease;
 }
 
-.serene-chatbot-launcher:hover .serene-chatbot-launcher-icon {
-  transform: rotate(10deg);
+.serene-chatbot-launcher:hover .serene-chatbot-launcher-mark {
+  transform: rotate(0deg) scale(1.1);
 }
 
 .serene-chatbot-online-pulse {
   position: absolute;
-  top: 2px;
-  right: 2px;
+  top: -3px;
+  right: -3px;
   width: 13px;
   height: 13px;
   background-color: #10b981;
   border: 2px solid #ffffff;
   border-radius: 50%;
-  animation: pulse-ring 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
+  animation: serenePulseRing 2s cubic-bezier(0.455, 0.03, 0.515, 0.955) infinite;
 }
 
-@keyframes pulse-ring {
+@keyframes serenePulseRing {
   0% {
     box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7);
   }
   70% {
-    box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    box-shadow: 0 0 0 7px rgba(16, 185, 129, 0);
   }
   100% {
     box-shadow: 0 0 0 0 rgba(16, 185, 129, 0);
   }
 }
 
-/* Chatbot Floating Dialog Window */
+/* ========================================================
+   2. DIALOG WINDOW (Khung cửa sổ Chatbot)
+   ======================================================== */
 .serene-chatbot-dialog {
-  width: 380px;
-  height: 560px;
+  width: 390px;
+  height: 570px;
   max-width: calc(100vw - 32px);
-  max-height: calc(100vh - 100px);
+  max-height: calc(100vh - 90px);
   background: #ffffff;
   border-radius: 18px;
-  box-shadow: 0 16px 40px -8px rgba(14, 61, 54, 0.35), 0 6px 16px -4px rgba(0, 0, 0, 0.1);
-  border: 1px solid rgba(226, 232, 240, 0.8);
+  box-shadow: 0 20px 45px -10px rgba(7, 91, 73, 0.35), 0 8px 20px -4px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(226, 232, 240, 0.9);
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: sereneSlideUp 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+  animation: sereneSlideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 @keyframes sereneSlideUp {
   from {
     opacity: 0;
-    transform: translateY(20px) scale(0.95);
+    transform: translateY(18px) scale(0.96);
   }
   to {
     opacity: 1;
@@ -98,11 +105,13 @@
   }
 }
 
-/* Header */
+/* ========================================================
+   3. HEADER (Đồng bộ Header Trang Chủ)
+   ======================================================== */
 .serene-chatbot-header {
-  background: linear-gradient(135deg, #0e3d36 0%, #082823 100%);
+  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
   color: #ffffff;
-  padding: 14px 16px;
+  padding: 13px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -112,21 +121,24 @@
 .serene-chatbot-header-info {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 11px;
 }
 
-.serene-chatbot-avatar {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: #175249;
-  border: 1.5px solid #f59e0b;
+/* Logo Brand Mark trong Header - Giống 100% .app-brand-mark trang chủ */
+.serene-chatbot-avatar-mark {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: #f5c76b;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fbbf24;
-  font-size: 20px;
+  font-size: 1.15rem;
+  line-height: 1;
   flex-shrink: 0;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.15);
 }
 
 .serene-chatbot-title-box {
@@ -135,11 +147,11 @@
 }
 
 .serene-chatbot-title {
-  font-size: 15px;
+  font-size: 14.5px;
   font-weight: 700;
   color: #ffffff;
   letter-spacing: -0.2px;
-  line-height: 1.2;
+  line-height: 1.25;
 }
 
 .serene-chatbot-status {
@@ -148,7 +160,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 .serene-chatbot-status-dot {
@@ -161,7 +173,7 @@
 .serene-chatbot-header-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 4px;
 }
 
 .serene-chatbot-btn-icon {
@@ -179,10 +191,12 @@
 
 .serene-chatbot-btn-icon:hover {
   color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.12);
+  background-color: rgba(255, 255, 255, 0.15);
 }
 
-/* Quick Prompts Bar */
+/* ========================================================
+   4. QUICK PROMPTS (Gợi ý câu hỏi nhanh)
+   ======================================================== */
 .serene-chatbot-quick-prompts {
   background-color: #f8fafc;
   border-bottom: 1px solid #e2e8f0;
@@ -191,54 +205,73 @@
   gap: 6px;
   overflow-x: auto;
   white-space: nowrap;
-  scrollbar-width: thin;
+  scrollbar-width: none; /* Ẩn scrollbar thô */
 }
 
 .serene-chatbot-quick-prompts::-webkit-scrollbar {
-  height: 4px;
-}
-
-.serene-chatbot-quick-prompts::-webkit-scrollbar-thumb {
-  background: #cbd5e1;
-  border-radius: 4px;
+  display: none;
 }
 
 .serene-chatbot-chip {
   background: #ffffff;
   border: 1px solid #cbd5e1;
-  border-radius: 14px;
-  padding: 4px 10px;
+  border-radius: 16px;
+  padding: 5px 11px;
   font-size: 11.5px;
-  color: #334155;
+  color: #1e293b;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   gap: 4px;
+  font-weight: 500;
 }
 
 .serene-chatbot-chip:hover {
-  background: #0e3d36;
+  background: #075b49;
   color: #ffffff;
-  border-color: #0e3d36;
+  border-color: #075b49;
+  transform: translateY(-1px);
 }
 
-/* Messages List */
+/* ========================================================
+   5. MESSAGES FEED & CUSTOM SLIM SCROLLBAR
+   ======================================================== */
 .serene-chatbot-messages {
   flex: 1;
   overflow-y: auto;
-  padding: 16px 14px;
+  padding: 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  background-color: #fdfdfd;
+  gap: 12px;
+  background-color: #f8fafc;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(7, 91, 73, 0.2) transparent;
+}
+
+/* Slim scrollbar mỏng tinh tế thay cho scrollbar mặc định */
+.serene-chatbot-messages::-webkit-scrollbar {
+  width: 5px;
+}
+
+.serene-chatbot-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.serene-chatbot-messages::-webkit-scrollbar-thumb {
+  background: rgba(7, 91, 73, 0.2);
+  border-radius: 10px;
+}
+
+.serene-chatbot-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(7, 91, 73, 0.4);
 }
 
 .serene-chat-row {
   display: flex;
   flex-direction: column;
-  max-width: 86%;
+  max-width: 90%;
 }
 
 .serene-chat-row-user {
@@ -252,26 +285,48 @@
 }
 
 .serene-chat-bubble {
-  padding: 10px 14px;
+  padding: 11px 14px;
   border-radius: 14px;
   font-size: 13.5px;
-  line-height: 1.5;
+  line-height: 1.55;
   word-break: break-word;
 }
 
 .serene-chat-row-user .serene-chat-bubble {
-  background: #0e3d36;
+  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
   color: #ffffff;
   border-bottom-right-radius: 3px;
-  box-shadow: 0 2px 6px rgba(14, 61, 54, 0.2);
+  box-shadow: 0 2px 8px rgba(7, 91, 73, 0.25);
 }
 
 .serene-chat-row-bot .serene-chat-bubble {
   background: #ffffff;
   color: #1e293b;
-  border: 1px solid #e2e8f0;
+  border: 1px solid rgba(226, 232, 240, 0.9);
   border-bottom-left-radius: 3px;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+/* Định dạng Markdown sạch đẹp, in đậm nổi bật */
+.serene-chat-bubble strong {
+  font-weight: 700;
+  color: #075b49;
+}
+
+.serene-chat-row-user .serene-chat-bubble strong {
+  color: #f5c76b;
+}
+
+.serene-chat-text-line {
+  margin-bottom: 3px;
+}
+
+.serene-chat-bullet-line {
+  margin-left: 4px;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
 }
 
 .serene-chat-time {
@@ -281,30 +336,31 @@
   padding: 0 4px;
 }
 
-/* Citations Box */
+/* Citations Card */
 .serene-chat-citations {
-  margin-top: 8px;
-  padding: 8px 10px;
+  margin-top: 9px;
+  padding: 9px 11px;
   background-color: #f1f5f9;
   border-left: 3px solid #f59e0b;
-  border-radius: 4px;
+  border-radius: 6px;
   font-size: 11.5px;
-  color: #475569;
+  color: #334155;
   width: 100%;
 }
 
 .serene-chat-citation-title {
-  font-weight: 600;
-  color: #0e3d36;
+  font-weight: 700;
+  color: #075b49;
   display: flex;
   align-items: center;
-  gap: 4px;
-  margin-bottom: 2px;
+  gap: 5px;
+  margin-bottom: 3px;
 }
 
 .serene-chat-citation-item {
-  color: #64748b;
+  color: #475569;
   font-size: 11px;
+  margin-top: 2px;
 }
 
 /* Typing Indicator */
@@ -312,7 +368,7 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 8px 12px;
+  padding: 9px 13px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -323,9 +379,9 @@
 .serene-typing-dot {
   width: 6px;
   height: 6px;
-  background-color: #0e3d36;
+  background-color: #075b49;
   border-radius: 50%;
-  opacity: 0.6;
+  opacity: 0.5;
   animation: sereneDotPulse 1.4s infinite ease-in-out;
 }
 
@@ -343,13 +399,15 @@
     opacity: 0.4;
   }
   40% {
-    transform: scale(1.1);
+    transform: scale(1.15);
     opacity: 1;
     background-color: #f59e0b;
   }
 }
 
-/* Footer & Input */
+/* ========================================================
+   6. FOOTER & INPUT FIELD (Đồng bộ Design System)
+   ======================================================== */
 .serene-chatbot-footer {
   padding: 10px 12px;
   background-color: #ffffff;
@@ -363,60 +421,69 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  position: relative;
 }
 
 .serene-chatbot-input {
   flex: 1;
-  border: 1px solid #cbd5e1;
-  border-radius: 20px;
-  padding: 9px 14px;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 22px;
+  padding: 9px 15px;
   font-size: 13px;
-  color: #1e293b;
+  color: #0f172a;
   outline: none;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
   background: #f8fafc;
 }
 
 .serene-chatbot-input:focus {
-  border-color: #0e3d36;
+  border-color: #075b49;
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(14, 61, 54, 0.12);
+  box-shadow: 0 0 0 3px rgba(7, 91, 73, 0.12);
 }
 
 .serene-chatbot-send-btn {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
-  background: #f59e0b;
-  border: none;
-  color: #ffffff;
+  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #f5c76b;
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(7, 91, 73, 0.2);
 }
 
 .serene-chatbot-send-btn:hover:not(:disabled) {
-  background: #d97706;
+  background: #075b49;
+  color: #ffffff;
+  border-color: #f59e0b;
   transform: scale(1.05);
 }
 
 .serene-chatbot-send-btn:disabled {
-  background: #cbd5e1;
+  background: #e2e8f0;
+  border-color: transparent;
+  color: #94a3b8;
   cursor: not-allowed;
   opacity: 0.6;
+  box-shadow: none;
 }
 
 .serene-chatbot-footer-caption {
   font-size: 10px;
   color: #94a3b8;
   text-align: center;
-  letter-spacing: 0.2px;
+  letter-spacing: 0.15px;
 }
 
-/* Mobile responsiveness */
+/* ========================================================
+   7. RESPONSIVE
+   ======================================================== */
 @media (max-width: 480px) {
   .serene-chatbot-container {
     bottom: 16px;
@@ -425,7 +492,6 @@
 
   .serene-chatbot-dialog {
     width: calc(100vw - 32px);
-    height: calc(100vh - 120px);
-    bottom: 76px;
+    height: calc(100vh - 100px);
   }
 }

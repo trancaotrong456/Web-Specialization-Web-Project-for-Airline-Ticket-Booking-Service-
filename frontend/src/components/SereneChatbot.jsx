@@ -4,7 +4,8 @@ import './sereneChatbot.css';
 const INITIAL_GREETING = {
   id: 'msg-welcome',
   sender: 'bot',
-  text: `Xin chào Quý khách! Em là **Trợ lý AI của Serene Flightways** ✈️.\n
+  text: `Xin chào Quý khách! Em là **Trợ lý AI của Serene Flightways** ✈️.
+
 Em được huấn luyện trực tiếp từ **Sổ tay Quy chế & Chính sách Hành khách 2026**. Quý khách có thể hỏi em về:
 • 🧳 **Hành lý:** Xách tay 7kg, ký gửi, chất lỏng, pin sạc
 • ⏱️ **Giữ chỗ 15 phút:** Cơ chế khóa giá & thanh toán VNPay / payOS
@@ -24,6 +25,65 @@ const DEFAULT_SUGGESTIONS = [
   'Thời gian check-in online và tại sân bay?',
   'Làm sao để tra cứu vé bằng mã PNR?'
 ];
+
+/**
+ * Phân tích và định dạng nội dung Markdown (Bold, Italic, Bullets)
+ */
+function renderMessageContent(rawText) {
+  if (!rawText) return null;
+  const lines = rawText.split('\n');
+
+  return lines.map((line, lineIndex) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return <div key={lineIndex} style={{ height: '0.45rem' }} />;
+    }
+
+    const isBullet = trimmed.startsWith('•') || trimmed.startsWith('-');
+    const lineContent = isBullet ? trimmed.replace(/^[•\-]\s*/, '') : line;
+
+    // Phân tích **in đậm** và *in nghiêng*
+    const segments = [];
+    const regex = /(\*\*.*?\*\*|\*.*?\*)/g;
+    let lastIndex = 0;
+    let match;
+
+    while ((match = regex.exec(lineContent)) !== null) {
+      if (match.index > lastIndex) {
+        segments.push(lineContent.substring(lastIndex, match.index));
+      }
+      const token = match[0];
+      if (token.startsWith('**') && token.endsWith('**')) {
+        segments.push(
+          <strong key={`${lineIndex}-${match.index}`}>{token.slice(2, -2)}</strong>
+        );
+      } else if (token.startsWith('*') && token.endsWith('*')) {
+        segments.push(
+          <em key={`${lineIndex}-${match.index}`}>{token.slice(1, -1)}</em>
+        );
+      }
+      lastIndex = regex.lastIndex;
+    }
+    if (lastIndex < lineContent.length) {
+      segments.push(lineContent.substring(lastIndex));
+    }
+
+    if (isBullet) {
+      return (
+        <div key={lineIndex} className="serene-chat-bullet-line">
+          <span style={{ color: '#075b49', fontWeight: 'bold' }}>•</span>
+          <span>{segments}</span>
+        </div>
+      );
+    }
+
+    return (
+      <div key={lineIndex} className="serene-chat-text-line">
+        {segments}
+      </div>
+    );
+  });
+}
 
 export function SereneChatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -147,10 +207,10 @@ export function SereneChatbot() {
     <div className="serene-chatbot-container" aria-label="Khung hỗ trợ trợ lý AI">
       {isOpen ? (
         <section className="serene-chatbot-dialog" role="dialog" aria-modal="true" aria-labelledby="chatbot-heading">
-          {/* Header */}
+          {/* Header với Brand Mark Logo Serene Flightways */}
           <header className="serene-chatbot-header">
             <div className="serene-chatbot-header-info">
-              <div className="serene-chatbot-avatar">✈️</div>
+              <span className="serene-chatbot-avatar-mark" aria-hidden="true">✈</span>
               <div className="serene-chatbot-title-box">
                 <span id="chatbot-heading" className="serene-chatbot-title">Serene AI Assistant</span>
                 <span className="serene-chatbot-status">
@@ -202,7 +262,7 @@ export function SereneChatbot() {
             ))}
           </nav>
 
-          {/* Messages list */}
+          {/* Messages list with formatted Markdown & Slim Scrollbar */}
           <div className="serene-chatbot-messages" role="log" aria-live="polite">
             {messages.map((msg) => (
               <div
@@ -210,7 +270,7 @@ export function SereneChatbot() {
                 className={`serene-chat-row ${msg.sender === 'user' ? 'serene-chat-row-user' : 'serene-chat-row-bot'}`}
               >
                 <div className="serene-chat-bubble">
-                  <div style={{ whiteSpace: 'pre-wrap' }}>{msg.text}</div>
+                  {renderMessageContent(msg.text)}
 
                   {/* Document Citations */}
                   {msg.citations && msg.citations.length > 0 && (
@@ -276,6 +336,7 @@ export function SereneChatbot() {
           </footer>
         </section>
       ) : (
+        /* Nút Floating Launcher - Dùng logo Brand Mark ✈ chuẩn trang chủ */
         <button
           type="button"
           className="serene-chatbot-launcher"
@@ -284,9 +345,7 @@ export function SereneChatbot() {
           title="Trợ lý Hàng không AI - Hỗ trợ 24/7"
         >
           <span className="serene-chatbot-online-pulse" />
-          <svg className="serene-chatbot-launcher-icon" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M21 16v-2l-8-5V3.5c0-.83-.67-1.5-1.5-1.5S10 2.67 10 3.5V9l-8 5v2l8-2.5V19l-2 1.5V22l3.5-1 3.5 1v-1.5L13 19v-5.5l8 2.5z" />
-          </svg>
+          <span className="serene-chatbot-launcher-mark" aria-hidden="true">✈</span>
         </button>
       )}
     </div>
