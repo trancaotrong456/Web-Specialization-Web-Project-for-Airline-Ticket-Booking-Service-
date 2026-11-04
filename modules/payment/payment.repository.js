@@ -6,11 +6,11 @@ function sanitizeGatewayError(error) {
 }
 
 class SequelizePaymentRepository {
-  constructor({ Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, ReconciliationReviewAction, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
+  constructor({ Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, ReconciliationReviewAction, ManualPaymentRefundRequest, ManualPaymentRefundAuditLog, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User } = {}) {
     if (![Payment, Booking, Flight, BookingPassenger, Promotion, User].every(Boolean)) {
       throw new TypeError('Payment repository requires Payment, Booking, Flight, BookingPassenger, Promotion and User');
     }
-    Object.assign(this, { Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, ReconciliationReviewAction, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
+    Object.assign(this, { Payment, PaymentGatewayOperation, PaymentReconciliationCase, ReconciliationWorkerLease, ReconciliationReviewAction, ManualPaymentRefundRequest, ManualPaymentRefundAuditLog, Booking, BookingSegment, Flight, BookingPassenger, Promotion, User });
   }
 
   _assertWorkerLeaseModel() {
@@ -395,6 +395,13 @@ class SequelizePaymentRepository {
     }
     return this.ReconciliationReviewAction.create({ case_id: caseId, operator_user_id: operatorUserId, action, reason: String(reason).slice(0, 500), outcome_reference: outcomeReference ? String(outcomeReference).slice(0, 191) : null }, { transaction });
   }
+  async findLockedManualRefundRequest(id, transaction) { return this.ManualPaymentRefundRequest.findOne({ where: { id }, lock: transaction.LOCK.UPDATE, transaction }); }
+  async findManualRefundRequestByPayment(paymentId, transaction) { return this.ManualPaymentRefundRequest.findOne({ where: { payment_id: paymentId }, lock: transaction?.LOCK?.UPDATE, transaction }); }
+  async createManualRefundRequest(values, { transaction } = {}) { return this.ManualPaymentRefundRequest.create(values, { transaction }); }
+  async saveManualRefundRequest(row, { transaction } = {}) { return row.save({ transaction }); }
+  async createManualRefundAuditLog(values, { transaction } = {}) { return this.ManualPaymentRefundAuditLog.create(values, { transaction }); }
+  listManualRefundRequests({ where = {}, limit, offset, order = [['created_at', 'DESC']] } = {}) { return this.ManualPaymentRefundRequest.findAndCountAll({ where, limit, offset, order, include: [{ model: this.Payment, as: 'payment', attributes: ['id', 'amount', 'payment_method', 'status', 'transaction_ref', 'paid_at'], required: true }, { model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status'], required: true }] }); }
+  findManualRefundDetail(id) { return this.ManualPaymentRefundRequest.findByPk(id, { include: [{ model: this.Payment, as: 'payment', attributes: ['id', 'amount', 'payment_method', 'status', 'transaction_ref', 'paid_at'], required: true }, { model: this.Booking, as: 'booking', attributes: ['id', 'booking_code', 'status'], required: true }, { model: this.ManualPaymentRefundAuditLog, as: 'auditLogs', attributes: ['id', 'admin_user_id', 'action', 'evidence_reference', 'settlement_reference', 'reason', 'metadata', 'created_at'] }] }); }
   async getReconciliationMetrics({ pendingSince } = {}) {
     const unresolvedWhere = { state: { [Op.in]: ['active', 'manual_review'] } };
     const [activeCases, manualReviewCases, oldest, pendingPaymentsBeyondSla, retryExhaustionCases, latePaidCases, gatewayTimeoutCases] = await Promise.all([

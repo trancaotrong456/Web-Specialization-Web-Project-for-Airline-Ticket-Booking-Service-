@@ -150,6 +150,15 @@ async function cleanupTrackedFixtures() {
         }
       }
     }
+    if (models.ManualPaymentRefundRequest) {
+      const paymentIds = await models.Payment.findAll({ where: { booking_id: bookingIds }, attributes: ['id'], raw: true });
+      const ids = paymentIds.map(({ id }) => id);
+      if (ids.length > 0 && models.ManualPaymentRefundAuditLog) {
+        const requests = await models.ManualPaymentRefundRequest.findAll({ where: { payment_id: ids }, attributes: ['id'], raw: true });
+        if (requests.length > 0) await models.ManualPaymentRefundAuditLog.destroy({ where: { refund_request_id: requests.map(({ id }) => id) }, force: true });
+      }
+      if (ids.length > 0) await models.ManualPaymentRefundRequest.destroy({ where: { payment_id: ids }, force: true });
+    }
     await models.Payment.destroy({ where: { booking_id: bookingIds }, force: true });
     await models.BookingPassenger.destroy({ where: { booking_id: bookingIds }, force: true });
     if (models.BookingSegment) {

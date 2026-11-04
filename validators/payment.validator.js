@@ -123,6 +123,10 @@ const reconciliationReviewActionValidator = [
   body('reason').isString().trim().isLength({ min: 3, max: 500 }).withMessage('A manual-review reason between 3 and 500 characters is required'),
   body('outcome_reference').optional({ nullable: true }).isString().trim().isLength({ max: 191 }).withMessage('outcome_reference is invalid'),
 ];
+const manualRefundCreateValidator = [param('paymentId').isInt({ min: 1 }).withMessage('Payment ID must be a positive integer'), body('reason').isString().trim().isLength({ min: 3, max: 500 }).withMessage('A refund reason between 3 and 500 characters is required'), body('evidence_reference').optional({ nullable: true }).isString().trim().isLength({ max: 500 }).withMessage('evidence_reference is invalid')];
+const manualRefundIdValidator = [param('id').isInt({ min: 1 }).withMessage('Refund request ID must be a positive integer')];
+const manualRefundSettleValidator = [...manualRefundIdValidator, body('evidence_reference').isString().trim().isLength({ min: 3, max: 500 }).withMessage('Verified evidence_reference is required'), body('settlement_reference').isString().trim().isLength({ min: 3, max: 150 }).withMessage('settlement_reference is required')];
+const manualRefundRejectValidator = [...manualRefundIdValidator, body('reason').isString().trim().isLength({ min: 3, max: 500 }).withMessage('A rejection reason is required')];
 
 const revenueValidator = [
   query('from_date')
@@ -166,4 +170,8 @@ module.exports = {
   reconciliationCaseListValidator,
   reconciliationCaseIdValidator,
   reconciliationReviewActionValidator,
+  manualRefundCreateValidator,
+  manualRefundIdValidator,
+  manualRefundSettleValidator,
+  manualRefundRejectValidator,
 };
