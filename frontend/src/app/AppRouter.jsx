@@ -45,6 +45,7 @@ import { NotificationsPage } from '../features/notifications/NotificationsPage';
 import { NotFoundPage } from '../components/NotFoundPage';
 import { ForbiddenPage } from '../components/ForbiddenPage';
 import { ScrollToTop } from '../components/ScrollToTop';
+import { SereneChatbot } from '../components/SereneChatbot';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -150,6 +151,7 @@ export function AppRouter() {
     <BrowserRouter>
       <ScrollToTop />
       <AppRoutes />
+      <SereneChatbot />
     </BrowserRouter>
   );
 }
