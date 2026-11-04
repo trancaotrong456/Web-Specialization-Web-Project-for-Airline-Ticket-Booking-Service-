@@ -42,3 +42,24 @@ test('IT-51 email adapter failure is isolated from the caller after commit', asy
     emailService.resetAdapter();
   }
 });
+
+test('IT-52 provider timeout is treated as an ambiguous delivery result, not success', async () => {
+  const originalSend = emailService.sendBookingConfirmation;
+  let attempts = 0;
+  emailService.sendBookingConfirmation = async () => {
+    attempts += 1;
+    const error = new Error('provider timeout after request acceptance');
+    error.code = 'ETIMEDOUT';
+    throw error;
+  };
+  const oldError = console.error;
+  console.error = () => {};
+  try {
+    await paymentService._triggerBookingConfirmationEmail(988);
+    assert.equal(attempts, 1);
+  } finally {
+    emailService.sendBookingConfirmation = originalSend;
+    console.error = oldError;
+    emailService.resetAdapter();
+  }
+});

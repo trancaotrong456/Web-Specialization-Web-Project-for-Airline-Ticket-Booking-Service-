@@ -646,11 +646,11 @@ class PaymentService {
   /**
    * Helper to send booking confirmed email in background
    */
-  async _triggerBookingConfirmationEmail(bookingId) {
+  async _triggerBookingConfirmationEmail(bookingId, logicalEventKey = null) {
     try {
       // Lazy load to avoid circular dependency
       const emailService = this.emailProvider || require('../../services/email.service');
-      await emailService.sendBookingConfirmation(bookingId);
+      await emailService.sendBookingConfirmation(bookingId, null, { logicalEventKey });
     } catch (error) {
       console.error(`[Email] Failed to send ticket confirmation email for booking #${bookingId}:`, redactString(error.message));
     }
@@ -1115,6 +1115,7 @@ class PaymentService {
     }
 
     let bookingIdToEmail = null;
+    let emailLogicalEventKey = null;
     let seatUpdates = [];
     let transactionOutcome = 'processed';
 
@@ -1217,6 +1218,7 @@ class PaymentService {
         await this.repository.save(lockedBooking, { transaction: t });
 
         bookingIdToEmail = lockedBooking.id;
+        emailLogicalEventKey = `payment:${lockedPayment.id}:succeeded`;
       } else {
         // Báo cáo Chương 2.3 (Ngoại lệ, Chức năng 2):
         // Khách hủy giữa chừng hoặc thanh toán thất bại tại cổng:
@@ -1268,7 +1270,7 @@ class PaymentService {
     await this._emitSeatUpdates(seatUpdates);
 
     if (bookingIdToEmail) {
-      this._triggerBookingConfirmationEmail(bookingIdToEmail);
+      this._triggerBookingConfirmationEmail(bookingIdToEmail, emailLogicalEventKey);
     }
 
     return { RspCode: '00', Message: 'Confirm Success' };
@@ -1365,6 +1367,7 @@ class PaymentService {
     }
 
     let bookingIdToEmail = null;
+    let emailLogicalEventKey = null;
     let seatUpdates = [];
     let requiresManualReview = false;
 
@@ -1444,6 +1447,7 @@ class PaymentService {
         await this.repository.save(lockedBooking, { transaction: t });
 
         bookingIdToEmail = lockedBooking.id;
+        emailLogicalEventKey = `payment:${lockedPayment.id}:succeeded`;
       } else {
         // payOS reports a non-success payment or cancellation.
         lockedPayment.status = 'failed';
@@ -1466,7 +1470,7 @@ class PaymentService {
     await this._emitSeatUpdates(seatUpdates);
 
     if (bookingIdToEmail) {
-      this._triggerBookingConfirmationEmail(bookingIdToEmail);
+      this._triggerBookingConfirmationEmail(bookingIdToEmail, emailLogicalEventKey);
     }
 
     return {
@@ -1546,6 +1550,7 @@ class PaymentService {
 
   async _applyVnpayQueryResult(paymentId, result, { reconciliationCaseId = null } = {}) {
     let bookingIdToEmail = null;
+    let emailLogicalEventKey = null;
     let seatUpdates = [];
     await this.transactionManager.transaction(async (transaction) => {
       const payment = await this.repository.findLockedPaymentById(paymentId, transaction);
@@ -1574,6 +1579,7 @@ class PaymentService {
           booking.status = 'confirmed';
           await this.repository.save(booking, { transaction });
           bookingIdToEmail = booking.id;
+          emailLogicalEventKey = `payment:${payment.id}:succeeded`;
         } else {
           const exception = await this._recordFinancialException(payment, booking, transaction, {
             status: 'PAID', reason: itineraryError || 'Late PAID payment requires financial reconciliation',
@@ -1600,7 +1606,7 @@ class PaymentService {
       }
     });
     await this._emitSeatUpdates(seatUpdates);
-    if (bookingIdToEmail) this._triggerBookingConfirmationEmail(bookingIdToEmail);
+    if (bookingIdToEmail) this._triggerBookingConfirmationEmail(bookingIdToEmail, emailLogicalEventKey);
     return { bookingIdToEmail, seatUpdates };
   }
 

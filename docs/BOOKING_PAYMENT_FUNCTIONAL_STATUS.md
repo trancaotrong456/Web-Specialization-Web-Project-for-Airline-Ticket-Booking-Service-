@@ -148,6 +148,96 @@ Interpretation:
 
 ## Priority acceptance follow-up (2026-11-02)
 
+## STT 36 — Booking confirmation email audit (2026-11-04)
+
+### Architecture and lifecycle
+
+- Provider: Resend adapter in `services/email.service.js:10-28`; tests force a noop adapter at `:38-45` when `NODE_ENV=test`. Live mode requires `RESEND_API_KEY` and uses `EMAIL_FROM` (`config/runtimeValidation.js`).
+- Confirmation email: `PaymentService._triggerBookingConfirmationEmail()` at `modules/payment/payment.service.js:649-657`. VNPay and payOS invoke it only after the payment/booking transaction has completed successfully (`:1259-1274`, `:1464-1475`); failures are logged and do not roll back the committed payment.
+- The EJS template is rendered with escaped `<%= ... %>` fields and includes booking, itinerary, passenger, ancillary and payment totals. The canonical confirmation flow attaches a generated ticket PDF.
+- Notification outbox uses leased claims, `FOR UPDATE SKIP LOCKED`, bounded retries (five attempts, exponential backoff capped at 15 minutes) and conditional lease-token updates. The worker deliberately skips email for `BOOKING_CONFIRMED` and `PAYMENT_SUCCEEDED` (`modules/notification/notificationDeliveryWorker.js:64-79`) because the Payment flow is the canonical PDF sender; this prevents duplicate confirmation emails. Realtime delivery remains outbox-driven.
+
+### Safe tests executed
+
+`node --test tests/emailConfirmation.test.js tests/emailIsolation.test.js tests/notificationOutboxRepository.test.js tests/notificationDeliveryWorker.test.js` → **4/4 test files PASS, 0 FAIL, 0 SKIP**. No Resend request or real email was sent.
+
+The broader callback safety file is not a valid email gate in the current environment: `node tests/paymentCallbackSafety.test.js` produced **30 PASS / 21 FAIL**. The failures are test-environment/configuration failures (VNPay disabled and missing checksum key), not evidence of an email regression; no source or database was changed.
+
+### Findings
+
+| Classification | Finding | Evidence / impact |
+|---|---|---|
+| CONFIRMED DEFECT | Template fallback interpolates `recipientName` and `booking.booking_code` without HTML escaping. | `services/email.service.js:118-127`; normally reached only if EJS rendering fails, but user-controlled content can enter the fallback HTML. Fix by escaping fallback values before interpolation. |
+| MISSING TEST | No DB-backed assertion that Booking/Payment commit precedes the provider invocation and that a provider failure leaves the committed success intact. | Existing lifecycle tests mock the provider; add an isolated integration test, without sending email. |
+| MISSING TEST | No provider-level acceptance proving duplicate VNPay/payOS callbacks result in exactly one delivered confirmation email. | `paymentModule` covers callback idempotency with mocks, while outbox tests cover leasing; combine these guarantees in one focused test. |
+| EXTERNAL ACCEPTANCE PENDING | Resend live delivery, verified sender/domain, provider timeout/ambiguous response and operational monitoring are not verified. | Correctly outside this read-only/no-real-email audit. |
+
+### Recommendation
+
+STT 36 remains **PARTIAL**. The confirmation trigger, commit-before-send ordering, failure isolation, template coverage, outbox leasing and bounded retry behavior are implemented and mock-tested. It must not be marked COMPLETE until the fallback escaping issue is fixed and the two focused integration/contract tests plus controlled staging Resend verification are complete. No credentials, `.env` files, production data, gateway calls or emails were touched in this audit.
+
+## STT 36 — Fix and integration verification (2026-11-04)
+
+- Fixed the confirmed fallback HTML injection in `services/email.service.js` by escaping `&`, `<`, `>`, `"` and `'` before interpolating recipient name and booking code.
+- Added a regression test in `tests/emailConfirmation.test.js` covering malicious recipient/booking-code content and normal escaped output.
+- Added `IT-52` to `tests/integration/emailIsolation.mysql.test.js`. It uses only the guarded isolated database, commits a confirmed Booking, successful Payment and `PAYMENT_SUCCEEDED` outbox event, forces the email notifier to fail once, then retries successfully. Payment and Booking remain unchanged and exactly one logical outbox event remains.
+- MySQL identity guard passed for `airline_booking_integration_test` on `127.0.0.1:3309`; `PAYOS_MODE=demo` was supplied as a process override. No `.env` file was changed and no external provider was contacted.
+
+### Results
+
+| Suite | Result |
+|---|---:|
+| Email/template, isolation, outbox repository and delivery worker unit files | 4/4 files PASS, 0 FAIL, 0 SKIP |
+| `tests/integration/emailIsolation.mysql.test.js` | 3/3 PASS, twice consecutively |
+| `tests/integration/bookingPaymentConcurrency.mysql.test.js` (duplicate callback/concurrency regression) | 9/9 PASS |
+| Syntax and `git diff --check` | PASS |
+
+The concurrency suite confirms duplicate VNPay callbacks remain idempotent and the payment/booking state is consistent. This proves one logical event and one concurrent worker claim, not exactly-once external email delivery: a provider timeout after accepting a request can still be ambiguous unless a provider-supported idempotency key is used. Controlled Resend sender/domain and live delivery verification remain external prerequisites.
+
+STT 36 remains **PARTIAL** pending controlled staging Resend acceptance and explicit provider-timeout/idempotency verification; the confirmed local HTML injection defect is resolved.
+
+## STT 36 — Idempotency and timeout acceptance (2026-11-04)
+
+### Idempotency evidence
+
+- VNPay and payOS callbacks re-check Payment and Booking under row locks before confirming; only the transaction that changes the pending Payment to `success` sets `bookingIdToEmail` (`modules/payment/payment.service.js:1117-1272` and `:1367-1469`).
+- The logical notification identity is `event_key = payment:<paymentId>:succeeded`; `NotificationOutbox.event_key` is database-unique (`models/notification_outbox.js`) and `NotificationEventPublisher.publish()` replays the same event instead of inserting a second record (`modules/notification/notificationEventPublisher.js:27-63`).
+- Notification delivery claims use `FOR UPDATE SKIP LOCKED`, a lease token and a conditional `id + status + lease_token` update (`modules/notification/notificationOutbox.repository.js:30-67`). A stale worker therefore cannot overwrite a newer claim.
+- The installed Resend SDK supports an `idempotencyKey` request option, but `services/email.service.js` does not currently generate or pass one. Exactly-once external delivery is therefore not claimed.
+
+### Acceptance results
+
+| Check | Result |
+|---|---:|
+| Email/unit, outbox and timeout mock suites | PASS (5/5 files) |
+| Isolated MySQL email isolation + committed success/outbox/retry | 3/3 PASS, twice |
+| VNPay/payOS callback and concurrency regression | 9/9 PASS |
+| Syntax and diff check | PASS |
+
+The callback concurrency suite verifies duplicate VNPay callbacks, payment/booking consistency and one confirmation trigger invocation. Existing payOS duplicate/concurrency cases pass through the same locked callback path. The database tests verify one logical outbox event and isolated worker claims; they do not prove exactly-once provider delivery.
+
+### Timeout limitation
+
+The timeout mock is treated as an error by the post-commit notifier, so Payment and Booking are not falsely changed to a delivery-success state. However, if Resend accepted the request before timing out, the outcome is ambiguous. Since the current adapter does not pass a stable Resend idempotency key across retries, duplicate external delivery remains possible and requires a follow-up adapter change plus controlled staging verification.
+
+STT 36 remains **PARTIAL**: internal idempotency and timeout behavior are covered, while provider-level exactly-once semantics and live Resend acceptance remain pending.
+
+## STT 36 — Stable Resend idempotency key (2026-11-04)
+
+- `payment:<paymentId>:succeeded` is now propagated from the locked VNPay/payOS confirmation path to `sendBookingConfirmation()` (`modules/payment/payment.service.js:649-657`, `:1270-1272`, `:1468-1470`, `:1600-1604`).
+- `services/email.service.js` derives `booking-email-<SHA-256(logicalEventKey)>` and passes it as Resend's `idempotencyKey` request option. The key contains no booking code, email, customer data or secret and is stable across retries of the same logical event.
+- The installed Resend SDK declares `emails.send(payload, options)` and sets the `Idempotency-Key` header from `options.idempotencyKey`; no undocumented SDK behavior was assumed. Provider retention duration was not documented in the installed package, so key reuse is only guaranteed within the provider's documented retention window once confirmed during staging.
+
+### Verification
+
+- Email/template/outbox unit suites: **4/4 files PASS**.
+- Stable-key tests: same event produces the same 64-hex digest; different events produce different keys; adapter receives the key while content/PDF behavior remains intact.
+- Isolated MySQL email isolation: **3/3 PASS**.
+- Isolated MySQL VNPay/payOS callback/concurrency regression: **9/9 PASS**.
+- Syntax checks and `git diff --check`: PASS.
+
+The implementation preserves outbox leases, retry/backoff, callback locking and PDF generation. It improves provider deduplication but does not claim unconditional exactly-once delivery: provider retention/timeout acceptance and live Resend behavior still require controlled staging verification.
+
 Existing-test review found no dedicated MySQL-backed HTTP acceptance suite for Booking list/detail/create/cancel or revenue endpoints. The available coverage is service/repository contract tests, frontend HTTP-client/page tests, route matrices, and the 86-test MySQL lifecycle/concurrency set.
 
 Executed without source changes:

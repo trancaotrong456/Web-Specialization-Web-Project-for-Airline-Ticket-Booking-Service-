@@ -1,5 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const ejs = require('ejs');
 
 process.env.RESEND_API_KEY = 're_test_key';
 process.env.EMAIL_FROM = 'Airline Booking <onboarding@resend.dev>';
@@ -14,7 +15,8 @@ test('confirmation email generates and sends the e-ticket PDF attachment', async
   const originalFetch = global.fetch;
   const pdfBuffer = Buffer.from('%PDF-test-ticket');
   let requestBody;
-  emailService.setAdapter({ send: async (message) => { requestBody = message; return { id: 'email-test-id' }; } });
+  let requestOptions;
+  emailService.setAdapter({ send: async (message, options) => { requestBody = message; requestOptions = options; return { id: 'email-test-id' }; } });
 
   models.Booking.findByPk = async () => ({
     id: 321,
@@ -50,17 +52,28 @@ test('confirmation email generates and sends the e-ticket PDF attachment', async
   };
 
   try {
-    await emailService.sendBookingConfirmation(321);
+    await emailService.sendBookingConfirmation(321, null, { logicalEventKey: 'payment:321:succeeded' });
     assert.equal(requestBody.to, 'guest@example.com');
     assert.equal(requestBody.attachments.length, 1);
     assert.equal(requestBody.attachments[0].filename, 'ticket-EMAIL-PDF-321.pdf');
     assert.equal(requestBody.attachments[0].content, pdfBuffer.toString('base64'));
+    assert.match(requestOptions.idempotencyKey, /^booking-email-[a-f0-9]{64}$/);
+    assert.ok(!requestOptions.idempotencyKey.includes('guest@example.com'));
   } finally {
     models.Booking.findByPk = originalFindByPk;
     ticketService.generateTicketPDF = originalGenerateTicket;
     global.fetch = originalFetch;
     emailService.resetAdapter();
   }
+});
+
+test('same logical email event derives the same provider key and different events do not', () => {
+  const { deriveEmailIdempotencyKey } = emailService;
+  const first = deriveEmailIdempotencyKey('payment:321:succeeded');
+  assert.equal(first, deriveEmailIdempotencyKey('payment:321:succeeded'));
+  assert.notEqual(first, deriveEmailIdempotencyKey('payment:322:succeeded'));
+  assert.match(first, /^booking-email-[a-f0-9]{64}$/);
+  assert.ok(!first.includes('321'));
 });
 
 test('multi-leg confirmation email lists ordered flights, fares, passengers and total', async () => {
@@ -103,6 +116,41 @@ test('multi-leg confirmation email lists ordered flights, fares, passengers and 
     models.Booking.findByPk = originalFindByPk;
     ticketService.generateTicketPDF = originalGenerateTicket;
     global.fetch = originalFetch;
+    emailService.resetAdapter();
+  }
+});
+
+test('fallback confirmation HTML escapes recipient and booking code', async () => {
+  const originalFindByPk = models.Booking.findByPk;
+  const originalGenerateTicket = ticketService.generateTicketPDF;
+  const originalRenderFile = ejs.renderFile;
+  let sent;
+  models.Booking.findByPk = async () => ({
+    id: 323,
+    booking_code: 'ABC"><img src=x onerror=alert(1)>',
+    user_id: null,
+    guest_email: 'guest@example.com',
+    guest_name: '<script>alert(1)</script>',
+    status: 'confirmed',
+    total_amount: 100000,
+    flight: null,
+    passengers: [],
+    payments: [],
+    user: { full_name: '<script>alert(1)</script>', email: 'guest@example.com' },
+  });
+  ticketService.generateTicketPDF = async () => Buffer.from('%PDF-fallback');
+  ejs.renderFile = async () => { throw new Error('template unavailable'); };
+  emailService.setAdapter({ send: async (message) => { sent = message; return { id: 'fallback-test' }; } });
+  try {
+    await emailService.sendBookingConfirmation(323);
+    assert.ok(sent.html.includes('ABC&quot;&gt;&lt;img src=x onerror=alert(1)&gt;'));
+    assert.ok(!sent.html.includes('<img src=x onerror=alert(1)>'));
+    assert.ok(!sent.html.includes('<script>alert(1)</script>'));
+    assert.ok(sent.html.includes('&lt;script&gt;alert(1)&lt;/script&gt;'));
+  } finally {
+    models.Booking.findByPk = originalFindByPk;
+    ticketService.generateTicketPDF = originalGenerateTicket;
+    ejs.renderFile = originalRenderFile;
     emailService.resetAdapter();
   }
 });
