@@ -115,7 +115,7 @@ describe('booking customer pages', () => {
     await user.click(screen.getByRole('button', { name: 'Tăng số lượng 20 kg cho hành khách 1, chặng 1' }));
     const nameInputs = screen.getAllByLabelText(/Họ tên/);
     await user.type(nameInputs[0], 'First Passenger'); await user.type(nameInputs[1], 'Second Passenger');
-    await user.click(screen.getByRole('button', { name: 'Tạo đặt chỗ và tiếp tục thanh toán' }));
+    await user.click(screen.getByRole('button', { name: /Đi tiếp|Tạo đặt chỗ/ }));
     await waitFor(() => {
       const createCall = mocks.request.mock.calls.find(([path]) => path === '/bookings');
       expect(createCall[1].body.ancillary_selections).toEqual([

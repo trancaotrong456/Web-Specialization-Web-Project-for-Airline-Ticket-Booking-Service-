@@ -25,6 +25,7 @@ import {
   FlightListPage,
 } from '../features/flights/FlightManagementPages';
 import { AdminBookingsPage, BookingCreatePage, BookingDetailPage, BookingLookupPage, MyBookingsPage } from '../features/bookings/BookingPages';
+import { BookingServicesPage } from '../features/bookings/BookingServicesPage';
 import { AdminPaymentDetailPage, AdminPaymentsPage, AdminRevenuePage, PaymentInitiatePage, PaymentResultPage } from '../features/bookings/PaymentPages';
 import {
   AirlineDetailPage,
@@ -43,6 +44,8 @@ import { DesignSystemShowcasePage } from '../features/showcase/DesignSystemShowc
 import { NotificationsPage } from '../features/notifications/NotificationsPage';
 import { NotFoundPage } from '../components/NotFoundPage';
 import { ForbiddenPage } from '../components/ForbiddenPage';
+import { ScrollToTop } from '../components/ScrollToTop';
+import { SereneChatbot } from '../components/SereneChatbot';
 
 const RoutePage = ({ title, description }) => (
   <main className="app-shell">
@@ -73,6 +76,7 @@ export function AppRoutes() {
       <Route path="/flights/search" element={<FlightResultsPage />} />
       <Route path="/bookings/new" element={<BookingCreatePage />} />
       <Route path="/bookings/lookup" element={<BookingLookupPage />} />
+      <Route path="/bookings/:id/services" element={<BookingServicesPage />} />
       <Route path="/bookings/:id/payment" element={<PaymentInitiatePage />} />
       <Route path="/bookings/:id" element={<BookingDetailPage />} />
       <Route path="/payments/result" element={<PaymentResultPage />} />
@@ -145,7 +149,9 @@ export function AppRoutes() {
 export function AppRouter() {
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <AppRoutes />
+      <SereneChatbot />
     </BrowserRouter>
   );
 }

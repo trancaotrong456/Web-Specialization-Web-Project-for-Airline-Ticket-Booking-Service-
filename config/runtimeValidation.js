@@ -32,6 +32,15 @@ const assertTrustedHost = (url, name, hosts) => {
   }
 };
 
+// Callback URLs are part of the public contract with the gateway. Validate
+// the parsed pathname, rather than the raw string, so query strings/fragments
+// cannot make an unrelated endpoint appear valid.
+const assertPathSuffix = (url, name, expectedSuffix) => {
+  if (!url.pathname.endsWith(expectedSuffix)) {
+    throw new Error(`${name} must end with ${expectedSuffix}.`);
+  }
+};
+
 const assertValidEmailFrom = (value) => {
   if (!value || /[\r\n]/.test(value)) throw new Error('EMAIL_FROM is required and must be a valid sender address.');
   const address = String(value).match(/<([^<>\s]+)>\s*$/)?.[1] || String(value).trim();
@@ -127,9 +136,14 @@ const validateRuntimeConfiguration = (env = process.env) => {
     if (isPrivateOrLocalHost(baseUrl.hostname)) throw new Error('PAYOS_BASE_URL must target a public HTTPS host.');
     const hosts = trustedHosts(env.PAYOS_TRUSTED_HOSTS);
     if (hosts.length === 0) throw new Error('PAYOS_TRUSTED_HOSTS is required when PAYOS_MODE=live.');
-    for (const [name, value] of [['PAYOS_RETURN_URL', env.PAYOS_RETURN_URL], ['PAYOS_CANCEL_URL', env.PAYOS_CANCEL_URL], ['PAYOS_WEBHOOK_URL', env.PAYOS_WEBHOOK_URL]]) {
+    for (const [name, value, expectedPath] of [
+      ['PAYOS_RETURN_URL', env.PAYOS_RETURN_URL, '/payments/result'],
+      ['PAYOS_CANCEL_URL', env.PAYOS_CANCEL_URL, '/payments/result'],
+      ['PAYOS_WEBHOOK_URL', env.PAYOS_WEBHOOK_URL, '/api/v1/payments/payos/webhook'],
+    ]) {
       const url = parseHttpsUrl(value, name);
       assertTrustedHost(url, name, hosts);
+      assertPathSuffix(url, name, expectedPath);
     }
   }
 

@@ -189,10 +189,15 @@ test('IT-04 successful webhook racing stale-payment reconciliation preserves the
   t.mock.method(emailService, 'sendBookingConfirmation', async () => ({ id: 'integration-email-disabled' }));
   const fixture = await createFlightFixture({ availableSeats: 1, totalSeats: 1 });
   const originalGrace = process.env.PAYMENT_PENDING_GRACE_MINUTES;
+  const originalFindStale = bookingService.repository.findStalePendingBookings;
   process.env.PAYMENT_PENDING_GRACE_MINUTES = '0';
   try {
     const booking = await createHoldingBooking(fixture, 'IT04');
     const { payment } = await initiateVnpay(booking);
+    // Scope this race test to its own fixture. The production reconciliation
+    // query must remain global; unrelated stale rows must not participate in
+    // this test's lock race or trigger gateway lookups.
+    bookingService.repository.findStalePendingBookings = async () => [booking];
     await models.Booking.update(
       { hold_expires_at: new Date(Date.now() - 60 * 1000) },
       { where: { id: booking.id } }
@@ -218,6 +223,7 @@ test('IT-04 successful webhook racing stale-payment reconciliation preserves the
       'seat release must match the final booking state exactly once'
     );
   } finally {
+    bookingService.repository.findStalePendingBookings = originalFindStale;
     if (originalGrace === undefined) delete process.env.PAYMENT_PENDING_GRACE_MINUTES;
     else process.env.PAYMENT_PENDING_GRACE_MINUTES = originalGrace;
     await cleanupTrackedFixtures();

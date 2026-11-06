@@ -22,6 +22,8 @@ import {
 } from '../../lib/dateUtils';
 import { isSafeCheckoutUrl } from './paymentQr';
 import { PaymentQr } from './PaymentQr.jsx';
+import { SearchSummaryBanner } from '../flights/FlightResultsPage';
+import './bookingServices.css';
 
 const time = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
 const rowsOf = (result) => Array.isArray(result) ? result : result?.data || [];
@@ -102,7 +104,11 @@ export function PaymentInitiatePage() {
   const startPayment = async (event) => {
     event.preventDefault();
     setState((current) => ({ ...current, submitting: true, error: '', result: null }));
-    const returnUrl = `${window.location.origin}/payments/result`;
+    // Keep the booking context in the browser return URL. payOS appends its
+    // own orderCode/status parameters, but a fresh tab may not retain
+    // sessionStorage from the checkout page. This is only a lookup hint; the
+    // backend still authorizes the status request and remains authoritative.
+    const returnUrl = `${window.location.origin}/payments/result?booking_id=${encodeURIComponent(id)}`;
     if (!idempotencyKey.current) idempotencyKey.current = window.crypto.randomUUID();
     try {
       const result = await api.initiatePayment({ booking_id: Number(id), payment_method: method, return_url: returnUrl, ...(!user ? { guest_email: guestEmail } : {}) }, idempotencyKey.current);
@@ -142,14 +148,163 @@ export function PaymentInitiatePage() {
   
   const isBookingExpired = expired || booking?.status === 'expired';
 
-  return <PaymentShell><Heading title="Thanh toán đặt chỗ" description="Chọn cổng thanh toán khả dụng cho đặt chỗ đang giữ." actions={<Link className="button button-outline" to={`/bookings/${id}`} state={{ guestEmail }}>Chi tiết đặt chỗ</Link>} />
-    <HoldCountdown expiresAt={booking?.hold_expires_at} onExpired={reloadBooking} />
-    {isBookingExpired ? <Notice type="warning">Đặt chỗ đã hết hạn giữ chỗ. Bạn vui lòng tìm chuyến bay mới để tiếp tục đặt vé. <Link className="button button-primary" style={{ display: 'inline-block', marginTop: '8px' }} to="/">Tìm chuyến bay khác</Link></Notice> : null}
-    {state.error ? <Notice type="error">{state.error}</Notice> : null}
-    <div className="payment-layout"><section className="surface-card booking-panel"><h2>Tóm tắt</h2><dl className="booking-facts"><div><dt>Mã đặt chỗ</dt><dd className="table-mono-cell">{booking?.booking_code || `#${id}`}</dd></div><div><dt>Chặng đầu</dt><dd className="table-mono-cell">{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div><div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div><div><dt>Số hành khách</dt><dd className="table-mono-cell">{booking?.passengers?.length || '—'}</dd></div><div><dt>Thành tiền</dt><dd><strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(booking?.total_amount)}</strong></dd></div><div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{time(booking?.hold_expires_at)}</dd></div></dl>{additionalSegments.length ? <><h3>Các chặng tiếp theo</h3><ol className="booking-itinerary-summary">{[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => <li key={segment.id}><div><strong className="table-mono-cell">{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong><span>{time(segment.flight?.departure_time)}</span></div></li>)}</ol></> : null}{booking?.ancillaries?.length ? <><h3>Dịch vụ bổ sung</h3><ul>{booking.ancillaries.map((line) => <li key={line.id}>{line.passenger?.passenger_name || 'Hành khách'} · Chặng {line.segment?.leg_order || '—'} · {line.service_name_snapshot} × {line.quantity}: <span className="table-mono-cell">{money(line.line_total_snapshot)}</span></li>)}</ul></> : null}</section>
-        <section className="surface-card booking-panel"><h2>Phương thức thanh toán</h2><form onSubmit={startPayment}><div className="payment-method-options"><label className={method === 'vnpay' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => { idempotencyKey.current = null; setMethod('vnpay'); }} /><span><strong>VNPay</strong><small>Cổng thanh toán sandbox của đồ án.</small></span></label><label className={method === 'payos' ? 'is-selected' : ''}><input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => { idempotencyKey.current = null; setMethod('payos'); }} /><span><strong>payOS · VietQR</strong><small>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small></span></label></div><button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}>{state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}</button>{booking?.status !== 'holding' ? <p className="field-hint">Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}</form>
-        {state.result ? <div className="payment-qr-result"><Notice>Kiểm tra thông tin đích chuyển trước khi thao tác. Thanh toán chỉ được xác nhận từ trạng thái hệ thống.</Notice>{state.result.qr_code ? <PaymentQr value={state.result.qr_code} /> : null}{isSafeCheckoutUrl(state.result.payment_url) ? <a className="button button-primary" href={state.result.payment_url} target="_blank" rel="noreferrer">Mở trang thanh toán payOS</a> : null}{!state.result.qr_code && !isSafeCheckoutUrl(state.result.payment_url) ? <p role="status" className="field-hint">Chưa có mã QR hoặc liên kết thanh toán khả dụng. Vui lòng thử lại sau.</p> : null}<p>Mã giao dịch: <code>{state.result.transaction_ref || '—'}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
-      </section></div>
+  const originCode = booking?.flight?.departureAirport?.iata_code || 'SGN';
+  const originCity = booking?.flight?.departureAirport?.city || booking?.flight?.departureAirport?.name || 'Tp. Hồ Chí Minh';
+  const isRoundTrip = additionalSegments.length > 0 || booking?.trip_type === 'round_trip';
+  const passengerCount = Math.max(1, booking?.passengers?.length || 1);
+
+  return <PaymentShell>
+    <SearchSummaryBanner
+      tripType={isRoundTrip ? 'round_trip' : 'one_way'}
+      passengerCount={passengerCount}
+      departureAirport={booking?.flight?.departureAirport}
+      arrivalAirport={booking?.flight?.arrivalAirport}
+      departureDate={booking?.flight?.departure_time}
+      returnDate={additionalSegments[0]?.flight?.departure_time}
+      currentStep={4}
+      editUrl={`/bookings/${id}/services`}
+      editText="Chọn lại dịch vụ"
+    />
+
+    <div className="results-layout-grid" style={{ marginTop: '1.25rem' }}>
+      {/* CỘT TRÁI: ĐỒNG HỒ ĐẾM NGƯỢC & PHƯƠNG THỨC THANH TOÁN */}
+      <section className="results-main-col">
+        <HoldCountdown expiresAt={booking?.hold_expires_at} onExpired={reloadBooking} />
+        {isBookingExpired ? <Notice type="warning">Đặt chỗ đã hết hạn giữ chỗ. Bạn vui lòng tìm chuyến bay mới để tiếp tục đặt vé. <Link className="button button-primary" style={{ display: 'inline-block', marginTop: '8px' }} to="/">Tìm chuyến bay khác</Link></Notice> : null}
+        {state.error ? <Notice type="error">{state.error}</Notice> : null}
+
+        <div className="service-vj-card" style={{ cursor: 'default' }}>
+          <div className="service-card-main-row" style={{ borderBottom: '1px solid #e2e8f0' }}>
+            <div className="service-card-left-group">
+              <div className="service-icon-square meal" style={{ background: '#e6f4f1', color: '#0e3d36' }}>💳</div>
+              <div className="service-text-group">
+                <span className="service-card-heading">Phương thức thanh toán trực tuyến</span>
+                <p className="service-card-desc">Cổng thanh toán bảo mật Serene Pay · Hỗ trợ thanh toán nhanh qua mã QR và Thẻ ngân hàng</p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ padding: '1.25rem 1.5rem' }}>
+            <form onSubmit={startPayment}>
+              <div className="payment-method-options" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+                <label className={method === 'vnpay' ? 'is-selected' : ''} style={{ border: method === 'vnpay' ? '2px solid #0e3d36' : '1.5px solid #cbd5e1', borderRadius: '0.65rem', padding: '1rem', cursor: 'pointer', background: method === 'vnpay' ? '#f0fdfa' : '#ffffff', transition: 'all 0.2s' }}>
+                  <input type="radio" name="payment-method" value="vnpay" checked={method === 'vnpay'} onChange={() => { idempotencyKey.current = null; setMethod('vnpay'); }} style={{ accentColor: '#0e3d36' }} />
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>VNPay</strong>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: '0.25rem' }}>Cổng thanh toán sandbox của đồ án (Hỗ trợ Thẻ ATM / Visa / QR).</small>
+                  </span>
+                </label>
+                <label className={method === 'payos' ? 'is-selected' : ''} style={{ border: method === 'payos' ? '2px solid #0e3d36' : '1.5px solid #cbd5e1', borderRadius: '0.65rem', padding: '1rem', cursor: 'pointer', background: method === 'payos' ? '#f0fdfa' : '#ffffff', transition: 'all 0.2s' }}>
+                  <input type="radio" name="payment-method" value="payos" checked={method === 'payos'} onChange={() => { idempotencyKey.current = null; setMethod('payos'); }} style={{ accentColor: '#0e3d36' }} />
+                  <span style={{ marginLeft: '0.5rem' }}>
+                    <strong style={{ fontSize: '1rem', color: '#0f172a' }}>payOS · VietQR</strong>
+                    <small style={{ display: 'block', color: '#64748b', marginTop: '0.25rem' }}>Hiển thị QR/link do máy chủ trả về; chế độ demo không chuyển tiền thật.</small>
+                  </span>
+                </label>
+              </div>
+
+              <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                <button className="button button-primary" type="submit" disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'} style={{ background: 'linear-gradient(135deg, #e8a33d 0%, #d97706 100%)', color: '#ffffff', fontWeight: 800, padding: '0.85rem 2.25rem', border: 'none', borderRadius: '0.55rem', cursor: 'pointer', boxShadow: '0 4px 14px rgba(232, 163, 61, 0.35)' }}>
+                  {state.submitting ? 'Đang kết nối…' : 'Tiếp tục thanh toán'}
+                </button>
+                {booking?.status !== 'holding' ? <p className="field-hint" style={{ margin: 0 }}>Đặt chỗ hiện không ở trạng thái giữ chỗ để bắt đầu thanh toán.</p> : null}
+              </div>
+            </form>
+
+            {state.result ? <div className="payment-qr-result" style={{ marginTop: '1.5rem' }}><Notice>Kiểm tra thông tin đích chuyển trước khi thao tác. Thanh toán chỉ được xác nhận từ trạng thái hệ thống.</Notice>{state.result.qr_code ? <PaymentQr value={state.result.qr_code} /> : null}{isSafeCheckoutUrl(state.result.payment_url) ? <a className="button button-primary" href={state.result.payment_url} target="_blank" rel="noreferrer" style={{ marginTop: '0.75rem', display: 'inline-block' }}>Mở trang thanh toán payOS</a> : null}{!state.result.qr_code && !isSafeCheckoutUrl(state.result.payment_url) ? <p role="status" className="field-hint">Chưa có mã QR hoặc liên kết thanh toán khả dụng. Vui lòng thử lại sau.</p> : null}<p>Mã giao dịch: <code>{state.result.transaction_ref || '—'}</code></p>{state.result.demo_notice ? <p className="demo-disclaimer">{state.result.demo_notice}</p> : null}{state.result.demo_webhook?.body ? <button className="button button-secondary" type="button" disabled={state.submitting} onClick={() => void simulatePayos()} style={{ marginTop: '0.75rem' }}>{state.submitting ? 'Đang cập nhật trạng thái…' : 'Mô phỏng xác nhận demo'}</button> : null}</div> : null}
+          </div>
+        </div>
+      </section>
+
+      {/* CỘT PHẢI: BOOKING SUMMARY WIDGET ĐỒNG BỘ CHUẨN */}
+      <aside className="booking-summary-widget" aria-label="Tóm tắt thông tin đặt chỗ">
+        <div className="booking-summary-header">
+          <h3 className="booking-summary-title">THÔNG TIN ĐẶT CHỖ</h3>
+        </div>
+
+        <div className="booking-summary-body">
+          <div className="summary-passenger-box">
+            <span className="summary-box-label">Thông tin hành khách</span>
+            <div className="summary-passenger-content">
+              <strong>{passengerCount} Người lớn</strong>
+            </div>
+          </div>
+
+          <div className="summary-leg-card is-current">
+            <div className="summary-leg-header">
+              <span className="summary-leg-name">Chi tiết đặt chỗ</span>
+              <Link to={`/bookings/${id}`} state={{ guestEmail }} style={{ fontSize: '0.8rem', color: '#0f6b66', fontWeight: 700, textDecoration: 'none' }}>
+                Chi Tiết ➔
+              </Link>
+            </div>
+
+            <dl className="booking-facts" style={{ margin: 0, padding: 0 }}>
+              <div><dt>Mã đặt chỗ</dt><dd className="table-mono-cell">{booking?.booking_code || `#${id}`}</dd></div>
+              <div><dt>Chặng đầu</dt><dd className="table-mono-cell">{booking?.flight?.departureAirport?.iata_code || '—'} → {booking?.flight?.arrivalAirport?.iata_code || '—'}</dd></div>
+              <div><dt>Khởi hành</dt><dd>{time(booking?.flight?.departure_time)}</dd></div>
+              <div><dt>Số hành khách</dt><dd className="table-mono-cell">{booking?.passengers?.length || '—'}</dd></div>
+              <div><dt>Giữ chỗ đến</dt><dd className="table-mono-cell">{time(booking?.hold_expires_at)}</dd></div>
+            </dl>
+
+            {additionalSegments.length ? (
+              <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, margin: '0 0 0.35rem', color: '#1e293b' }}>Các chặng tiếp theo</h4>
+                <ol className="booking-itinerary-summary" style={{ paddingLeft: '1.2rem', margin: 0 }}>
+                  {[...additionalSegments].sort((a, b) => Number(a.leg_order) - Number(b.leg_order)).map((segment) => (
+                    <li key={segment.id}>
+                      <div>
+                        <strong className="table-mono-cell">{segment.flight?.departureAirport?.iata_code || '—'} → {segment.flight?.arrivalAirport?.iata_code || '—'}</strong>
+                        <span>{time(segment.flight?.departure_time)}</span>
+                      </div>
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            ) : null}
+
+            {booking?.ancillaries?.length ? (
+              <div style={{ marginTop: '0.75rem', borderTop: '1px dashed #e2e8f0', paddingTop: '0.5rem' }}>
+                <h4 style={{ fontSize: '0.82rem', fontWeight: 700, margin: '0 0 0.35rem', color: '#1e293b' }}>Dịch vụ bổ sung</h4>
+                <ul style={{ paddingLeft: '1.2rem', margin: 0, fontSize: '0.8rem', color: '#475569' }}>
+                  {booking.ancillaries.map((line) => (
+                    <li key={line.id} style={{ marginBottom: '0.25rem' }}>
+                      {line.passenger?.passenger_name || 'Hành khách'} · {line.service_name_snapshot} × {line.quantity}: <span className="table-mono-cell">{money(line.line_total_snapshot)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="summary-total-strip">
+            <span>TỔNG TIỀN</span>
+            <span className="summary-total-amount">{money(booking?.total_amount)}</span>
+          </div>
+        </div>
+      </aside>
+    </div>
+
+    {/* Thanh Bottom Action Bar Cố định (Đồng bộ theo Ảnh 2 & 4) */}
+    <div className="passenger-bottom-actions">
+      <div className="passenger-bottom-actions-container">
+        <Link to={`/bookings/${id}/services`} state={{ guestEmail, booking }} className="button-back">
+          ‹ Quay lại
+        </Link>
+        <div className="passenger-bottom-submit-group">
+          <Link to={`/bookings/${id}/services`} state={{ guestEmail, booking }} className="button-add-more">
+            + Mua Thêm
+          </Link>
+          <button
+            type="button"
+            className="button-continue"
+            disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}
+            onClick={startPayment}
+          >
+            {state.submitting ? 'Đang kết nối…' : 'Thanh toán ➔'}
+          </button>
+        </div>
+      </div>
+    </div>
   </PaymentShell>;
 }
 
@@ -228,6 +383,9 @@ export function PaymentResultPage() {
 
   const isSuccess = effectiveBooking?.status === 'confirmed';
   const isCancelledOrExpired = effectiveBooking?.status === 'cancelled' || effectiveBooking?.status === 'expired';
+  const showPayosPendingNotice = gateway === 'payos'
+    && state.gatewayResult?.processed === false
+    && !(effectiveBooking?.status === 'confirmed' && activePayment?.status === 'success');
 
   const statusMessage = isSuccess && (!activePayment || activePayment?.status === 'success')
     ? 'Thanh toán thành công và đặt chỗ đã được xác nhận.'
@@ -243,7 +401,7 @@ export function PaymentResultPage() {
               ? 'Thanh toán đang chờ xác nhận từ hệ thống.'
               : 'Trạng thái đặt chỗ được tải từ hệ thống.';
 
-  return <PaymentShell><Heading eyebrow="KẾT QUẢ THANH TOÁN" title="Kiểm tra trạng thái đặt chỗ" description="Thông tin trả về từ trình duyệt không tự xác nhận thanh toán. Trạng thái đặt chỗ bên dưới được tải lại từ hệ thống." />{state.loading || status === 'loading' ? <LoadingView label="Đang kiểm tra trạng thái…" /> : <section className="surface-card booking-panel payment-result-panel">{state.error ? <Notice type="error">{state.error}</Notice> : null}{state.downloadError ? <Notice type="error">{state.downloadError}</Notice> : null}{state.gatewayError ? <Notice>{state.gatewayError} Trạng thái bên dưới vẫn được đọc từ hệ thống.</Notice> : null}{state.gatewayResult?.isValidChecksum === false ? <Notice type="error">Thông tin VNPay trả về không xác minh được chữ ký.</Notice> : null}{state.gatewayResult?.processed === false && gateway === 'payos' ? <Notice>payOS đã chuyển hướng về ứng dụng; trạng thái giao dịch cần được xác nhận qua webhook.</Notice> : null}{effectiveBooking ? <><div className="booking-detail-title"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2 className="table-mono-cell">{effectiveBooking.booking_code}</h2></div><StatusBadge status={effectiveBooking.status} /></div>{isSuccess ? <Notice type="success">Thanh toán hoàn tất! Đặt chỗ của bạn đã được hệ thống xác nhận.</Notice> : isCancelledOrExpired ? <Notice type="warning">Đặt chỗ đã hết hạn hoặc bị hủy.</Notice> : null}<p>{statusMessage}</p>{activePayment ? <p>Thanh toán hiện tại: <strong>{statusLabel(activePayment.status)}</strong>{activePayment.transaction_ref ? <> · Mã giao dịch <code>{activePayment.transaction_ref}</code></> : null}</p> : <p>Chưa có giao dịch thanh toán được ghi nhận cho đặt chỗ này.</p>}{payment?.previous_attempts?.length ? <p className="field-hint">Các giao dịch trước đó không quyết định trạng thái thanh toán hiện tại.</p> : null}{payment?.manual_review_required ? <Notice>Giao dịch cần được hỗ trợ kiểm tra thủ công. Vui lòng giữ lại mã đặt chỗ khi liên hệ hỗ trợ.</Notice> : null}<div className="booking-actions"><Link className="button button-primary" to={`/bookings/${effectiveBooking.id}`} state={{ guestEmail }}>Xem đặt chỗ</Link>{isSuccess ? <button className="button button-secondary" type="button" disabled={state.downloading} onClick={downloadTicket}>{state.downloading ? 'Đang chuẩn bị tệp…' : 'Tải vé PDF'}</button> : null}<button className="button button-outline" type="button" onClick={() => void load()}>Kiểm tra lại</button></div>{isSuccess && effectiveBooking?.passengers?.some((p) => p?.passenger_name) ? <BoardingPassCard booking={effectiveBooking} onDownloadPdf={downloadTicket} downloadingPdf={state.downloading} /> : null}</> : <><p>Không có mã đặt chỗ hợp lệ để tải trạng thái. Tra cứu bằng mã đặt chỗ và email để kiểm tra.</p><Link className="button button-primary" to="/bookings/lookup">Tra cứu đặt chỗ</Link><button className="button button-outline" type="button" onClick={() => void load()}>Thử lại</button></>}</section>}</PaymentShell>;
+  return <PaymentShell><Heading eyebrow="KẾT QUẢ THANH TOÁN" title="Kiểm tra trạng thái đặt chỗ" description="Thông tin trả về từ trình duyệt không tự xác nhận thanh toán. Trạng thái đặt chỗ bên dưới được tải lại từ hệ thống." />{state.loading || status === 'loading' ? <LoadingView label="Đang kiểm tra trạng thái…" /> : <section className="surface-card booking-panel payment-result-panel">{state.error ? <Notice type="error">{state.error}</Notice> : null}{state.downloadError ? <Notice type="error">{state.downloadError}</Notice> : null}{state.gatewayError ? <Notice>{state.gatewayError} Trạng thái bên dưới vẫn được đọc từ hệ thống.</Notice> : null}{state.gatewayResult?.isValidChecksum === false ? <Notice type="error">Thông tin VNPay trả về không xác minh được chữ ký.</Notice> : null}{showPayosPendingNotice ? <Notice>payOS đã chuyển hướng về ứng dụng; trạng thái giao dịch cần được xác nhận qua webhook.</Notice> : null}{effectiveBooking ? <><div className="booking-detail-title"><div><span className="eyebrow">MÃ ĐẶT CHỖ</span><h2 className="table-mono-cell">{effectiveBooking.booking_code}</h2></div><StatusBadge status={effectiveBooking.status} /></div>{isSuccess ? <Notice type="success">Thanh toán hoàn tất! Đặt chỗ của bạn đã được hệ thống xác nhận.</Notice> : isCancelledOrExpired ? <Notice type="warning">Đặt chỗ đã hết hạn hoặc bị hủy.</Notice> : null}<p>{statusMessage}</p>{activePayment ? <p>Thanh toán hiện tại: <strong>{statusLabel(activePayment.status)}</strong>{activePayment.transaction_ref ? <> · Mã giao dịch <code>{activePayment.transaction_ref}</code></> : null}</p> : <p>Chưa có giao dịch thanh toán được ghi nhận cho đặt chỗ này.</p>}{payment?.previous_attempts?.length ? <p className="field-hint">Các giao dịch trước đó không quyết định trạng thái thanh toán hiện tại.</p> : null}{payment?.manual_review_required ? <Notice>Giao dịch cần được hỗ trợ kiểm tra thủ công. Vui lòng giữ lại mã đặt chỗ khi liên hệ hỗ trợ.</Notice> : null}<div className="booking-actions"><Link className="button button-primary" to={`/bookings/${effectiveBooking.id}`} state={{ guestEmail }}>Xem đặt chỗ</Link>{isSuccess ? <button className="button button-secondary" type="button" disabled={state.downloading} onClick={downloadTicket}>{state.downloading ? 'Đang chuẩn bị tệp…' : 'Tải vé PDF'}</button> : null}<button className="button button-outline" type="button" onClick={() => void load()}>Kiểm tra lại</button></div>{isSuccess && effectiveBooking?.passengers?.some((p) => p?.passenger_name) ? <BoardingPassCard booking={effectiveBooking} onDownloadPdf={downloadTicket} downloadingPdf={state.downloading} /> : null}</> : <><p>Không có mã đặt chỗ hợp lệ để tải trạng thái. Tra cứu bằng mã đặt chỗ và email để kiểm tra.</p><Link className="button button-primary" to="/bookings/lookup">Tra cứu đặt chỗ</Link><button className="button button-outline" type="button" onClick={() => void load()}>Thử lại</button></>}</section>}</PaymentShell>;
 }
 
 export function AdminPaymentsPage() {

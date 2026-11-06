@@ -43,6 +43,29 @@ async function withStatus(status, callback) {
   try { return await callback(); } finally { bookingService.payosStatusLookup = previous; }
 }
 
+async function withFixtureStaleBooking(bookingId, callback) {
+  const originalFindStale = bookingService.repository.findStalePendingBookings;
+  bookingService.repository.findStalePendingBookings = async (cutoff) => {
+    const candidates = await originalFindStale.call(bookingService.repository, cutoff);
+    return candidates.filter((candidate) => String(candidate.id) === String(bookingId));
+  };
+  try {
+    return await callback();
+  } finally {
+    bookingService.repository.findStalePendingBookings = originalFindStale;
+  }
+}
+
+async function withPayosReconciliationEnabled(callback) {
+  const previous = bookingService.payosReconciliationAvailable;
+  bookingService.payosReconciliationAvailable = () => true;
+  try {
+    return await callback();
+  } finally {
+    bookingService.payosReconciliationAvailable = previous;
+  }
+}
+
 before(async () => { await verifyConnectedDatabase(); });
 after(async () => { await cleanupTrackedFixtures(); await models.sequelize.close(); });
 
@@ -87,10 +110,10 @@ test('IT-20 payOS Payment Link timeout keeps pending attempt for reconciliation'
 
 test('IT-21 payOS PAID lookup records payment and expires booking without confirming it', { timeout: 20000 }, async () => {
   const { fixture, booking, payment } = await createStalePayosBooking('IT21');
-  await withStatus('PAID', async () => {
+  await withPayosReconciliationEnabled(() => withFixtureStaleBooking(booking.id, () => withStatus('PAID', async () => {
     const result = await bookingService.reconcileStalePendingPayments();
     assert.equal(result.reconciledCount, 1);
-  });
+  })));
   assert.equal((await models.Payment.findByPk(payment.id)).status, 'success');
   assert.equal((await models.Booking.findByPk(booking.id)).status, 'expired');
   assert.equal((await models.Flight.findByPk(fixture.flight.id)).available_seats, 1);
@@ -106,7 +129,7 @@ test('IT-22 payOS PENDING lookup leaves payment and inventory unchanged', { time
 
 test('IT-23 payOS CANCELLED lookup fails payment and releases inventory once', { timeout: 20000 }, async () => {
   const { fixture, booking, payment } = await createStalePayosBooking('IT23');
-  await withStatus('CANCELLED', async () => { await bookingService.reconcileStalePendingPayments(); });
+  await withPayosReconciliationEnabled(() => withFixtureStaleBooking(booking.id, () => withStatus('CANCELLED', async () => { await bookingService.reconcileStalePendingPayments(); })));
   assert.equal((await models.Payment.findByPk(payment.id)).status, 'failed');
   assert.equal((await models.Booking.findByPk(booking.id)).status, 'expired');
   assert.equal((await models.Flight.findByPk(fixture.flight.id)).available_seats, 1);
@@ -114,8 +137,8 @@ test('IT-23 payOS CANCELLED lookup fails payment and releases inventory once', {
 
 test('IT-23a payOS CANCELLED reconciliation restores promotion usage once', { timeout: 20000 }, async () => {
   const promotion = await createPromotionFixture({ maxUses: 1 });
-  const { fixture } = await createStalePayosBooking('IT23A', { promotionCode: promotion.code });
-  await withStatus('CANCELLED', async () => { await bookingService.reconcileStalePendingPayments(); });
+  const { fixture, booking } = await createStalePayosBooking('IT23A', { promotionCode: promotion.code });
+  await withPayosReconciliationEnabled(() => withFixtureStaleBooking(booking.id, () => withStatus('CANCELLED', async () => { await bookingService.reconcileStalePendingPayments(); })));
   assert.equal((await models.Flight.findByPk(fixture.flight.id)).available_seats, 1);
   assert.equal((await models.Promotion.findByPk(promotion.id)).used_count, 0);
 });
@@ -142,10 +165,10 @@ test('IT-25 concurrent payOS webhook and reconciliation do not duplicate confirm
 
 test('IT-26 repeated payOS reconciliation has no duplicate side effects', { timeout: 20000 }, async () => {
   const { fixture, booking, payment } = await createStalePayosBooking('IT26');
-  await withStatus('PAID', async () => {
+  await withPayosReconciliationEnabled(() => withFixtureStaleBooking(booking.id, () => withStatus('PAID', async () => {
     assert.equal((await bookingService.reconcileStalePendingPayments()).reconciledCount, 1);
     assert.equal((await bookingService.reconcileStalePendingPayments()).reconciledCount, 0);
-  });
+  })));
   assert.equal((await models.Payment.findByPk(payment.id)).status, 'success');
   assert.equal((await models.Booking.findByPk(booking.id)).status, 'expired');
   assert.equal((await models.Flight.findByPk(fixture.flight.id)).available_seats, 1);

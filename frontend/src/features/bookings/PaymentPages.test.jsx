@@ -112,6 +112,35 @@ describe('payment pages', () => {
     expect(screen.getByText(/Thanh toán đang chờ xác nhận từ hệ thống/)).toBeInTheDocument();
   });
 
+  it('hides the payOS webhook notice after authoritative success', async () => {
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/payments/payos/return?')) return { orderCode: '1001', status: 'PAID', processed: false };
+      if (path.startsWith('/payments/bookings/7/status?')) return {
+        booking: { ...booking, status: 'confirmed' },
+        payment: { active_attempt: { payment_method: 'payos', status: 'success', amount: booking.total_amount, transaction_ref: '1001', paid_at: '2026-10-12T10:00:00Z' }, previous_attempts: [], manual_review_required: false, status_confidence: 'authoritative' },
+        checked_at: '2026-10-12T10:00:00Z',
+      };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&orderCode=1001&status=PAID');
+    expect(await screen.findByText(/Thanh toán thành công và đặt chỗ đã được xác nhận/)).toBeInTheDocument();
+    expect(screen.queryByText(/cần được xác nhận qua webhook/)).not.toBeInTheDocument();
+  });
+
+  it('keeps the payOS webhook notice while authoritative status is pending', async () => {
+    mocks.request.mockImplementation(async (path) => {
+      if (path.startsWith('/payments/payos/return?')) return { orderCode: '1001', status: 'PAID', processed: false };
+      if (path.startsWith('/payments/bookings/7/status?')) return {
+        booking: { ...booking, status: 'pending_payment' },
+        payment: { active_attempt: { payment_method: 'payos', status: 'pending', amount: booking.total_amount, transaction_ref: '1001', paid_at: null }, previous_attempts: [], manual_review_required: false, status_confidence: 'authoritative' },
+        checked_at: '2026-10-12T10:00:00Z',
+      };
+      throw new Error(`Unexpected request ${path}`);
+    });
+    routes(<PaymentResultPage />, '/payments/result', '/payments/result?booking_id=7&orderCode=1001&status=PAID');
+    expect(await screen.findByText(/cần được xác nhận qua webhook/)).toBeInTheDocument();
+  });
+
   it('uses authoritative payment status and shows manual review without false confirmation', async () => {
     mocks.request.mockResolvedValue({
       booking: { ...booking, status: 'expired' },

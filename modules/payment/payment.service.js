@@ -308,6 +308,12 @@ class PaymentService {
     return mode;
   }
 
+  isPayosReconciliationAvailable() {
+    if (this._getPayOSMode() !== 'live') return false;
+    return ['PAYOS_CLIENT_ID', 'PAYOS_API_KEY', 'PAYOS_CHECKSUM_KEY']
+      .every((key) => Boolean(String(process.env[key] || '').trim()));
+  }
+
   _getPayOSDemoSecret() {
     return process.env.PAYOS_DEMO_SECRET || 'local-academic-demo-only';
   }
@@ -973,7 +979,14 @@ class PaymentService {
       return { isValidChecksum: false, isSuccess: false, message: 'VNPay is disabled' };
     }
     const secretKey = config.hashSecret;
-    const isValidChecksum = verifyVnpayChecksum(queryParams, secretKey);
+    // Browser context hints (for example booking_id) are not part of the
+    // VNPay-signed payload. Verify only the gateway namespace so a frontend
+    // lookup hint cannot invalidate an otherwise valid VNPay return.
+    const signedParams = Object.fromEntries(
+      Object.entries(queryParams || {})
+        .filter(([key]) => key.toLowerCase().startsWith('vnp_'))
+    );
+    const isValidChecksum = verifyVnpayChecksum(signedParams, secretKey);
     const isValidTmnCode = queryParams.vnp_TmnCode === config.tmnCode;
 
     const responseCode = queryParams.vnp_ResponseCode;
@@ -1018,9 +1031,9 @@ class PaymentService {
    * Đúng thứ tự 6 bước theo đặc tả sandbox VNPay:
    * Bước 1: Checksum -> RspCode '97'
    * Bước 2: Tìm payment & booking -> RspCode '01'
-   * Bước 3: Idempotent (payment.status === 'success') -> RspCode '02'
-   * Bước 4: Check booking status (status === 'pending_payment') -> RspCode '02'
-   * Bước 5: So sánh amount -> RspCode '04'
+   * Bước 3: So sánh amount -> RspCode '04'
+   * Bước 4: Idempotent (payment.status === 'success') -> RspCode '02'
+   * Bước 5: Check booking status (status === 'pending_payment') -> RspCode '02'
    * Bước 6: Update DB trong transaction có row-level lock -> RspCode '00'
    */
   async handleVnpayIpn(queryParams) {
@@ -1031,6 +1044,25 @@ class PaymentService {
     // BƯỚC 1: Verify Checksum
     const isChecksumValid = verifyVnpayChecksum(queryParams, secretKey);
     if (!isChecksumValid) {
+      if (process.env.NODE_ENV === 'test') {
+        const vnpayFields = Object.keys(queryParams || {})
+          .filter((key) => key.toLowerCase().startsWith('vnp_'))
+          .sort();
+        const fieldTypes = {};
+        for (const key of ['vnp_TmnCode', 'vnp_TxnRef', 'vnp_Amount', 'vnp_ResponseCode', 'vnp_SecureHash']) {
+          if (Object.prototype.hasOwnProperty.call(queryParams || {}, key)) fieldTypes[key] = typeof queryParams[key];
+        }
+        console.warn('[VNPay IPN] Checksum diagnostics (test only):', {
+          receivedAt: new Date().toISOString(),
+          vnpayFields,
+          tmnCodeMatches: queryParams?.vnp_TmnCode === config.tmnCode,
+          txnRef: queryParams?.vnp_TxnRef || null,
+          amount: queryParams?.vnp_Amount || null,
+          responseCode: queryParams?.vnp_ResponseCode || null,
+          fieldTypes,
+          secureHashPresent: Boolean(queryParams?.vnp_SecureHash || queryParams?.vnp_securehash),
+        });
+      }
       console.warn('[VNPay IPN] Invalid checksum received:', {
         txnRef: queryParams.vnp_TxnRef || null,
         receivedAt: new Date().toISOString(),
@@ -1057,7 +1089,14 @@ class PaymentService {
       return { RspCode: '01', Message: 'Order not found' };
     }
 
-    // BƯỚC 3: Kiểm tra Idempotent (nếu payment đã thành công trước đó)
+    // BƯỚC 3: Đối chiếu số tiền trước trạng thái idempotent. Một IPN
+    // đã ký nhưng sai amount phải trả 04, kể cả payment đã success.
+    if (Math.round(Number(payment.amount)) !== Math.round(vnpAmount)) {
+      console.warn(`[VNPay IPN] Amount mismatch: Expected ${payment.amount}, received ${vnpAmount}`);
+      return { RspCode: '04', Message: 'Invalid amount' };
+    }
+
+    // BƯỚC 4: Kiểm tra Idempotent (nếu payment đã thành công trước đó)
     if (payment.status === 'success') {
       console.log(`[VNPay IPN] Payment ${txnRef} already processed successfully (Idempotent call).`);
       return { RspCode: '02', Message: 'Order already confirmed' };
@@ -1073,12 +1112,6 @@ class PaymentService {
     if (payment.booking.status !== 'pending_payment' && !isRecordableLateSuccess) {
       console.warn(`[VNPay IPN] Invalid booking status: ${payment.booking.status}`);
       return { RspCode: '02', Message: 'Order already updated or invalid state' };
-    }
-
-    // BƯỚC 5: Đối chiếu số tiền thanh toán (Amount)
-    if (Math.round(Number(payment.amount)) !== Math.round(vnpAmount)) {
-      console.warn(`[VNPay IPN] Amount mismatch: Expected ${payment.amount}, received ${vnpAmount}`);
-      return { RspCode: '04', Message: 'Invalid amount' };
     }
 
     let bookingIdToEmail = null;
@@ -1446,34 +1479,49 @@ class PaymentService {
 
   /**
    * payOS sends the customer to cancelUrl when they cancel a payment link.
-   * Query parameters are not trusted: the payment-link status is re-read from
-   * payOS before returning the booking from pending_payment to holding/expired.
+   * Browser returns are informational only. State transitions belong to the
+   * signed webhook or reconciliation workflow, never to navigation.
    */
   async handlePayosReturn(queryParams) {
-    const orderCode = queryParams.orderCode;
-    const isCancellation = queryParams.cancel === 'true' || queryParams.status === 'CANCELLED';
+    const orderCode = queryParams?.orderCode;
+    const isCancellation = queryParams?.cancel === 'true' || queryParams?.status === 'CANCELLED';
 
     if (!orderCode || !isCancellation) {
-      return { orderCode: orderCode || null, status: queryParams.status || null, processed: false };
+      return { orderCode: orderCode || null, status: queryParams?.status || null, processed: false };
     }
 
     if (this._getPayOSMode() === 'demo') {
       return { orderCode, status: 'DEMO', processed: false };
     }
 
-    const paymentLink = await this._getPayOSClient().paymentRequests.get(Number(orderCode));
-    if (paymentLink.status !== 'CANCELLED') {
-      return { orderCode, status: paymentLink.status, processed: false };
+    let paymentLink;
+    try {
+      paymentLink = await this._getPayOSClient().paymentRequests.get(Number(orderCode));
+    } catch (error) {
+      this.logger.warn?.('[payOS return] Gateway status unavailable; browser return remains read-only.');
+      return { orderCode, status: 'UNKNOWN', processed: false, verification: 'unavailable' };
     }
 
-    const payment = await this.repository.findPaymentWithBookingByRef(String(orderCode));
-
-    if (!payment || !payment.booking) {
-      return { orderCode, status: 'CANCELLED', processed: false };
+    const gatewayOrderCode = paymentLink?.orderCode ?? paymentLink?.order_code;
+    if (gatewayOrderCode != null && String(gatewayOrderCode) !== String(orderCode)) {
+      return { orderCode, status: 'UNKNOWN', processed: false, verification: 'mismatch' };
     }
 
-    await this._markPayosPaymentFailed(payment.id, payment.booking_id);
-    return { orderCode, status: 'CANCELLED', processed: true };
+    let payment = null;
+    try {
+      // Read-only lookup is used only to restore display context after a
+      // gateway redirect. It deliberately cannot change local state.
+      payment = await this.repository.findPaymentWithBookingByRef(String(orderCode), 'payos');
+    } catch (error) {
+      this.logger.warn?.('[payOS return] Local status lookup unavailable; browser return remains read-only.');
+    }
+
+    return {
+      orderCode,
+      status: paymentLink?.status || 'UNKNOWN',
+      processed: false,
+      ...(payment?.booking_id || payment?.booking?.id ? { bookingId: payment.booking_id || payment.booking.id } : {}),
+    };
   }
 
   async _createGatewayOperation(payment, operationType, operationKey, amount, transaction) {
