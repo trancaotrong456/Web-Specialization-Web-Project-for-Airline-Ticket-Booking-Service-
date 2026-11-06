@@ -61,6 +61,8 @@ services:
       ELASTICSEARCH_NODE: http://elasticsearch:9200
       PAYOS_CANCEL_URL: ${PAYOS_CANCEL_URL:-http://localhost:5173/payments/result}
       DISABLE_CRON: ${DISABLE_CRON:-false}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
       RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: "Airline Booking <onboarding@resend.dev>"
       EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-disabled}
