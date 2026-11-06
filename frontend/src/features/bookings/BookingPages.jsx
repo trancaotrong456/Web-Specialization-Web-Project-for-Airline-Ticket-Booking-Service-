@@ -15,7 +15,9 @@ import { money } from '../../lib/formatters';
 import { getServerTimeOffset } from '../../lib/apiClient';
 import { BoardingPassCard } from './BoardingPassCard';
 import { FlightPicker } from '../../components/FlightPicker';
+import { SearchSummaryBanner } from '../flights/FlightResultsPage';
 import './seatSelection.css';
+import './passengerDetails.css';
 
 export const bookingStatusSourceLabels = {
   booking_created: 'Tạo đặt chỗ ban đầu',
@@ -181,15 +183,26 @@ export function BookingCreatePage() {
         setState((current) => ({ ...current, loadingFares: true, error: '' }));
         const response = await api.fareClassesForFlight(selected.id);
         if (!active) return;
-        setFares(rowsOf(response));
-        setState((current) => ({ ...current, loadingFares: false, stage: 'fare' }));
+        const loadedFares = rowsOf(response);
+        setFares(loadedFares);
+        const presetFareId = urlParams.get('fare_class_id');
+        const matchedFare = presetFareId ? loadedFares.find((f) => Number(f.id) === Number(presetFareId)) : null;
+        if (matchedFare) {
+          setFare(matchedFare);
+          const count = Number(countFromSearchParams(urlParams));
+          setCriteria((current) => ({ ...current, passengers: String(count) }));
+          setPassengers((current) => Array.from({ length: count }, (_, index) => current[index] || { passenger_name: '', passport_no: '' }));
+          setState((current) => ({ ...current, loadingFares: false, stage: 'passenger' }));
+        } else {
+          setState((current) => ({ ...current, loadingFares: false, stage: 'fare' }));
+        }
       } catch (error) {
         if (active) setState((current) => ({ ...current, loadingFares: false, error: errText(error, 'Không thể tải chuyến bay đã chọn.') }));
       }
     };
     void loadPreset();
     return () => { active = false; };
-  }, [api, presetFlight, itineraryKey]);
+  }, [api, presetFlight, itineraryKey, urlParams]);
 
   useEffect(() => {
     if (!expectsItinerary) return undefined;
@@ -294,20 +307,57 @@ export function BookingCreatePage() {
     const fields = {};
     if (!user && !isValidEmail(guestEmail)) fields.guest_email = 'Vui lòng nhập email hợp lệ để tra cứu và quản lý đặt chỗ.';
     passengers.forEach((passenger, index) => {
-      if (!passenger.passenger_name.trim()) fields[`passengers.${index}.passenger_name`] = 'Vui lòng nhập họ tên hành khách.';
-      if (passenger.passenger_name.trim().length > 150) fields[`passengers.${index}.passenger_name`] = 'Họ tên không vượt quá 150 ký tự.';
-      if (passenger.passport_no.trim().length > 30) fields[`passengers.${index}.passport_no`] = 'Số hộ chiếu không vượt quá 30 ký tự.';
+      if (passenger.passenger_name && passenger.passenger_name.trim().length > 150) fields[`passengers.${index}.passenger_name`] = 'Họ tên không vượt quá 150 ký tự.';
+      if (passenger.passport_no && passenger.passport_no.trim().length > 30) fields[`passengers.${index}.passport_no`] = 'Số hộ chiếu không vượt quá 30 ký tự.';
     });
     setFormErrors(fields);
-    if (Object.keys(fields).length) return;
+    if (Object.keys(fields).length) {
+      const firstKey = Object.keys(fields)[0];
+      const targetId = firstKey.startsWith('passengers.')
+        ? `passenger-name-${firstKey.split('.')[1]}`
+        : 'booking-guest-email';
+      const targetElement = typeof document !== 'undefined' ? document.getElementById(targetId) : null;
+      if (targetElement) {
+        if (typeof targetElement.scrollIntoView === 'function') {
+          targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+        if (typeof targetElement.focus === 'function') {
+          targetElement.focus();
+        }
+      }
+      return;
+    }
+
+    const resolvedPassengers = passengers.map((p, index) => {
+      const fallbackName = (index === 0 && user?.full_name)
+        ? user.full_name
+        : (index === 0 && user?.email)
+          ? user.email.split('@')[0]
+          : `Hành khách ${index + 1}`;
+      const name = p.passenger_name?.trim() || fallbackName;
+      return {
+        passenger_name: name,
+        ...(p.passport_no?.trim() ? { passport_no: p.passport_no.trim() } : {})
+      };
+    });
+
     setState((current) => ({ ...current, submitting: true, error: '' }));
-    const payload = { flight_id: Number(flight.id), fare_class_id: Number(fare.id), ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}), ...(seatSelections.length ? { seat_selections: seatSelections } : {}), ...(ancillarySelections.length ? { ancillary_selections: ancillarySelections } : {}), passengers: passengers.map(({ passenger_name, passport_no }) => ({ passenger_name: passenger_name.trim(), ...(passport_no.trim() ? { passport_no: passport_no.trim() } : {}) })), ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}), ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {}) };
+    const payload = {
+      flight_id: Number(flight.id),
+      fare_class_id: Number(fare.id),
+      ...(itineraryFlights.length > 1 ? { trip_type: tripType, itinerary_legs: itineraryFlights.map(({ flight: legFlight, fare: legFare }) => ({ flight_id: Number(legFlight.id), fare_class_id: Number(legFare.id) })) } : {}),
+      ...(seatSelections.length ? { seat_selections: seatSelections } : {}),
+      ...(ancillarySelections.length ? { ancillary_selections: ancillarySelections } : {}),
+      passengers: resolvedPassengers,
+      ...(normalizedPromotionCode ? { promotion_code: normalizedPromotionCode } : {}),
+      ...(!user ? { guest_email: guestEmail.trim().toLowerCase() } : {})
+    };
     try {
       const booking = await api.createBooking(payload);
       const bookingId = booking?.id || booking?.booking?.id;
       if (!bookingId) throw new Error('Máy chủ không trả về mã đặt chỗ.');
       if (!user) sessionStorage.setItem(emailKey(bookingId), guestEmail.trim().toLowerCase());
-      navigate(`/bookings/${bookingId}/payment`, { state: { booking, guestEmail: !user ? guestEmail.trim().toLowerCase() : '' } });
+      navigate(`/bookings/${bookingId}/services`, { state: { booking, guestEmail: !user ? guestEmail.trim().toLowerCase() : '' } });
     } catch (error) { setState((current) => ({ ...current, submitting: false, error: errText(error, 'Không thể tạo yêu cầu đặt chỗ.'), fields: errorFields(error) })); }
   };
 
@@ -332,65 +382,440 @@ export function BookingCreatePage() {
         {results.length === 0 && !state.searching && criteria.departure_date ? <p className="empty-state">Chưa có kết quả. Hãy thử tìm chuyến bay phù hợp với tiêu chí khác.</p> : null}
       </> : null}
       {state.stage === 'fare' || state.loadingFares && flight ? <><div className="booking-section-heading"><div><h2>Chọn hạng vé</h2><p>{flightCarrier(flight)} · {airportsOf(flight)} · {dateTime(flight.departure_time)}</p></div><button className="button button-outline" type="button" onClick={() => { setFlight(null); setFare(null); setState((current) => ({ ...current, stage: 'flight' })); }}>Đổi chuyến bay</button></div>{state.loadingFares ? <LoadingView label="Đang tải hạng vé…" /> : fares.length ? <><div className="booking-fare-list">{fares.map((item) => <label className={`booking-fare-option ${fare?.id === item.id ? 'is-selected' : ''}`} key={item.id}><input type="radio" name="fare" checked={fare?.id === item.id} onChange={() => setFare(item)} /><span><strong>{item.class_name}</strong><small>{item.seat_quota ?? '—'} ghế phân bổ</small></span><strong>{money(item.price)} / khách</strong></label>)}</div><button className="button button-primary" type="button" onClick={continueToPassenger}>Tiếp tục</button></> : <div className="empty-state"><h3>Chưa có hạng vé cho chuyến bay này</h3><p>Hãy chọn chuyến bay khác hoặc quay lại sau.</p></div>}</> : null}
-      {state.stage === 'passenger' ? <div className="booking-passenger-layout">
-        <section className="booking-passenger-main" aria-labelledby="passenger-form-title">
-          <div className="booking-section-heading"><div><h2 id="passenger-form-title">Thông tin hành khách</h2><p>{itineraryFlights.length > 1 ? `${itineraryFlights.length} chặng · ${passengers.length} hành khách` : `${flightCarrier(flight)} · ${fare?.class_name} · ${passengers.length} hành khách`}</p></div>{itineraryFlights.length > 1 ? <span className="eyebrow">HẠNG VÉ ĐÃ CHỌN CHO TỪNG CHẶNG</span> : <button className="button button-outline" type="button" onClick={() => setState((current) => ({ ...current, stage: 'fare' }))}>Đổi hạng vé</button>}</div>
-          <form className="booking-passenger-form" onSubmit={submit} noValidate>
-            {!user ? <Field id="booking-guest-email" label="Email liên hệ" type="email" autoComplete="email" required value={guestEmail} onChange={(event) => setGuestEmail(event.target.value)} error={formErrors.guest_email} hint="Dùng email này cùng mã đặt chỗ để tra cứu đặt chỗ của bạn." /> : null}
+      {state.stage === 'passenger' ? <>
+        <SearchSummaryBanner
+          tripType={tripType}
+          passengerCount={passengers.length}
+          departureAirport={flight?.departureAirport}
+          arrivalAirport={flight?.arrivalAirport}
+          departureDate={flight?.departure_time}
+          returnDate={itineraryFlights[1]?.flight?.departure_time}
+          currentStep={2}
+          editUrl={expectsItinerary ? '/flights/search' : '/'}
+          editText="Chỉnh sửa tìm kiếm"
+        />
+
+        <form className="passenger-checkout-layout" onSubmit={submit} noValidate>
+          <div className="passenger-main-form-col">
+            <h2 className="passenger-page-title" id="passenger-form-title">
+              Thông tin hành khách
+            </h2>
+
+            {passengers.map((passenger, index) => (
+              <div className="passenger-vj-card" key={index}>
+                <div className="passenger-vj-card-header">
+                  <h3 className="passenger-vj-card-title">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Người lớn {passengers.length > 1 ? index + 1 : ''}
+                  </h3>
+                  {index === 0 && user ? (
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked="false"
+                      className="passenger-self-booking-toggle"
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
+                      onClick={() => {
+                        if (user?.full_name) {
+                          setPassengers((curr) => curr.map((p, at) => at === 0 ? { ...p, passenger_name: user.full_name } : p));
+                        }
+                      }}
+                    >
+                      <span style={{ display: 'inline-block', width: '1.2rem', height: '1.2rem', borderRadius: '4px', border: '1.5px solid #0d9488', textAlign: 'center', lineHeight: '1.1rem', fontSize: '0.8rem', color: '#0d9488' }}>✓</span>
+                      <span>Mua vé cho tôi</span>
+                    </button>
+                  ) : null}
+                </div>
+                <div className="passenger-vj-card-body">
+                  <div className="gender-selection-row" role="radiogroup" aria-label={`Giới tính hành khách ${index + 1}`}>
+                    <label className="gender-radio-item">
+                      <input type="radio" name={`passenger-gender-${index}`} defaultChecked={index % 2 === 0} />
+                      <span>Nam</span>
+                    </label>
+                    <label className="gender-radio-item">
+                      <input type="radio" name={`passenger-gender-${index}`} defaultChecked={index % 2 === 1} />
+                      <span>Nữ</span>
+                    </label>
+                    <label className="gender-radio-item">
+                      <input type="radio" name={`passenger-gender-${index}`} />
+                      <span>Khác</span>
+                    </label>
+                  </div>
+
+                  <div className="passenger-input-grid-2">
+                    <Field
+                      id={`passenger-name-${index}`}
+                      label="Họ tên"
+                      autoComplete="name"
+                      required
+                      placeholder="Ví dụ: NGUYEN VAN A"
+                      value={passenger.passenger_name}
+                      onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))}
+                      error={formErrors[`passengers.${index}.passenger_name`]}
+                      hint="Vui lòng nhập tên đệm và tên theo đúng thứ tự giấy tờ tùy thân"
+                    />
+                    <Field
+                      id={`passenger-passport-${index}`}
+                      label="Số hộ chiếu (không bắt buộc)"
+                      placeholder="CCCD hoặc Số hộ chiếu"
+                      value={passenger.passport_no}
+                      onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passport_no: event.target.value } : item))}
+                      error={formErrors[`passengers.${index}.passport_no`]}
+                      hint="Số CCCD / Hộ chiếu dùng khi làm thủ tục lên máy bay"
+                    />
+
+                    <div className="passenger-vj-field">
+                      <label htmlFor={`passenger-dob-${index}`}>
+                        Ngày sinh*(DD/MM/YYYY) <span className="req-star">*</span>
+                      </label>
+                      <input
+                        id={`passenger-dob-${index}`}
+                        type="text"
+                        placeholder="DD/MM/YYYY"
+                        defaultValue="15/08/1995"
+                      />
+                      <p className="passenger-field-hint">Vui lòng chọn hoặc nhập ngày sinh</p>
+                    </div>
+
+                    <div className="passenger-vj-field">
+                      <label htmlFor={`passenger-country-${index}`}>
+                        Quốc gia* <span className="req-star">*</span>
+                      </label>
+                      <select id={`passenger-country-${index}`} defaultValue="VN">
+                        <option value="VN">Việt Nam</option>
+                        <option value="US">Hoa Kỳ (United States)</option>
+                        <option value="JP">Nhật Bản (Japan)</option>
+                        <option value="KR">Hàn Quốc (South Korea)</option>
+                        <option value="SG">Singapore</option>
+                        <option value="OTHER">Quốc gia khác</option>
+                      </select>
+                    </div>
+
+                    {index === 0 ? (
+                      <>
+                        <div className="passenger-vj-field">
+                          <label htmlFor="passenger-phone-input">
+                            Số điện thoại* <span className="req-star">*</span>
+                          </label>
+                          <div className="passenger-phone-wrap">
+                            <span className="passenger-phone-prefix">🇻🇳 +84</span>
+                            <input
+                              id="passenger-phone-input"
+                              type="tel"
+                              placeholder="0912 345 678"
+                              defaultValue="0912345678"
+                            />
+                          </div>
+                          <p className="passenger-field-hint">Vui lòng nhập số điện thoại để nhận SMS thông báo chuyến bay</p>
+                        </div>
+
+                        {!user ? (
+                          <Field
+                            id="booking-guest-email"
+                            label="Email liên hệ"
+                            type="email"
+                            autoComplete="email"
+                            required
+                            placeholder="email@example.com"
+                            value={guestEmail}
+                            onChange={(event) => setGuestEmail(event.target.value)}
+                            error={formErrors.guest_email}
+                            hint="Vui lòng nhập địa chỉ email của bạn để nhận vé điện tử."
+                          />
+                        ) : (
+                          <div className="passenger-vj-field">
+                            <label>Email tài khoản* <span className="req-star">*</span></label>
+                            <input type="email" value={user.email} disabled />
+                            <p className="passenger-field-hint">Vé điện tử sẽ gửi về email tài khoản đã đăng nhập</p>
+                          </div>
+                        )}
+                      </>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+            ))}
+
             <div className="booking-promotion-entry">
-              <Field id="booking-promotion-code" label="Mã khuyến mại (không bắt buộc)" autoComplete="off" maxLength={30} value={promotionCode} onChange={(event) => { setPromotionCode(event.target.value); setPromotionState({ checking: false, validCode: '', error: '' }); }} hint="Mã sẽ được hệ thống kiểm tra lại khi tạo đặt chỗ." />
-              <button className="button button-outline" type="button" disabled={promotionState.checking || !promotionCode.trim()} onClick={() => void validatePromotion()}>{promotionState.checking ? 'Đang kiểm tra…' : 'Kiểm tra mã'}</button>
+              <Field
+                id="booking-promotion-code"
+                label="Mã khuyến mại (không bắt buộc)"
+                autoComplete="off"
+                maxLength={30}
+                placeholder="Nhập mã ưu đãi (ví dụ: SERENE2026)"
+                value={promotionCode}
+                onChange={(event) => { setPromotionCode(event.target.value); setPromotionState({ checking: false, validCode: '', error: '' }); }}
+                hint="Mã sẽ được hệ thống kiểm tra và áp dụng giảm giá trực tiếp."
+              />
+              <button className="button button-outline" type="button" disabled={promotionState.checking || !promotionCode.trim()} onClick={() => void validatePromotion()}>
+                {promotionState.checking ? 'Đang kiểm tra…' : 'Kiểm tra mã'}
+              </button>
               {promotionState.error ? <p className="booking-promotion-message is-error" role="alert">{promotionState.error}</p> : null}
               {promotionState.validCode ? <p className="booking-promotion-message" role="status">Mã {promotionState.validCode} hợp lệ. Giá cuối cùng do hệ thống tính khi tạo đặt chỗ.</p> : null}
             </div>
-            {((itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).some((_leg, index) => seatMaps[index + 1]?.supported)) ? <section className="seat-selection-picker" aria-label="Chọn ghế theo hành khách và chặng">
-              <h3>Chọn ghế (không bắt buộc)</h3><p>Ghế được giữ cùng đặt chỗ trong thời gian thanh toán. Giá vé không thay đổi.</p>
-              <div className="seat-legend" aria-hidden="true">
-                <span className="seat-legend-item"><span className="seat-legend-sample available" /> Ghế trống</span>
-                <span className="seat-legend-item"><span className="seat-legend-sample selected" /> Đang chọn</span>
-                <span className="seat-legend-item"><span className="seat-legend-sample occupied" /> Đã giữ / không bán</span>
+
+            {((itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).some((_leg, index) => seatMaps[index + 1]?.supported)) ? (
+              <section className="seat-selection-picker" aria-label="Chọn ghế theo hành khách và chặng">
+                <h3>Chọn ghế ngồi (không bắt buộc)</h3>
+                <p>Ghế được giữ cùng đặt chỗ trong thời gian thanh toán. Giá vé không thay đổi.</p>
+                <div className="seat-legend" aria-hidden="true">
+                  <span className="seat-legend-item"><span className="seat-legend-sample available" /> Ghế trống</span>
+                  <span className="seat-legend-item"><span className="seat-legend-sample selected" /> Đang chọn</span>
+                  <span className="seat-legend-item"><span className="seat-legend-sample occupied" /> Đã giữ / không bán</span>
+                </div>
+                {passengers.length > 1 ? (
+                  <div className="seat-passenger-tabs" role="group" aria-label="Hành khách">
+                    {passengers.map((_passenger, index) => (
+                      <button type="button" key={index} aria-pressed={activeSeatPassenger === index} onClick={() => setActiveSeatPassenger(index)}>
+                        Hành khách {index + 1}
+                      </button>
+                    ))}
+                  </div>
+                ) : null}
+                {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((leg, index) => {
+                  const legOrder = index + 1; const map = seatMaps[legOrder];
+                  if (!map?.supported) return null;
+                  const fareId = Number(leg.fare?.id || fare?.id);
+                  const selected = seatSelections.find((item) => item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)?.seat_no;
+                  const aisles = map.aisle_after || [];
+                  return (
+                    <fieldset className="seat-leg-picker" key={leg.flight.id}>
+                      <legend>Chặng {legOrder}: {airportsOf(leg.flight)}</legend>
+                      <div className="seat-grid" style={{ '--seat-columns': map.column_count + aisles.length }}>
+                        {map.seats.map((seat) => {
+                          const eligible = Number(seat.fare_class_id) === fareId;
+                          const disabled = seat.status !== 'available' || !eligible;
+                          const displayColumn = seat.column_number + aisles.filter((after) => after < seat.column_number).length;
+                          return (
+                            <button
+                              key={seat.seat_no}
+                              style={{ gridColumn: displayColumn, gridRow: seat.row_number }}
+                              type="button"
+                              className={`seat-choice ${seat.status} ${selected === seat.seat_no ? 'selected' : ''}`}
+                              aria-label={`${seat.seat_no}, ${seat.status === 'available' ? (eligible ? 'trống' : 'không thuộc hạng vé') : 'đã giữ hoặc không bán'}`}
+                              aria-pressed={selected === seat.seat_no}
+                              disabled={disabled}
+                              title={`${seat.seat_no} · ${seat.zone}${seat.special_properties?.length ? ` · ${seat.special_properties.join(', ')}` : ''}`}
+                              onClick={() => setSeatSelections((current) => [...current.filter((item) => !(item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)), { leg_order: legOrder, passenger_index: activeSeatPassenger, seat_no: seat.seat_no }])}
+                            >
+                              {seat.seat_no}
+                            </button>
+                          );
+                        })}
+                        {aisles.flatMap((after) => Array.from({ length: map.row_count }, (_, row) => (
+                          <span key={`aisle-${row + 1}-${after}`} className="seat-aisle" style={{ gridColumn: after + aisles.filter((column) => column < after).length + 1, gridRow: row + 1 }} aria-hidden="true" />
+                        )))}
+                      </div>
+                      <button className="button button-outline seat-clear-button" type="button" disabled={!selected} onClick={() => setSeatSelections((current) => current.filter((item) => !(item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)))}>
+                        Bỏ chọn ghế chặng này
+                      </button>
+                    </fieldset>
+                  );
+                })}
+              </section>
+            ) : null}
+
+            {Object.values(ancillaryOffers).some((offers) => offers.length > 0) ? (
+              <section className="seat-selection-picker ancillary-picker" aria-label="Dịch vụ bổ sung theo hành khách và chặng">
+                <h3>Dịch vụ bổ sung (không bắt buộc)</h3>
+                <p>Giá và điều kiện áp dụng được xác nhận lại trên máy chủ khi tạo đặt chỗ.</p>
+                {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((leg, legIndex) => {
+                  const legOrder = legIndex + 1; const offers = ancillaryOffers[legOrder] || [];
+                  if (!offers.length) return null;
+                  return (
+                    <fieldset className="seat-leg-picker" key={leg.flight.id}>
+                      <legend>Chặng {legOrder}: {airportsOf(leg.flight)}</legend>
+                      {passengers.map((_passenger, passengerIndex) => (
+                        <div className="ancillary-passenger-options" key={passengerIndex}>
+                          <strong>Hành khách {passengerIndex + 1}</strong>
+                          {offers.map((offer) => {
+                            const selection = ancillarySelections.find((item) => item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex);
+                            const maxQuantity = ancillaryMaxQuantity(offer, ancillarySelections, legOrder, passengerIndex);
+                            return (
+                              <div className="ancillary-choice" key={offer.id}>
+                                <label className="booking-fare-option">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(selection)}
+                                    disabled={!selection && maxQuantity < 1}
+                                    onChange={(event) => setAncillarySelections((current) => event.target.checked ? [...current, { offer_id: Number(offer.id), leg_order: legOrder, passenger_index: passengerIndex, quantity: 1 }] : current.filter((item) => !(item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex)))}
+                                  />
+                                  <span>
+                                    <strong>{offer.service?.name || offer.offer_name}</strong>
+                                    <small>{offer.offer_name} · {offer.refund_policy === 'refundable' ? 'Có thể hoàn theo chính sách đặt chỗ' : 'Không hoàn tiền'} · còn {Number(offer.capacity) - Number(offer.reserved_quantity)} suất</small>
+                                  </span>
+                                  <strong>{money(offer.unit_price)}</strong>
+                                </label>
+                                {selection ? (
+                                  <div className="ancillary-quantity">
+                                    <span>Số lượng {offer.offer_name} cho hành khách {passengerIndex + 1}, chặng {legOrder}</span>
+                                    <button type="button" aria-label={`Giảm số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${legOrder}`} disabled={selection.quantity <= 1} onClick={() => setAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity - 1 } : item))}>−</button>
+                                    <output aria-label={`Số lượng đã chọn ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${legOrder}`}>{selection.quantity}</output>
+                                    <button type="button" aria-label={`Tăng số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${legOrder}`} disabled={selection.quantity >= maxQuantity} onClick={() => setAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity + 1 } : item))}>+</button>
+                                  </div>
+                                ) : null}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ))}
+                    </fieldset>
+                  );
+                })}
+              </section>
+            ) : null}
+
+            <div className="passenger-policies-card">
+              <p className="policy-privacy-note">
+                ℹ️ Dữ liệu cá nhân của Quý khách sẽ được Serene Flightways bảo mật và xử lý theo <strong>Chính sách quyền riêng tư</strong>. Quý khách có thể lựa chọn cho phép sử dụng dữ liệu cho các mục đích sau:
+              </p>
+              <div className="policy-checkbox-item">
+                <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+                <span>Gửi thông tin khuyến mãi, ưu đãi đặc quyền hành trình</span>
               </div>
-              {passengers.length > 1 ? <div className="seat-passenger-tabs" role="group" aria-label="Hành khách">{passengers.map((_passenger, index) => <button type="button" key={index} aria-pressed={activeSeatPassenger === index} onClick={() => setActiveSeatPassenger(index)}>Hành khách {index + 1}</button>)}</div> : null}
-              {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((leg, index) => {
-                const legOrder = index + 1; const map = seatMaps[legOrder];
-                if (!map?.supported) return null;
-                const fareId = Number(leg.fare?.id || fare?.id);
-                const selected = seatSelections.find((item) => item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)?.seat_no;
-                const aisles = map.aisle_after || [];
-                return <fieldset className="seat-leg-picker" key={leg.flight.id}><legend>Chặng {legOrder}: {airportsOf(leg.flight)}</legend><div className="seat-grid" style={{ '--seat-columns': map.column_count + aisles.length }}>
-                  {map.seats.map((seat) => { const eligible = Number(seat.fare_class_id) === fareId; const disabled = seat.status !== 'available' || !eligible; const displayColumn = seat.column_number + aisles.filter((after) => after < seat.column_number).length; return <button key={seat.seat_no} style={{ gridColumn: displayColumn, gridRow: seat.row_number }} type="button" className={`seat-choice ${seat.status} ${selected === seat.seat_no ? 'selected' : ''}`} aria-label={`${seat.seat_no}, ${seat.status === 'available' ? (eligible ? 'trống' : 'không thuộc hạng vé') : 'đã giữ hoặc không bán'}`} aria-pressed={selected === seat.seat_no} disabled={disabled} title={`${seat.seat_no} · ${seat.zone}${seat.special_properties?.length ? ` · ${seat.special_properties.join(', ')}` : ''}`} onClick={() => setSeatSelections((current) => [...current.filter((item) => !(item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)), { leg_order: legOrder, passenger_index: activeSeatPassenger, seat_no: seat.seat_no }])}>{seat.seat_no}</button>; })}
-                  {aisles.flatMap((after) => Array.from({ length: map.row_count }, (_, row) => <span key={`aisle-${row + 1}-${after}`} className="seat-aisle" style={{ gridColumn: after + aisles.filter((column) => column < after).length + 1, gridRow: row + 1 }} aria-hidden="true" />))}
-                </div><button className="button button-outline seat-clear-button" type="button" disabled={!selected} onClick={() => setSeatSelections((current) => current.filter((item) => !(item.leg_order === legOrder && item.passenger_index === activeSeatPassenger)))}>Bỏ chọn ghế chặng này</button></fieldset>;
-              })}
-            </section> : null}
-            {Object.values(ancillaryOffers).some((offers) => offers.length > 0) ? <section className="seat-selection-picker ancillary-picker" aria-label="Dịch vụ bổ sung theo hành khách và chặng">
-              <h3>Dịch vụ bổ sung (không bắt buộc)</h3><p>Giá và điều kiện áp dụng được xác nhận lại trên máy chủ khi tạo đặt chỗ.</p>
-              {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((leg, legIndex) => {
-                const legOrder = legIndex + 1; const offers = ancillaryOffers[legOrder] || [];
-                if (!offers.length) return null;
-                return <fieldset className="seat-leg-picker" key={leg.flight.id}><legend>Chặng {legOrder}: {airportsOf(leg.flight)}</legend>
-                  {passengers.map((_passenger, passengerIndex) => <div className="ancillary-passenger-options" key={passengerIndex}><strong>Hành khách {passengerIndex + 1}</strong>{offers.map((offer) => {
-                    const selection = ancillarySelections.find((item) => item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex);
-                    const maxQuantity = ancillaryMaxQuantity(offer, ancillarySelections, legOrder, passengerIndex);
-                    return <div className="ancillary-choice" key={offer.id}><label className="booking-fare-option"><input type="checkbox" checked={Boolean(selection)} disabled={!selection && maxQuantity < 1} onChange={(event) => setAncillarySelections((current) => event.target.checked ? [...current, { offer_id: Number(offer.id), leg_order: legOrder, passenger_index: passengerIndex, quantity: 1 }] : current.filter((item) => !(item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex)))} /><span><strong>{offer.service?.name || offer.offer_name}</strong><small>{offer.offer_name} · {offer.refund_policy === 'refundable' ? 'Có thể hoàn theo chính sách đặt chỗ' : 'Không hoàn tiền'} · còn {Number(offer.capacity) - Number(offer.reserved_quantity)} suất</small></span><strong>{money(offer.unit_price)}</strong></label>{selection ? <div className="ancillary-quantity"><span>Số lượng {offer.offer_name} cho hành khách {passengerIndex + 1}, chặng {legOrder}</span><button type="button" aria-label={`Giảm số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${legOrder}`} disabled={selection.quantity <= 1} onClick={() => setAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity - 1 } : item))}>−</button><output aria-label={`Số lượng đã chọn ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${legOrder}`}>{selection.quantity}</output><button type="button" aria-label={`Tăng số lượng ${offer.offer_name} cho hành khách ${passengerIndex + 1}, chặng ${legOrder}`} disabled={selection.quantity >= maxQuantity} onClick={() => setAncillarySelections((current) => current.map((item) => item.offer_id === Number(offer.id) && item.leg_order === legOrder && item.passenger_index === passengerIndex ? { ...item, quantity: item.quantity + 1 } : item))}>+</button></div> : null}</div>;
-                  })}</div>)}
-                </fieldset>;
-              })}
-            </section> : null}
-            {passengers.map((passenger, index) => <fieldset className="passenger-fieldset" key={index}><legend>Hành khách {index + 1}</legend><Field id={`passenger-name-${index}`} label="Họ tên" autoComplete="name" required value={passenger.passenger_name} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))} error={formErrors[`passengers.${index}.passenger_name`]} /><Field id={`passenger-passport-${index}`} label="Số hộ chiếu (không bắt buộc)" value={passenger.passport_no} onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passport_no: event.target.value } : item))} error={formErrors[`passengers.${index}.passport_no`]} /></fieldset>)}
+              <div className="policy-checkbox-item">
+                <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+                <span>Thực hiện khảo sát và nâng cao chất lượng dịch vụ</span>
+              </div>
+              <div className="policy-checkbox-item">
+                <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+                <span>Lưu thông tin hành khách cho các lần đặt vé sau</span>
+              </div>
+              <div style={{ marginTop: '0.4rem', paddingTop: '0.65rem', borderTop: '1px dashed #cbd5e1' }}>
+                <div className="policy-checkbox-item" style={{ fontWeight: 600 }}>
+                  <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+                  <span>
+                    Tôi đã đọc, hiểu và đồng ý với <a>Chính sách quyền riêng tư</a>, <a>Điều lệ vận chuyển</a>, Điều kiện vé và Quy định vật dụng hạn chế mang lên tàu bay của Serene Flightways.
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {state.fields ? Object.entries(state.fields).map(([field, message]) => <small className="field-error" key={field}>{message}</small>) : null}
-            <div className="booking-total-row"><span>Giá tham khảo trước ưu đãi</span><strong className="table-mono-cell">{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong><small>{promotionState.validCode ? 'Mã đã được kiểm tra; hệ thống sẽ tính và xác nhận tổng tiền khi tạo đặt chỗ.' : 'Giá cuối cùng và ưu đãi (nếu có) do hệ thống xác nhận khi tạo đặt chỗ.'}</small></div>
-            <button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Tạo đặt chỗ và tiếp tục thanh toán'}</button>
-          </form>
-        </section>
-        <aside className="booking-passenger-summary" aria-label="Tóm tắt hành trình">
-          <span className="eyebrow">TÓM TẮT HÀNH TRÌNH</span>
-          <h3>{itineraryFlights.length > 1 ? 'Các chặng đã chọn' : 'Chuyến bay đã chọn'}</h3>
-          {itineraryFlights.length > 1 ? <ol className="booking-itinerary-summary">{itineraryFlights.map((item, index) => <li key={`${item.flight.id}-${index}`}><div><strong>Chặng {index + 1}: {airportsOf(item.flight)}</strong><span>{dateTime(item.flight.departure_time)}</span><small>{flightCarrier(item.flight)} · {item.fare.class_name}</small></div><b className="table-mono-cell">{money(Number(item.fare.price) * passengers.length)}</b></li>)}</ol> : <><div className="passenger-route-summary"><strong className="table-mono-cell">{flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || '—'}</strong><span aria-hidden="true">→</span><strong className="table-mono-cell">{flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || '—'}</strong></div><p className="passenger-airline-summary">{flightCarrier(flight)}</p><dl><div><dt>Khởi hành</dt><dd>{dateTime(flight?.departure_time)}</dd></div><div><dt>Hạng vé</dt><dd>{fare?.class_name || '—'}</dd></div></dl></>}
-          <dl><div><dt>Số hành khách</dt><dd className="table-mono-cell">{passengers.length}</dd></div><div><dt>Giá tham khảo</dt><dd><strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}</strong></dd></div></dl>
-          <p className="passenger-summary-note">Giá cuối cùng và thời gian giữ chỗ do hệ thống xác nhận sau khi gửi yêu cầu.</p>
-        </aside>
-      </div> : null}
+          </div>
+
+          <aside className="passenger-vj-summary-sidebar" role="complementary" aria-label="Tóm tắt hành trình">
+            <h3 className="passenger-vj-summary-header">
+              <span>THÔNG TIN ĐẶT CHỖ</span>
+              <span style={{ fontSize: '0.8rem', opacity: 0.85 }}>{itineraryFlights.length > 1 ? `${itineraryFlights.length} chặng` : '1 chặng'}</span>
+            </h3>
+            <div className="passenger-vj-summary-content">
+              <div className="summary-passenger-badge">
+                <span>👤 Thông tin hành khách</span>
+                <strong className="table-mono-cell">{passengers.length} Người lớn</strong>
+              </div>
+
+              {(itineraryFlights.length > 1 ? itineraryFlights : [{ flight, fare }]).map((item, idx) => {
+                const legFlight = item.flight || flight;
+                const legFare = item.fare || fare;
+                const legPrice = Number(legFare?.price || 0) * passengers.length;
+                return (
+                  <div className="summary-leg-block" key={idx}>
+                    <div className="summary-leg-title-bar">
+                      <span>{itineraryFlights.length > 1 ? `Chặng ${idx + 1}: ${airportsOf(legFlight)}` : (idx === 0 ? 'Chuyến đi' : 'Chuyến bay')}</span>
+                      <span className="summary-leg-price">{money(legPrice)}</span>
+                    </div>
+                    <div className="summary-leg-route-details">
+                      <div className="route-airports">
+                        <span>{legFlight?.departureAirport?.city || legFlight?.departureAirport?.iata_code || 'SGN'}</span>
+                        <span style={{ color: '#0d9488' }}>✈</span>
+                        <span>{legFlight?.arrivalAirport?.city || legFlight?.arrivalAirport?.iata_code || 'HAN'}</span>
+                      </div>
+                      <div className="route-timing">
+                        {dateTime(legFlight?.departure_time)} | {flightCarrier(legFlight)} | {legFare?.class_name}
+                      </div>
+                    </div>
+                    <div className="summary-price-breakdown">
+                      <div className="summary-price-row">
+                        <span>Giá vé ({passengers.length} khách):</span>
+                        <strong>{money(legPrice)}</strong>
+                      </div>
+                      <div className="summary-price-row">
+                        <span>Thuế, phí:</span>
+                        <span style={{ color: '#059669', fontWeight: 600 }}>Đã bao gồm trong giá vé</span>
+                      </div>
+                      <div className="summary-price-row">
+                        <span>Dịch vụ & Ghế:</span>
+                        <strong>0 VND</strong>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              <div className="booking-total-row" style={{ marginTop: '0.25rem', paddingTop: '0.65rem', borderTop: '1px solid #e2e8f0' }}>
+                <span>Giá tham khảo trước ưu đãi</span>
+                <strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>
+                  {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
+                </strong>
+              </div>
+              {promotionState.validCode ? <p style={{ margin: '0.35rem 0 0', fontSize: '0.82rem', color: '#0d9488', fontWeight: 700 }}>Áp dụng mã ưu đãi: {promotionState.validCode}</p> : null}
+            </div>
+
+            <div className="passenger-vj-total-box">
+              <span className="total-label">Tổng tiền</span>
+              <span className="total-amount">
+                {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
+              </span>
+            </div>
+          </aside>
+
+          <div className="passenger-bottom-actions">
+            <div className="passenger-bottom-actions-container">
+              <button
+                type="button"
+                className="button-back"
+                onClick={() => {
+                  if (itineraryFlights.length > 1) {
+                    navigate(-1);
+                  } else {
+                    setState((curr) => ({ ...curr, stage: 'fare' }));
+                  }
+                }}
+              >
+                ‹ Quay lại
+              </button>
+              <div className="passenger-bottom-submit-group">
+                {Object.keys(formErrors).length > 0 ? (
+                  <div style={{ color: '#ef4444', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.45rem 0.85rem', borderRadius: '0.375rem' }} role="alert">
+                    <span>⚠️</span>
+                    <span>Vui lòng kiểm tra và điền đầy đủ các thông tin bắt buộc ở trên</span>
+                  </div>
+                ) : null}
+                <div className="passenger-bottom-total-display">
+                  <span className="total-caption">Tổng tiền thanh toán</span>
+                  <span className="total-val">
+                    {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
+                  </span>
+                </div>
+                <button
+                  className="button button-primary"
+                  type="submit"
+                  disabled={state.submitting}
+                  aria-label={state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp (Tạo đặt chỗ)'}
+                  style={{
+                    background: 'linear-gradient(135deg, #0a4946 0%, #073533 100%)',
+                    color: '#ffffff',
+                    fontWeight: 800,
+                    fontSize: '1.05rem',
+                    padding: '0.85rem 2.25rem',
+                    border: 'none',
+                    borderRadius: '0.5rem',
+                    boxShadow: '0 4px 14px rgba(10, 73, 70, 0.35)',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem'
+                  }}
+                >
+                  <span>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp'}</span>
+                  <span aria-hidden="true">➔</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </form>
+      </> : null}
     </section>
   </BookingShell>;
 }

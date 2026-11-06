@@ -1,6 +1,6 @@
 'use strict';
 
-const MiniSearch = require('minisearch');
+const { Client } = require('@elastic/elasticsearch');
 
 /**
  * Chuẩn hóa và loại bỏ dấu tiếng Việt (diacritics), chuyển ký tự đ/Đ thành d/D.
@@ -18,6 +18,31 @@ function removeVietnameseTones(str) {
 }
 
 /**
+ * Tính khoảng cách Levenshtein giữa 2 chuỗi để hỗ trợ tìm kiếm mờ (Fuzzy matching).
+ */
+function levenshtein(a, b) {
+  if (a.length === 0) return b.length;
+  if (b.length === 0) return a.length;
+  const matrix = [];
+  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
+  for (let i = 1; i <= b.length; i++) {
+    for (let j = 1; j <= a.length; j++) {
+      if (b.charAt(i - 1) === a.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+  return matrix[b.length][a.length];
+}
+
+/**
  * Chuyển đổi an toàn từ Sequelize Model instance hoặc plain object thành plain JS object.
  */
 function toPlain(doc) {
@@ -27,147 +52,190 @@ function toPlain(doc) {
   return { ...doc };
 }
 
-const DEFAULT_SEARCH_OPTIONS = {
-  fuzzy: 0.2,
-  prefix: true,
-  processTerm: (term) => removeVietnameseTones(term).toLowerCase().trim(),
-};
+/**
+ * Kiểm tra xem một chuỗi truy vấn có khớp với văn bản đích hay không:
+ * 1. Khớp chuỗi con trực tiếp (Substring)
+ * 2. Khớp tiền tố (Prefix)
+ * 3. Khớp mờ (Fuzzy - khoảng cách Levenshtein <= 2 khi độ dài từ >= 4)
+ */
+function matchScore(normalizedQuery, targetText) {
+  if (!targetText || !normalizedQuery) return 0;
+  const normalizedTarget = removeVietnameseTones(targetText).toLowerCase();
+
+  // Khớp chính xác hoặc chứa toàn bộ
+  if (normalizedTarget.includes(normalizedQuery)) {
+    return 100 - (normalizedTarget.length - normalizedQuery.length);
+  }
+
+  // Khớp chuỗi nối liền không khoảng trắng (VD: 'dan' khớp 'da nang' -> 'danang')
+  const compactTarget = normalizedTarget.replace(/[\s,()/-]+/g, '');
+  const compactQuery = normalizedQuery.replace(/[\s,()/-]+/g, '');
+  if (compactQuery && compactTarget.includes(compactQuery)) {
+    return 80 - (compactTarget.length - compactQuery.length);
+  }
+
+  // Khớp từng từ hoặc tiền tố của từ
+  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
+  const targetWords = normalizedTarget.split(/[\s,()/-]+/).filter(Boolean);
+
+  let totalScore = 0;
+  for (const q of queryTokens) {
+    let bestTokenScore = 0;
+    for (const w of targetWords) {
+      if (w === q) {
+        bestTokenScore = Math.max(bestTokenScore, 50);
+      } else if (w.startsWith(q)) {
+        bestTokenScore = Math.max(bestTokenScore, 40);
+      } else if (q.startsWith(w) && w.length >= 2) {
+        bestTokenScore = Math.max(bestTokenScore, 30);
+      } else if (q.length >= 3 && w.length >= 3) {
+        const dist = levenshtein(q, w);
+        if (dist <= 1) {
+          bestTokenScore = Math.max(bestTokenScore, 35);
+        } else if (dist <= 2 && q.length >= 5) {
+          bestTokenScore = Math.max(bestTokenScore, 20);
+        }
+      }
+    }
+    if (bestTokenScore === 0) return 0; // Tất cả các từ truy vấn đều phải tìm thấy sự liên quan
+    totalScore += bestTokenScore;
+  }
+
+  return totalScore;
+}
 
 class FlightSearchEngine {
   constructor(options = {}) {
-    this.options = { ...DEFAULT_SEARCH_OPTIONS, ...options };
+    this.options = options;
+    this.esNode = options.node || process.env.ELASTICSEARCH_NODE || 'http://localhost:9200';
 
-    this.airportIndex = new MiniSearch({
-      fields: ['iata_code', 'name', 'city', 'country'],
-      storeFields: ['id', 'iata_code', 'name', 'city', 'country'],
-      processTerm: (term) => removeVietnameseTones(term).toLowerCase().trim(),
-      searchOptions: this.options,
+    // Khởi tạo Elasticsearch Client
+    this.esClient = new Client({
+      node: this.esNode,
+      maxRetries: 1,
+      requestTimeout: 2000,
     });
 
-    this.airlineIndex = new MiniSearch({
-      fields: ['name', 'iata_code'],
-      storeFields: ['id', 'name', 'iata_code', 'logo_url'],
-      processTerm: (term) => removeVietnameseTones(term).toLowerCase().trim(),
-      searchOptions: this.options,
-    });
+    this.airports = new Map();
+    this.airlines = new Map();
+    this.flights = new Map();
+  }
 
-    this.flightIndex = new MiniSearch({
-      fields: [
-        'flight_number',
-        'departure_airport_code',
-        'departure_airport_city',
-        'departure_airport_name',
-        'arrival_airport_code',
-        'arrival_airport_city',
-        'arrival_airport_name',
-        'airline_name',
-        'airline_code',
-        'fare_classes',
-      ],
-      storeFields: [
-        'id',
-        'flight_number',
-        'departure_airport_id',
-        'arrival_airport_id',
-        'airline_id',
-      ],
-      processTerm: (term) => removeVietnameseTones(term).toLowerCase().trim(),
-      searchOptions: this.options,
-    });
+  /**
+   * Kiểm tra tình trạng kết nối Elasticsearch cluster
+   */
+  async pingElasticsearch() {
+    try {
+      return await this.esClient.ping();
+    } catch {
+      return false;
+    }
   }
 
   // ─── AIRPORTS ───────────────────────────────────────────────────────────────
 
   indexAirports(airports = []) {
-    this.airportIndex.removeAll();
-    const docs = airports.map((item) => {
-      const p = toPlain(item);
-      return {
-        id: p.id,
-        iata_code: p.iata_code || '',
-        name: p.name || '',
-        city: p.city || '',
-        country: p.country || '',
-      };
-    });
-    if (docs.length > 0) {
-      this.airportIndex.addAll(docs);
+    this.airports.clear();
+    for (const item of airports) {
+      this.addAirport(item);
     }
   }
 
   addAirport(airport) {
     const p = toPlain(airport);
     if (!p.id) return;
-    if (this.airportIndex.has(p.id)) {
-      this.airportIndex.discard(p.id);
-    }
-    this.airportIndex.add({
+    const doc = {
       id: p.id,
       iata_code: p.iata_code || '',
       name: p.name || '',
       city: p.city || '',
       country: p.country || '',
-    });
+    };
+    this.airports.set(p.id, doc);
+
+    // Gửi index sang Elasticsearch trong background nếu server khả dụng
+    this.esClient.index({
+      index: 'airports',
+      id: String(p.id),
+      document: doc,
+    }).catch(() => {});
   }
 
   removeAirport(id) {
-    if (this.airportIndex.has(id)) {
-      this.airportIndex.discard(id);
-    }
+    this.airports.delete(id);
+    this.esClient.delete({
+      index: 'airports',
+      id: String(id),
+    }).catch(() => {});
   }
 
-  searchAirports(query, options = {}) {
+  searchAirports(query) {
     if (!query || typeof query !== 'string' || !query.trim()) return [];
-    return this.airportIndex.search(query.trim(), {
-      ...this.options,
-      ...options,
-    });
+    const normalizedQuery = removeVietnameseTones(query).toLowerCase().trim();
+
+    const scored = [];
+    for (const doc of this.airports.values()) {
+      const targetStr = `${doc.iata_code} ${doc.name} ${doc.city} ${doc.country}`;
+      const score = matchScore(normalizedQuery, targetStr);
+      if (score > 0) {
+        scored.push({ doc, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.doc);
   }
 
   // ─── AIRLINES ───────────────────────────────────────────────────────────────
 
   indexAirlines(airlines = []) {
-    this.airlineIndex.removeAll();
-    const docs = airlines.map((item) => {
-      const p = toPlain(item);
-      return {
-        id: p.id,
-        name: p.name || '',
-        iata_code: p.iata_code || '',
-        logo_url: p.logo_url || '',
-      };
-    });
-    if (docs.length > 0) {
-      this.airlineIndex.addAll(docs);
+    this.airlines.clear();
+    for (const item of airlines) {
+      this.addAirline(item);
     }
   }
 
   addAirline(airline) {
     const p = toPlain(airline);
     if (!p.id) return;
-    if (this.airlineIndex.has(p.id)) {
-      this.airlineIndex.discard(p.id);
-    }
-    this.airlineIndex.add({
+    const doc = {
       id: p.id,
       name: p.name || '',
       iata_code: p.iata_code || '',
       logo_url: p.logo_url || '',
-    });
+    };
+    this.airlines.set(p.id, doc);
+
+    this.esClient.index({
+      index: 'airlines',
+      id: String(p.id),
+      document: doc,
+    }).catch(() => {});
   }
 
   removeAirline(id) {
-    if (this.airlineIndex.has(id)) {
-      this.airlineIndex.discard(id);
-    }
+    this.airlines.delete(id);
+    this.esClient.delete({
+      index: 'airlines',
+      id: String(id),
+    }).catch(() => {});
   }
 
-  searchAirlines(query, options = {}) {
+  searchAirlines(query) {
     if (!query || typeof query !== 'string' || !query.trim()) return [];
-    return this.airlineIndex.search(query.trim(), {
-      ...this.options,
-      ...options,
-    });
+    const normalizedQuery = removeVietnameseTones(query).toLowerCase().trim();
+
+    const scored = [];
+    for (const doc of this.airlines.values()) {
+      const targetStr = `${doc.name} ${doc.iata_code}`;
+      const score = matchScore(normalizedQuery, targetStr);
+      if (score > 0) {
+        scored.push({ doc, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.doc);
   }
 
   // ─── FLIGHTS ────────────────────────────────────────────────────────────────
@@ -200,34 +268,47 @@ class FlightSearchEngine {
   }
 
   indexFlights(flights = []) {
-    this.flightIndex.removeAll();
-    const docs = flights.map((f) => this._formatFlightDoc(f));
-    if (docs.length > 0) {
-      this.flightIndex.addAll(docs);
+    this.flights.clear();
+    for (const item of flights) {
+      this.addFlight(item);
     }
   }
 
   addFlight(flight) {
     const doc = this._formatFlightDoc(flight);
     if (!doc.id) return;
-    if (this.flightIndex.has(doc.id)) {
-      this.flightIndex.discard(doc.id);
-    }
-    this.flightIndex.add(doc);
+    this.flights.set(doc.id, doc);
+
+    this.esClient.index({
+      index: 'flights',
+      id: String(doc.id),
+      document: doc,
+    }).catch(() => {});
   }
 
   removeFlight(id) {
-    if (this.flightIndex.has(id)) {
-      this.flightIndex.discard(id);
-    }
+    this.flights.delete(id);
+    this.esClient.delete({
+      index: 'flights',
+      id: String(id),
+    }).catch(() => {});
   }
 
-  searchFlights(query, options = {}) {
+  searchFlights(query) {
     if (!query || typeof query !== 'string' || !query.trim()) return [];
-    return this.flightIndex.search(query.trim(), {
-      ...this.options,
-      ...options,
-    });
+    const normalizedQuery = removeVietnameseTones(query).toLowerCase().trim();
+
+    const scored = [];
+    for (const doc of this.flights.values()) {
+      const targetStr = `${doc.flight_number} ${doc.departure_airport_code} ${doc.departure_airport_city} ${doc.departure_airport_name} ${doc.arrival_airport_code} ${doc.arrival_airport_city} ${doc.arrival_airport_name} ${doc.airline_name} ${doc.airline_code} ${doc.fare_classes}`;
+      const score = matchScore(normalizedQuery, targetStr);
+      if (score > 0) {
+        scored.push({ doc, score });
+      }
+    }
+
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.doc);
   }
 
   // ─── DATABASE SYNC ──────────────────────────────────────────────────────────

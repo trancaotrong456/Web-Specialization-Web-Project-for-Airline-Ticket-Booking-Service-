@@ -21,6 +21,7 @@
     "smoke:payos-demo": "node scripts/smoke-tests/payos-demo-smoke.js"
   },
   "dependencies": {
+    "@elastic/elasticsearch": "^8.11.0",
     "@payos/node": "^2.0.5",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
@@ -32,7 +33,6 @@
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.2",
     "lucide-react": "^1.61.0",
-    "minisearch": "^7.2.0",
     "morgan": "^1.10.0",
     "mysql2": "^3.24.4",
     "node-cron": "^3.0.3",
