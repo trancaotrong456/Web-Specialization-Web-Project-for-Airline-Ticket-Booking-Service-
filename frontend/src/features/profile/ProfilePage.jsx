@@ -238,21 +238,6 @@ export function ProfilePage() {
                 </span>
               </div>
               <div className="vj-info-item">
-                <span className="vj-info-label">Hạng thẻ</span>
-                <span className="vj-info-value">
-                  <span className="tier-badge">⭐ Red</span>
-                </span>
-              </div>
-              <div className="vj-info-item">
-                <span className="vj-info-label">Điểm tích lũy</span>
-                <span className="vj-info-value">
-                  <span className="points-badge">🪙 0 dặm</span>
-                  <a href="#reward" className="points-link" onClick={(e) => { e.preventDefault(); alert('Chương trình Đổi thưởng Serene Miles / SkyPoint sẽ sớm ra mắt!'); }}>
-                    Đổi thưởng qua SkyPoint
-                  </a>
-                </span>
-              </div>
-              <div className="vj-info-item">
                 <span className="vj-info-label">Số điện thoại</span>
                 <span className="vj-info-value">{form.phone || '+84915780867'}</span>
               </div>

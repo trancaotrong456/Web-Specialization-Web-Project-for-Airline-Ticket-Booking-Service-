@@ -20,7 +20,6 @@ export function ProfileLayout({ title, description, children }) {
               <div className="sidebar-user-meta">
                 <span className="sidebar-greeting">Xin chào,</span>
                 <strong className="sidebar-user-name">{displayName}</strong>
-                <span className="sidebar-user-tier">⭐ Hội viên Serene Club</span>
               </div>
             </div>
 
