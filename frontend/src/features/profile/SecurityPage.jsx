@@ -53,15 +53,92 @@ export function SecurityPage() {
 
   return (
     <ProfileLayout title="Bảo mật tài khoản" description="Đổi mật khẩu định kỳ để bảo vệ tài khoản đặt vé.">
-      <section className="surface-card account-card account-card-narrow">
-        <Notice type="error">{message}</Notice>
-        <form className="form-stack" onSubmit={submit} noValidate>
-          <Field id="current-password" name="current_password" label="Mật khẩu hiện tại" type="password" autoComplete="current-password" value={form.current_password} onChange={update} error={errors.current_password} />
-          <Field id="new-password" name="new_password" label="Mật khẩu mới" type="password" autoComplete="new-password" value={form.new_password} onChange={update} error={errors.new_password} hint="Tối thiểu 6 ký tự." />
-          <Field id="confirm-password" name="password_confirmation" label="Xác nhận mật khẩu mới" type="password" autoComplete="new-password" value={form.password_confirmation} onChange={update} error={errors.password_confirmation} />
-          <button className="button button-primary" type="submit" disabled={pending}>{pending ? 'Đang cập nhật…' : 'Đổi mật khẩu'}</button>
-        </form>
-      </section>
+      <div className="security-page-grid">
+        <section className="surface-card account-card account-card-narrow vj-card">
+          <div className="vj-card-header">
+            <h2 className="vj-card-title">
+              <span>🔒</span>
+              <span>Đổi mật khẩu</span>
+            </h2>
+          </div>
+          <Notice type="error">{message}</Notice>
+          <form className="form-stack" onSubmit={submit} noValidate>
+            <Field
+              id="current-password"
+              name="current_password"
+              label="Mật khẩu hiện tại"
+              type="password"
+              autoComplete="current-password"
+              value={form.current_password}
+              onChange={update}
+              error={errors.current_password}
+            />
+            <Field
+              id="new-password"
+              name="new_password"
+              label="Mật khẩu mới"
+              type="password"
+              autoComplete="new-password"
+              value={form.new_password}
+              onChange={update}
+              error={errors.new_password}
+              hint="Tối thiểu 6 ký tự."
+            />
+            <Field
+              id="confirm-password"
+              name="password_confirmation"
+              label="Xác nhận mật khẩu mới"
+              type="password"
+              autoComplete="new-password"
+              value={form.password_confirmation}
+              onChange={update}
+              error={errors.password_confirmation}
+            />
+            <button className="button button-primary" type="submit" disabled={pending}>
+              {pending ? 'Đang cập nhật…' : 'Đổi mật khẩu'}
+            </button>
+          </form>
+        </section>
+
+        {/* Supplementary Security Info Card inspired by Vietjet Air */}
+        <section className="vj-card security-overview-card">
+          <div className="vj-card-header">
+            <h2 className="vj-card-title">
+              <span>🛡️</span>
+              <span>Cài đặt an toàn & Trạng thái tài khoản</span>
+            </h2>
+          </div>
+          <div className="security-status-list">
+            <div className="security-status-item">
+              <div className="status-icon">✅</div>
+              <div>
+                <strong>Xác thực phiên làm việc an toàn</strong>
+                <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+                  Hệ thống sử dụng cơ chế bảo mật JWT kép (Access Token & Refresh Token) tự động xoay vòng an toàn.
+                </p>
+              </div>
+            </div>
+            <div className="security-status-item">
+              <div className="status-icon">🔐</div>
+              <div>
+                <strong>Khuyến nghị mật khẩu</strong>
+                <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+                  Nên sử dụng mật khẩu có chữ hoa, chữ thường, số và ký tự đặc biệt để ngăn ngừa tấn công dò quét.
+                </p>
+              </div>
+            </div>
+            <div className="security-status-item">
+              <div className="status-icon">⚠️</div>
+              <div>
+                <strong>Yêu cầu khóa / Đóng tài khoản khẩn cấp</strong>
+                <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
+                  Nếu nghi ngờ bị lộ thông tin, hãy liên hệ tổng đài 1900 1886 hoặc hỗ trợ trực tuyến để khóa tài khoản ngay lập tức.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
     </ProfileLayout>
   );
 }
