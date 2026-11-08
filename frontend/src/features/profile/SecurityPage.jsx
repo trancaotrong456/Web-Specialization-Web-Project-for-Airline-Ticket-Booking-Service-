@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
 import { Field } from '../../components/Field';
 import { Notice } from '../../components/Notice';
@@ -24,6 +25,9 @@ export function SecurityPage() {
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const update = (event) => {
     const { name, value } = event.target;
@@ -67,32 +71,62 @@ export function SecurityPage() {
               id="current-password"
               name="current_password"
               label="Mật khẩu hiện tại"
-              type="password"
+              type={showCurrentPassword ? 'text' : 'password'}
               autoComplete="current-password"
               value={form.current_password}
               onChange={update}
               error={errors.current_password}
+              suffix={
+                <button
+                  className="field-icon-button"
+                  type="button"
+                  aria-label={showCurrentPassword ? 'Ẩn mật khẩu hiện tại' : 'Hiện mật khẩu hiện tại'}
+                  onClick={() => setShowCurrentPassword((value) => !value)}
+                >
+                  {showCurrentPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+                </button>
+              }
             />
             <Field
               id="new-password"
               name="new_password"
               label="Mật khẩu mới"
-              type="password"
+              type={showNewPassword ? 'text' : 'password'}
               autoComplete="new-password"
               value={form.new_password}
               onChange={update}
               error={errors.new_password}
               hint="Tối thiểu 6 ký tự."
+              suffix={
+                <button
+                  className="field-icon-button"
+                  type="button"
+                  aria-label={showNewPassword ? 'Ẩn mật khẩu mới' : 'Hiện mật khẩu mới'}
+                  onClick={() => setShowNewPassword((value) => !value)}
+                >
+                  {showNewPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+                </button>
+              }
             />
             <Field
               id="confirm-password"
               name="password_confirmation"
               label="Xác nhận mật khẩu mới"
-              type="password"
+              type={showConfirmPassword ? 'text' : 'password'}
               autoComplete="new-password"
               value={form.password_confirmation}
               onChange={update}
               error={errors.password_confirmation}
+              suffix={
+                <button
+                  className="field-icon-button"
+                  type="button"
+                  aria-label={showConfirmPassword ? 'Ẩn xác nhận mật khẩu mới' : 'Hiện xác nhận mật khẩu mới'}
+                  onClick={() => setShowConfirmPassword((value) => !value)}
+                >
+                  {showConfirmPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+                </button>
+              }
             />
             <button className="button button-primary" type="submit" disabled={pending}>
               {pending ? 'Đang cập nhật…' : 'Đổi mật khẩu'}

@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryRouter } from 'react-router-dom';
@@ -101,7 +101,15 @@ describe('Flight and Fare Class management screens', () => {
     });
     expect(await screen.findByRole('heading', { name: 'Chỉnh sửa chuyến bay' })).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
-    await waitFor(() => expect(fetch.mock.calls.some(([, options]) => options.method === 'PUT')).toBe(true));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Xác nhận thay đổi thông tin chuyến bay' });
+    expect(dialog).toBeInTheDocument();
+    expect(within(dialog).getByText(/34 hành khách đặt chỗ/)).toBeInTheDocument();
+    expect(fetch.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false);
+
+    await user.click(within(dialog).getByRole('button', { name: 'Xác nhận cập nhật' }));
+
+    await waitFor(() => expect(fetch.mock.calls.filter(([, options]) => options?.method === 'PUT').length).toBe(1));
     const [, options] = fetch.mock.calls.find(([, candidate]) => candidate.method === 'PUT');
     expect(JSON.parse(options.body)).toEqual({
       departure_time: '2026-11-05T06:30:00.000Z',
@@ -110,6 +118,59 @@ describe('Flight and Fare Class management screens', () => {
     expect(options.body).not.toContain('available_seats');
     expect(screen.queryByLabelText('Số ghế còn trống')).not.toBeInTheDocument();
     expect(fetch.mock.calls.some(([url]) => url.includes('/airlines?') || url.includes('/airports?'))).toBe(false);
+  });
+
+  it('cancels flight update when clicking Huy on ConfirmDialog without calling API', async () => {
+    const user = userEvent.setup();
+    const fetch = renderAs('admin', '/admin/flights/5/edit', (url, options) => {
+      if (url.endsWith('/flights/5') && options.method === 'PUT') return flight;
+      if (url.endsWith('/flights/5')) return flight;
+      throw new Error(`Unexpected request ${url}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Chỉnh sửa chuyến bay' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Xác nhận thay đổi thông tin chuyến bay' });
+    expect(dialog).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: 'Hủy' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false);
+  });
+
+  it('saves directly without ConfirmDialog when flight has no booked seats', async () => {
+    const user = userEvent.setup();
+    const unbookedFlight = { ...flight, available_seats: flight.total_seats };
+    const fetch = renderAs('admin', '/admin/flights/5/edit', (url, options) => {
+      if (url.endsWith('/flights/5') && options.method === 'PUT') return unbookedFlight;
+      if (url.endsWith('/flights/5')) return unbookedFlight;
+      throw new Error(`Unexpected request ${url}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Chỉnh sửa chuyến bay' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    await waitFor(() => expect(fetch.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(true));
+  });
+
+  it('blocks submission and does not open ConfirmDialog when arrival time precedes or equals departure time', async () => {
+    const user = userEvent.setup();
+    const fetch = renderAs('admin', '/admin/flights/5/edit', (url, options) => {
+      if (url.endsWith('/flights/5') && options.method === 'PUT') return flight;
+      if (url.endsWith('/flights/5')) return flight;
+      throw new Error(`Unexpected request ${url}`);
+    });
+    expect(await screen.findByRole('heading', { name: 'Chỉnh sửa chuyến bay' })).toBeInTheDocument();
+
+    const arrivalInput = screen.getByLabelText('Thời gian đến');
+    fireEvent.change(arrivalInput, { target: { value: '2026-11-05T05:00' } });
+
+    await user.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+
+    const errors = await screen.findAllByText('Thời gian đến phải sau thời gian khởi hành.');
+    expect(errors.length).toBeGreaterThan(0);
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(fetch.mock.calls.some(([, options]) => options?.method === 'PUT')).toBe(false);
   });
 
   it('creates a Flight with API-provided airline and airport options and only approved fields', async () => {
