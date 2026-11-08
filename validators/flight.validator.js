@@ -59,7 +59,7 @@ const searchFlightValidator = [
   query('max_duration_minutes').optional().isInt({ min: 1, max: 1440 }).withMessage('max_duration_minutes must be between 1 and 1440'),
   query('sort_by')
     .optional()
-    .isIn(['price_low', 'price_high', 'departure_earliest', 'departure_latest', 'duration_shortest', 'arrival_earliest'])
+    .isIn(['price_low', 'price_high', 'departure_earliest', 'departure_latest', 'duration_shortest', 'arrival_earliest', 'relevance'])
     .withMessage('sort_by is not supported'),
   query('max_price').custom((value, { req }) => {
     if (value !== undefined && req.query.min_price !== undefined && Number(value) < Number(req.query.min_price)) {

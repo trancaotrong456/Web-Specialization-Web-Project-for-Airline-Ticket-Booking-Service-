@@ -8,9 +8,13 @@ class AirportService {
   async getAll({ page = 1, limit = 20, search } = {}) {
     const query = { page, limit, search };
     if (this.searchEngine && search && typeof search === 'string' && search.trim()) {
-      const results = this.searchEngine.searchAirports(search.trim());
-      if (results && results.length > 0) {
+      const searchResult = await this.searchEngine.searchAirports(search.trim());
+      if (searchResult && !searchResult.fallback) {
+        const results = Array.isArray(searchResult) ? searchResult : searchResult.items || [];
         query.matchingIds = results.map((r) => r.id);
+        query.fromElasticsearch = true;
+      } else {
+        query.fromDatabaseFallback = true;
       }
     }
     const { count, rows } = await this.repository.findPage(query);
