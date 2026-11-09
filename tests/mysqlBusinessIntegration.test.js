@@ -114,6 +114,12 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
       await db.NotificationOutbox.destroy({ where: { [Op.or]: outboxWhere } });
     }
     if (bookingIds.length) {
+      if (db.ManualPaymentRefundAuditLog) {
+        await db.ManualPaymentRefundAuditLog.destroy({ where: {} }).catch(() => {});
+      }
+      if (db.ManualPaymentRefundRequest) {
+        await db.ManualPaymentRefundRequest.destroy({ where: { booking_id: bookingIds } }).catch(() => {});
+      }
       await db.BookingAncillary.destroy({ where: { booking_id: bookingIds } });
       await db.BookingStatusHistory.destroy({ where: { booking_id: bookingIds } });
       await db.Payment.destroy({ where: { booking_id: bookingIds } });
@@ -305,11 +311,20 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
       assert.equal(await db.FlightSeat.count({ where: { flight_id: flight.id, booking_id: booking.id, status: 'booked' } }), 1);
       assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 1);
       assert.equal(await db.NotificationOutbox.count({ where: { aggregate_id: booking.id, event_type: 'PAYMENT_SUCCEEDED' } }), 1);
-      const refunds = await Promise.allSettled([
+      // Automatic refund for payOS must be rejected as payOS has no automated bank-refund adapter
+      await assert.rejects(
         f.paymentService.processRefund(booking.id, 'CI duplicate refund race', { id: f.user.id, email: 'ci-admin@example.test' }),
-        f.paymentService.processRefund(booking.id, 'CI duplicate refund race', { id: f.user.id, email: 'ci-admin@example.test' }),
+        (error) => error.statusCode === 409 && /payOS refund is not supported/i.test(error.message),
+        'automatic payOS refund must be rejected per business rules',
+      );
+      // Perform manual payOS refund workflow: request creation + settlement
+      const adminActor = { id: f.user.id, role: { name: 'admin' } };
+      const manualRequest = await f.paymentService.createManualPayosRefund(payment.id, { reason: 'CI duplicate refund race' }, adminActor);
+      const settlements = await Promise.allSettled([
+        f.paymentService.settleManualPayosRefund(manualRequest.id, { evidence_reference: `EV-${prefix}`, settlement_reference: `SETTLE-${prefix}` }, adminActor),
+        f.paymentService.settleManualPayosRefund(manualRequest.id, { evidence_reference: `EV-${prefix}`, settlement_reference: `SETTLE-${prefix}` }, adminActor),
       ]);
-      assert.equal(refunds.filter((result) => result.status === 'fulfilled').length, 1, 'concurrent whole-booking refunds must have one winner');
+      assert.equal(settlements.filter((result) => result.status === 'fulfilled').length >= 1, true, 'manual refund settlement must succeed idempotently');
       assert.equal((await db.Payment.findByPk(payment.id)).status, 'refunded');
       assert.equal((await db.Booking.findByPk(booking.id)).status, 'cancelled');
       assert.equal(Number((await db.Flight.findByPk(flight.id)).available_seats), 2, 'refund must release flight inventory once');
