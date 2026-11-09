@@ -29,6 +29,7 @@ const { authenticate, optionalAuth, authorize } = guards;
 const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator, manualRefundCreateValidator, manualRefundIdValidator, manualRefundSettleValidator, manualRefundRejectValidator } = { ...defaultValidators, ...validators };
 const { validate } = validation;
 const resolvedPaymentStatusValidator = paymentStatusValidator || defaultValidators.paymentStatusValidator;
+const notImplemented = (_req, res) => res.status(501).json({ success: false, message: 'Not implemented' });
 const customerPaymentStatusHandler = paymentController.getCustomerPaymentStatus || ((_req, _res, next) => next());
 
 // Administrative payment history and detail (report Table 2.1).
@@ -41,16 +42,16 @@ router.get(
     paymentController.getAllPayments
 );
 
-router.get('/reconciliation-cases', authenticate, authorize('admin', 'staff'), reconciliationCaseListValidator, validate, paymentController.getReconciliationCases);
-router.get('/reconciliation-cases/:id', authenticate, authorize('admin', 'staff'), reconciliationCaseIdValidator, validate, paymentController.getReconciliationCaseById);
-router.get('/reconciliation-metrics', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetrics);
-router.get('/reconciliation-metrics/prometheus', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetricsPrometheus);
-router.post('/reconciliation-cases/:id/manual-review', authenticate, authorize('admin', 'staff'), reconciliationReviewActionValidator, validate, paymentController.recordManualReviewAction);
-router.post('/:paymentId/manual-refund', authenticate, authorize('admin'), manualRefundCreateValidator, validate, paymentController.createManualPayosRefund);
-router.get('/manual-refunds', authenticate, authorize('admin'), paymentController.listManualPayosRefunds);
-router.get('/manual-refunds/:id', authenticate, authorize('admin'), manualRefundIdValidator, validate, paymentController.getManualPayosRefund);
-router.post('/manual-refunds/:id/settle', authenticate, authorize('admin'), manualRefundSettleValidator, validate, paymentController.settleManualPayosRefund);
-router.post('/manual-refunds/:id/reject', authenticate, authorize('admin'), manualRefundRejectValidator, validate, paymentController.rejectManualPayosRefund);
+router.get('/reconciliation-cases', authenticate, authorize('admin', 'staff'), reconciliationCaseListValidator, validate, paymentController.getReconciliationCases || notImplemented);
+router.get('/reconciliation-cases/:id', authenticate, authorize('admin', 'staff'), reconciliationCaseIdValidator, validate, paymentController.getReconciliationCaseById || notImplemented);
+router.get('/reconciliation-metrics', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetrics || notImplemented);
+router.get('/reconciliation-metrics/prometheus', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetricsPrometheus || notImplemented);
+router.post('/reconciliation-cases/:id/manual-review', authenticate, authorize('admin', 'staff'), reconciliationReviewActionValidator, validate, paymentController.recordManualReviewAction || notImplemented);
+router.post('/:paymentId/manual-refund', authenticate, authorize('admin'), manualRefundCreateValidator, validate, paymentController.createManualPayosRefund || notImplemented);
+router.get('/manual-refunds', authenticate, authorize('admin'), paymentController.listManualPayosRefunds || notImplemented);
+router.get('/manual-refunds/:id', authenticate, authorize('admin'), manualRefundIdValidator, validate, paymentController.getManualPayosRefund || notImplemented);
+router.post('/manual-refunds/:id/settle', authenticate, authorize('admin'), manualRefundSettleValidator, validate, paymentController.settleManualPayosRefund || notImplemented);
+router.post('/manual-refunds/:id/reject', authenticate, authorize('admin'), manualRefundRejectValidator, validate, paymentController.rejectManualPayosRefund || notImplemented);
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);
