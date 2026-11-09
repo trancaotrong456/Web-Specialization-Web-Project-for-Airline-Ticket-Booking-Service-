@@ -1,10 +1,11 @@
 'use strict';
 
-const { Client } = require('@elastic/elasticsearch');
+const { getElasticsearchClient, checkElasticsearchHealth } = require('../../../infrastructure/elasticsearch/elasticsearchClient');
+const { INDEX_NAMES, ensureIndicesExist } = require('../../../infrastructure/elasticsearch/indexManager');
+const { formatAirportDoc, formatFlightDoc, syncAllToElasticsearch } = require('../../../infrastructure/elasticsearch/elasticsearchSync');
 
 /**
  * Chuẩn hóa và loại bỏ dấu tiếng Việt (diacritics), chuyển ký tự đ/Đ thành d/D.
- * Giúp tìm kiếm không phân biệt có dấu và không dấu (VD: 'ha noi' khớp 'Hà Nội').
  *
  * @param {string} str - Chuỗi đầu vào
  * @returns {string} - Chuỗi đã loại bỏ dấu tiếng Việt
@@ -17,116 +18,110 @@ function removeVietnameseTones(str) {
     .replace(/[đĐ]/g, (m) => (m === 'đ' ? 'd' : 'D'));
 }
 
-/**
- * Tính khoảng cách Levenshtein giữa 2 chuỗi để hỗ trợ tìm kiếm mờ (Fuzzy matching).
- */
-function levenshtein(a, b) {
-  if (a.length === 0) return b.length;
-  if (b.length === 0) return a.length;
-  const matrix = [];
-  for (let i = 0; i <= b.length; i++) matrix[i] = [i];
-  for (let j = 0; j <= a.length; j++) matrix[0][j] = j;
-  for (let i = 1; i <= b.length; i++) {
-    for (let j = 1; j <= a.length; j++) {
-      if (b.charAt(i - 1) === a.charAt(j - 1)) {
-        matrix[i][j] = matrix[i - 1][j - 1];
-      } else {
-        matrix[i][j] = Math.min(
-          matrix[i - 1][j - 1] + 1,
-          matrix[i][j - 1] + 1,
-          matrix[i - 1][j] + 1
-        );
-      }
-    }
-  }
-  return matrix[b.length][a.length];
-}
-
-/**
- * Chuyển đổi an toàn từ Sequelize Model instance hoặc plain object thành plain JS object.
- */
-function toPlain(doc) {
-  if (!doc || typeof doc !== 'object') return {};
-  if (typeof doc.get === 'function') return doc.get({ plain: true });
-  if (typeof doc.toJSON === 'function') return doc.toJSON();
-  return { ...doc };
-}
-
-/**
- * Kiểm tra xem một chuỗi truy vấn có khớp với văn bản đích hay không:
- * 1. Khớp chuỗi con trực tiếp (Substring)
- * 2. Khớp tiền tố (Prefix)
- * 3. Khớp mờ (Fuzzy - khoảng cách Levenshtein <= 2 khi độ dài từ >= 4)
- */
-function matchScore(normalizedQuery, targetText) {
-  if (!targetText || !normalizedQuery) return 0;
-  const normalizedTarget = removeVietnameseTones(targetText).toLowerCase();
-
-  // Khớp chính xác hoặc chứa toàn bộ
-  if (normalizedTarget.includes(normalizedQuery)) {
-    return 100 - (normalizedTarget.length - normalizedQuery.length);
-  }
-
-  // Khớp chuỗi nối liền không khoảng trắng (VD: 'dan' khớp 'da nang' -> 'danang')
-  const compactTarget = normalizedTarget.replace(/[\s,()/-]+/g, '');
-  const compactQuery = normalizedQuery.replace(/[\s,()/-]+/g, '');
-  if (compactQuery && compactTarget.includes(compactQuery)) {
-    return 80 - (compactTarget.length - compactQuery.length);
-  }
-
-  // Khớp từng từ hoặc tiền tố của từ
-  const queryTokens = normalizedQuery.split(/\s+/).filter(Boolean);
-  const targetWords = normalizedTarget.split(/[\s,()/-]+/).filter(Boolean);
-
-  let totalScore = 0;
-  for (const q of queryTokens) {
-    let bestTokenScore = 0;
-    for (const w of targetWords) {
-      if (w === q) {
-        bestTokenScore = Math.max(bestTokenScore, 50);
-      } else if (w.startsWith(q)) {
-        bestTokenScore = Math.max(bestTokenScore, 40);
-      } else if (q.startsWith(w) && w.length >= 2) {
-        bestTokenScore = Math.max(bestTokenScore, 30);
-      } else if (q.length >= 3 && w.length >= 3) {
-        const dist = levenshtein(q, w);
-        if (dist <= 1) {
-          bestTokenScore = Math.max(bestTokenScore, 35);
-        } else if (dist <= 2 && q.length >= 5) {
-          bestTokenScore = Math.max(bestTokenScore, 20);
-        }
-      }
-    }
-    if (bestTokenScore === 0) return 0; // Tất cả các từ truy vấn đều phải tìm thấy sự liên quan
-    totalScore += bestTokenScore;
-  }
-
-  return totalScore;
-}
-
 class FlightSearchEngine {
   constructor(options = {}) {
     this.options = options;
-    this.esNode = options.node || process.env.ELASTICSEARCH_NODE || 'http://localhost:9200';
-
-    // Khởi tạo Elasticsearch Client
-    this.esClient = new Client({
-      node: this.esNode,
-      maxRetries: 1,
-      requestTimeout: 2000,
-    });
-
-    this.airports = new Map();
-    this.airlines = new Map();
-    this.flights = new Map();
+    this.esClient = options.client || getElasticsearchClient(options);
+    this.lastFallbackTime = null;
+    this._indicesChecked = false;
+    // Hàng đợi đồng bộ bù khi Elasticsearch offline (Idempotent Offline Catch-up Buffer)
+    // Key: `${type}:${id}`, Value: { type, action: 'upsert'|'delete', id, data, timestamp }
+    this.pendingSyncQueue = new Map();
   }
 
   /**
-   * Kiểm tra tình trạng kết nối Elasticsearch cluster
+   * Lấy số lượng thao tác đang chờ đồng bộ bù.
+   */
+  getPendingQueueSize() {
+    return this.pendingSyncQueue.size;
+  }
+
+  /**
+   * Lấy danh sách các thao tác trong hàng đợi bù.
+   */
+  getPendingQueue() {
+    return Array.from(this.pendingSyncQueue.values());
+  }
+
+  /**
+   * Xóa toàn bộ hàng đợi bù (dùng cho test/reset).
+   */
+  clearPendingQueue() {
+    this.pendingSyncQueue.clear();
+  }
+
+  /**
+   * Đồng bộ bù toàn bộ các document trong hàng đợi sang Elasticsearch khi kết nối phục hồi.
+   * Phương thức đảm bảo idempotent:
+   * - Không tạo document trùng lặp (dùng ID làm document id).
+   * - Cho phép chạy lại nhiều lần mà không gây lỗi hoặc tác dụng phụ.
+   * - Tự động xóa khỏi hàng đợi khi thao tác thành công.
+   *
+   * @returns {Promise<{ processed: number, remaining: number }>}
+   */
+  async flushPendingSyncQueue() {
+    if (this.pendingSyncQueue.size === 0) {
+      return { processed: 0, remaining: 0 };
+    }
+
+    const items = Array.from(this.pendingSyncQueue.entries());
+    let processed = 0;
+
+    for (const [key, item] of items) {
+      try {
+        const indexName = item.type === 'airport' ? INDEX_NAMES.AIRPORTS : INDEX_NAMES.FLIGHTS;
+        if (item.action === 'upsert') {
+          await this.esClient.index({
+            index: indexName,
+            id: String(item.id),
+            document: item.data,
+            refresh: true,
+          });
+        } else if (item.action === 'delete') {
+          try {
+            await this.esClient.delete({
+              index: indexName,
+              id: String(item.id),
+              refresh: true,
+            });
+          } catch (delError) {
+            if (delError?.meta?.statusCode !== 404) throw delError;
+          }
+        }
+        this.pendingSyncQueue.delete(key);
+        processed += 1;
+        console.log(`[Elasticsearch Catch-up] Đồng bộ bù thành công: ${key} (${item.action})`);
+      } catch (error) {
+        console.warn(`[Elasticsearch Catch-up] Chưa thể đồng bộ bù ${key} (Elasticsearch có thể vẫn chưa sẵn sàng):`, error.message);
+        break; // Dừng lại nếu kết nối vẫn gặp lỗi, giữ nguyên phần còn lại trong hàng đợi
+      }
+    }
+
+    return { processed, remaining: this.pendingSyncQueue.size };
+  }
+
+  /**
+   * Đảm bảo index và mapping đã được khởi tạo trên Elasticsearch.
+   */
+  async ensureReady() {
+    if (this._indicesChecked) return true;
+    try {
+      await ensureIndicesExist(this.esClient);
+      this._indicesChecked = true;
+      return true;
+    } catch (error) {
+      console.warn('[Elasticsearch] Chưa thể khởi tạo index:', error.message);
+      return false;
+    }
+  }
+
+  /**
+   * Kiểm tra tình trạng kết nối Elasticsearch cluster.
    */
   async pingElasticsearch() {
     try {
-      return await this.esClient.ping();
+      const health = await checkElasticsearchHealth(this.esClient);
+      return health.isAvailable;
     } catch {
       return false;
     }
@@ -134,209 +129,351 @@ class FlightSearchEngine {
 
   // ─── AIRPORTS ───────────────────────────────────────────────────────────────
 
-  indexAirports(airports = []) {
-    this.airports.clear();
-    for (const item of airports) {
-      this.addAirport(item);
+  /**
+   * Thêm hoặc cập nhật một sân bay vào Elasticsearch.
+   *
+   * @param {object} airport
+   */
+  async addAirport(airport) {
+    const doc = formatAirportDoc(airport);
+    if (!doc.id) return;
+
+    try {
+      await this.esClient.index({
+        index: INDEX_NAMES.AIRPORTS,
+        id: String(doc.id),
+        document: doc,
+        refresh: true,
+      });
+      // Nếu trước đó có trong hàng đợi đồng bộ bù thì xóa bỏ
+      this.pendingSyncQueue.delete(`airport:${doc.id}`);
+      if (this.pendingSyncQueue.size > 0) {
+        this.flushPendingSyncQueue().catch(() => {});
+      }
+    } catch (error) {
+      console.warn(`[Elasticsearch Offline] Không thể đồng bộ Airport #${doc.id}: ${error.message}. Đã lưu vào hàng đợi đồng bộ bù.`);
+      this.pendingSyncQueue.set(`airport:${doc.id}`, {
+        type: 'airport',
+        action: 'upsert',
+        id: doc.id,
+        data: doc,
+        timestamp: Date.now(),
+      });
     }
   }
 
-  addAirport(airport) {
-    const p = toPlain(airport);
-    if (!p.id) return;
-    const doc = {
-      id: p.id,
-      iata_code: p.iata_code || '',
-      name: p.name || '',
-      city: p.city || '',
-      country: p.country || '',
-    };
-    this.airports.set(p.id, doc);
-
-    // Gửi index sang Elasticsearch trong background nếu server khả dụng
-    this.esClient.index({
-      index: 'airports',
-      id: String(p.id),
-      document: doc,
-    }).catch(() => {});
-  }
-
-  removeAirport(id) {
-    this.airports.delete(id);
-    this.esClient.delete({
-      index: 'airports',
-      id: String(id),
-    }).catch(() => {});
-  }
-
-  searchAirports(query) {
-    if (!query || typeof query !== 'string' || !query.trim()) return [];
-    const normalizedQuery = removeVietnameseTones(query).toLowerCase().trim();
-
-    const scored = [];
-    for (const doc of this.airports.values()) {
-      const targetStr = `${doc.iata_code} ${doc.name} ${doc.city} ${doc.country}`;
-      const score = matchScore(normalizedQuery, targetStr);
-      if (score > 0) {
-        scored.push({ doc, score });
+  /**
+   * Xóa một sân bay khỏi Elasticsearch.
+   *
+   * @param {number|string} id
+   */
+  async removeAirport(id) {
+    if (!id) return;
+    try {
+      await this.esClient.delete({
+        index: INDEX_NAMES.AIRPORTS,
+        id: String(id),
+        refresh: true,
+      });
+      this.pendingSyncQueue.delete(`airport:${id}`);
+      if (this.pendingSyncQueue.size > 0) {
+        this.flushPendingSyncQueue().catch(() => {});
+      }
+    } catch (error) {
+      if (error?.meta?.statusCode === 404) {
+        this.pendingSyncQueue.delete(`airport:${id}`);
+      } else {
+        console.warn(`[Elasticsearch Offline] Không thể xóa Airport #${id}: ${error.message}. Đã lưu vào hàng đợi xóa bù.`);
+        this.pendingSyncQueue.set(`airport:${id}`, {
+          type: 'airport',
+          action: 'delete',
+          id,
+          timestamp: Date.now(),
+        });
       }
     }
-
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((s) => s.doc);
   }
 
-  // ─── AIRLINES ───────────────────────────────────────────────────────────────
-
-  indexAirlines(airlines = []) {
-    this.airlines.clear();
-    for (const item of airlines) {
-      this.addAirline(item);
-    }
-  }
-
-  addAirline(airline) {
-    const p = toPlain(airline);
-    if (!p.id) return;
-    const doc = {
-      id: p.id,
-      name: p.name || '',
-      iata_code: p.iata_code || '',
-      logo_url: p.logo_url || '',
-    };
-    this.airlines.set(p.id, doc);
-
-    this.esClient.index({
-      index: 'airlines',
-      id: String(p.id),
-      document: doc,
-    }).catch(() => {});
-  }
-
-  removeAirline(id) {
-    this.airlines.delete(id);
-    this.esClient.delete({
-      index: 'airlines',
-      id: String(id),
-    }).catch(() => {});
-  }
-
-  searchAirlines(query) {
-    if (!query || typeof query !== 'string' || !query.trim()) return [];
-    const normalizedQuery = removeVietnameseTones(query).toLowerCase().trim();
-
-    const scored = [];
-    for (const doc of this.airlines.values()) {
-      const targetStr = `${doc.name} ${doc.iata_code}`;
-      const score = matchScore(normalizedQuery, targetStr);
-      if (score > 0) {
-        scored.push({ doc, score });
-      }
+  /**
+   * Tìm kiếm sân bay qua Elasticsearch với hỗ trợ:
+   * - Tìm kiếm chính xác (match, term)
+   * - Tìm kiếm gần đúng / fuzzy (fuzziness: 'AUTO')
+   * - Tìm kiếm tiền tố (match_bool_prefix)
+   * - Xếp hạng theo _score
+   *
+   * Khi Elasticsearch gặp sự cố, tự động trả về cờ fallback để chuyển sang Database.
+   *
+   * @param {string} query
+   * @param {object} [options]
+   * @returns {Promise<Array<{ id: number, _score: number, source: string }> | { fallback: boolean, source: string, error: string }>}
+   */
+  async searchAirports(query, options = {}) {
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return [];
     }
 
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((s) => s.doc);
+    const keyword = query.trim();
+    const limit = options.limit || 50;
+
+    // Tự động kiểm tra và flush các mục chờ bù nếu Elasticsearch vừa phục hồi
+    if (this.pendingSyncQueue.size > 0) {
+      await this.flushPendingSyncQueue();
+    }
+
+    try {
+      // Câu truy vấn Elasticsearch chuẩn mực dựa trên tài liệu Tim_kiem_User_Elasticsearch.docx
+      const esResponse = await this.esClient.search({
+        index: INDEX_NAMES.AIRPORTS,
+        query: {
+          bool: {
+            should: [
+              // 1. So khớp chính xác hoặc tiền tố mã IATA (ưu tiên cao nhất)
+              { term: { iata_code: { value: keyword.toUpperCase(), boost: 5.0 } } },
+              { match_bool_prefix: { iata_code: { query: keyword.toUpperCase(), boost: 3.5 } } },
+
+              // 2. So khớp mờ (Fuzzy) trên tên sân bay (hỗ trợ cả chuẩn có dấu và không dấu qua vi analyzer)
+              { match: { name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.0 } } },
+              { match: { 'name.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.0 } } },
+              { match_bool_prefix: { name: { query: keyword, operator: 'and', boost: 1.8 } } },
+              { match_bool_prefix: { 'name.vi': { query: keyword, operator: 'and', boost: 1.8 } } },
+
+              // 3. So khớp mờ trên thành phố (hỗ trợ cả chuẩn có dấu và không dấu)
+              { match: { city: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match: { 'city.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match_bool_prefix: { city: { query: keyword, operator: 'and', boost: 2.0 } } },
+              { match_bool_prefix: { 'city.vi': { query: keyword, operator: 'and', boost: 2.0 } } },
+
+              // 4. So khớp trên quốc gia
+              { match: { country: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 1.0 } } },
+              { match_bool_prefix: { country: { query: keyword, operator: 'and', boost: 0.8 } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+        size: limit,
+      });
+
+      const hits = esResponse?.hits?.hits || esResponse?.body?.hits?.hits || [];
+      console.log(`[Elasticsearch] Tìm kiếm Airport: "${keyword}" -> Tìm thấy ${hits.length} kết quả (nguồn: Elasticsearch)`);
+
+      const results = hits.map((hit) => ({
+        id: Number(hit._source?.id || hit._id),
+        iata_code: hit._source?.iata_code,
+        name: hit._source?.name,
+        city: hit._source?.city,
+        country: hit._source?.country,
+        _score: hit._score,
+        source: 'elasticsearch',
+      }));
+
+      // Gắn thuộc tính bổ trợ để caller nhận diện nguồn
+      results.source = 'elasticsearch';
+      results.fallback = false;
+      return results;
+    } catch (error) {
+      console.warn(`[Elasticsearch Fallback] Sân bay: Chuyển sang tìm kiếm Database LIKE cho từ khóa "${keyword}" (Lý do: ${error.message})`);
+      return {
+        fallback: true,
+        source: 'database',
+        error: error.message,
+        items: [],
+      };
+    }
   }
 
   // ─── FLIGHTS ────────────────────────────────────────────────────────────────
 
-  _formatFlightDoc(flight) {
-    const p = toPlain(flight);
-    const depAirport = toPlain(p.departureAirport);
-    const arrAirport = toPlain(p.arrivalAirport);
-    const airline = toPlain(p.airline);
-    const fareClasses = Array.isArray(p.fareClasses)
-      ? p.fareClasses.map((f) => toPlain(f).class_name).filter(Boolean).join(' ')
-      : '';
+  /**
+   * Thêm hoặc cập nhật chuyến bay vào Elasticsearch.
+   *
+   * @param {object} flight
+   */
+  async addFlight(flight) {
+    const doc = formatFlightDoc(flight);
+    if (!doc.id) return;
 
-    return {
-      id: p.id,
-      flight_number: p.flight_number || '',
-      departure_airport_id: p.departure_airport_id,
-      arrival_airport_id: p.arrival_airport_id,
-      airline_id: p.airline_id,
-      departure_airport_code: depAirport.iata_code || '',
-      departure_airport_city: depAirport.city || '',
-      departure_airport_name: depAirport.name || '',
-      arrival_airport_code: arrAirport.iata_code || '',
-      arrival_airport_city: arrAirport.city || '',
-      arrival_airport_name: arrAirport.name || '',
-      airline_name: airline.name || '',
-      airline_code: airline.iata_code || '',
-      fare_classes: fareClasses,
-    };
-  }
-
-  indexFlights(flights = []) {
-    this.flights.clear();
-    for (const item of flights) {
-      this.addFlight(item);
+    try {
+      await this.esClient.index({
+        index: INDEX_NAMES.FLIGHTS,
+        id: String(doc.id),
+        document: doc,
+        refresh: true,
+      });
+      this.pendingSyncQueue.delete(`flight:${doc.id}`);
+      if (this.pendingSyncQueue.size > 0) {
+        this.flushPendingSyncQueue().catch(() => {});
+      }
+    } catch (error) {
+      console.warn(`[Elasticsearch Offline] Không thể đồng bộ Flight #${doc.id}: ${error.message}. Đã lưu vào hàng đợi đồng bộ bù.`);
+      this.pendingSyncQueue.set(`flight:${doc.id}`, {
+        type: 'flight',
+        action: 'upsert',
+        id: doc.id,
+        data: doc,
+        timestamp: Date.now(),
+      });
     }
   }
 
-  addFlight(flight) {
-    const doc = this._formatFlightDoc(flight);
-    if (!doc.id) return;
-    this.flights.set(doc.id, doc);
-
-    this.esClient.index({
-      index: 'flights',
-      id: String(doc.id),
-      document: doc,
-    }).catch(() => {});
-  }
-
-  removeFlight(id) {
-    this.flights.delete(id);
-    this.esClient.delete({
-      index: 'flights',
-      id: String(id),
-    }).catch(() => {});
-  }
-
-  searchFlights(query) {
-    if (!query || typeof query !== 'string' || !query.trim()) return [];
-    const normalizedQuery = removeVietnameseTones(query).toLowerCase().trim();
-
-    const scored = [];
-    for (const doc of this.flights.values()) {
-      const targetStr = `${doc.flight_number} ${doc.departure_airport_code} ${doc.departure_airport_city} ${doc.departure_airport_name} ${doc.arrival_airport_code} ${doc.arrival_airport_city} ${doc.arrival_airport_name} ${doc.airline_name} ${doc.airline_code} ${doc.fare_classes}`;
-      const score = matchScore(normalizedQuery, targetStr);
-      if (score > 0) {
-        scored.push({ doc, score });
+  /**
+   * Xóa chuyến bay khỏi Elasticsearch.
+   *
+   * @param {number|string} id
+   */
+  async removeFlight(id) {
+    if (!id) return;
+    try {
+      await this.esClient.delete({
+        index: INDEX_NAMES.FLIGHTS,
+        id: String(id),
+        refresh: true,
+      });
+      this.pendingSyncQueue.delete(`flight:${id}`);
+      if (this.pendingSyncQueue.size > 0) {
+        this.flushPendingSyncQueue().catch(() => {});
+      }
+    } catch (error) {
+      if (error?.meta?.statusCode === 404) {
+        this.pendingSyncQueue.delete(`flight:${id}`);
+      } else {
+        console.warn(`[Elasticsearch Offline] Không thể xóa Flight #${id}: ${error.message}. Đã lưu vào hàng đợi xóa bù.`);
+        this.pendingSyncQueue.set(`flight:${id}`, {
+          type: 'flight',
+          action: 'delete',
+          id,
+          timestamp: Date.now(),
+        });
       }
     }
+  }
 
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((s) => s.doc);
+  /**
+   * Tìm kiếm chuyến bay qua Elasticsearch với hỗ trợ:
+   * - Tìm kiếm chính xác (mã chuyến bay, mã hãng, mã sân bay)
+   * - Tìm kiếm gần đúng / fuzzy (tên hãng, tên thành phố, tên sân bay)
+   * - Tìm kiếm tiền tố (match_bool_prefix)
+   * - Xếp hạng theo _score
+   *
+   * Khi Elasticsearch gặp sự cố, tự động trả về cờ fallback để chuyển sang Database.
+   *
+   * @param {string} query
+   * @param {object} [options]
+   * @returns {Promise<Array<{ id: number, _score: number, source: string }> | { fallback: boolean, source: string, error: string }>}
+   */
+  async searchFlights(query, options = {}) {
+    if (!query || typeof query !== 'string' || !query.trim()) {
+      return [];
+    }
+
+    const keyword = query.trim();
+    const limit = options.limit || 50;
+
+    // Tự động kiểm tra và flush các mục chờ bù nếu Elasticsearch vừa phục hồi
+    if (this.pendingSyncQueue.size > 0) {
+      await this.flushPendingSyncQueue();
+    }
+
+    try {
+      // Câu truy vấn Elasticsearch chuẩn mực dựa trên tài liệu Tim_kiem_User_Elasticsearch.docx
+      const esResponse = await this.esClient.search({
+        index: INDEX_NAMES.FLIGHTS,
+        query: {
+          bool: {
+            should: [
+              // 1. Số hiệu chuyến bay (VN123, VJ456...)
+              { term: { flight_number: { value: keyword.toUpperCase(), boost: 6.0 } } },
+              { match_bool_prefix: { flight_number: { query: keyword.toUpperCase(), boost: 4.0 } } },
+              { match: { 'flight_number.text': { query: keyword, boost: 3.0 } } },
+
+              // 2. Mã IATA sân bay đi / đến / hãng
+              { term: { departure_airport_code: { value: keyword.toUpperCase(), boost: 3.5 } } },
+              { term: { arrival_airport_code: { value: keyword.toUpperCase(), boost: 3.5 } } },
+              { term: { airline_code: { value: keyword.toUpperCase(), boost: 3.5 } } },
+
+              // 3. Tên hãng hàng không (Fuzzy: "Vjetjet" -> "Vietjet Air")
+              { match: { airline_name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match: { 'airline_name.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match_bool_prefix: { airline_name: { query: keyword, operator: 'and', boost: 2.0 } } },
+              { match_bool_prefix: { 'airline_name.vi': { query: keyword, operator: 'and', boost: 2.0 } } },
+
+              // 4. Thành phố khởi hành
+              { match: { departure_airport_city: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.2 } } },
+              { match: { 'departure_airport_city.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.2 } } },
+              { match_bool_prefix: { departure_airport_city: { query: keyword, operator: 'and', boost: 1.8 } } },
+              { match_bool_prefix: { 'departure_airport_city.vi': { query: keyword, operator: 'and', boost: 1.8 } } },
+
+              // 5. Thành phố đến
+              { match: { arrival_airport_city: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.2 } } },
+              { match: { 'arrival_airport_city.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.2 } } },
+              { match_bool_prefix: { arrival_airport_city: { query: keyword, operator: 'and', boost: 1.8 } } },
+              { match_bool_prefix: { 'arrival_airport_city.vi': { query: keyword, operator: 'and', boost: 1.8 } } },
+
+              // 6. Tên sân bay đi / đến
+              { match: { departure_airport_name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 1.5 } } },
+              { match: { 'departure_airport_name.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 1.5 } } },
+              { match_bool_prefix: { departure_airport_name: { query: keyword, operator: 'and', boost: 1.2 } } },
+              { match_bool_prefix: { 'departure_airport_name.vi': { query: keyword, operator: 'and', boost: 1.2 } } },
+              { match: { arrival_airport_name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 1.5 } } },
+              { match: { 'arrival_airport_name.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 1.5 } } },
+              { match_bool_prefix: { arrival_airport_name: { query: keyword, operator: 'and', boost: 1.2 } } },
+              { match_bool_prefix: { 'arrival_airport_name.vi': { query: keyword, operator: 'and', boost: 1.2 } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+        size: limit,
+      });
+
+      const hits = esResponse?.hits?.hits || esResponse?.body?.hits?.hits || [];
+      console.log(`[Elasticsearch] Tìm kiếm Flight: "${keyword}" -> Tìm thấy ${hits.length} kết quả (nguồn: Elasticsearch)`);
+
+      const results = hits.map((hit) => ({
+        id: Number(hit._source?.id || hit._id),
+        flight_number: hit._source?.flight_number,
+        airline_name: hit._source?.airline_name,
+        departure_airport_city: hit._source?.departure_airport_city,
+        arrival_airport_city: hit._source?.arrival_airport_city,
+        _score: hit._score,
+        source: 'elasticsearch',
+      }));
+
+      results.source = 'elasticsearch';
+      results.fallback = false;
+      return results;
+    } catch (error) {
+      console.warn(`[Elasticsearch Fallback] Chuyến bay: Chuyển sang tìm kiếm Database LIKE cho từ khóa "${keyword}" (Lý do: ${error.message})`);
+      return {
+        fallback: true,
+        source: 'database',
+        error: error.message,
+        items: [],
+      };
+    }
+  }
+
+  // ─── AIRLINES ───────────────────────────────────────────────────────────────
+
+  async addAirline(airline) {
+    // Để tương thích nếu có gọi
+  }
+
+  async removeAirline(id) {
+    // Để tương thích nếu có gọi
   }
 
   // ─── DATABASE SYNC ──────────────────────────────────────────────────────────
 
+  /**
+   * Đồng bộ toàn bộ dữ liệu từ Database sang Elasticsearch.
+   *
+   * @param {object} models
+   */
   async syncFromDatabase(models) {
     if (!models) return;
     try {
-      if (models.Airport) {
-        const airports = await models.Airport.findAll();
-        this.indexAirports(airports);
-      }
-      if (models.Airline) {
-        const airlines = await models.Airline.findAll();
-        this.indexAirlines(airlines);
-      }
-      if (models.Flight) {
-        const flights = await models.Flight.findAll({
-          include: [
-            models.Airline ? { model: models.Airline, as: 'airline' } : null,
-            models.Airport ? { model: models.Airport, as: 'departureAirport' } : null,
-            models.Airport ? { model: models.Airport, as: 'arrivalAirport' } : null,
-            models.FareClass ? { model: models.FareClass, as: 'fareClasses' } : null,
-          ].filter(Boolean),
-        });
-        this.indexFlights(flights);
-      }
-    } catch (_err) {
-      // Bỏ qua lỗi kết nối DB tạm thời khi chạy offline hoặc unit tests
+      return await syncAllToElasticsearch({ models, client: this.esClient });
+    } catch (error) {
+      console.warn('[Elasticsearch] Đồng bộ ban đầu từ Database thất bại (Elasticsearch có thể đang offline):', error.message);
     }
   }
 }
@@ -345,14 +482,19 @@ class FlightSearchEngine {
 let defaultInstance = null;
 
 function getSearchEngine(options) {
-  if (!defaultInstance) {
+  if (!defaultInstance || options) {
     defaultInstance = new FlightSearchEngine(options);
   }
   return defaultInstance;
 }
 
+function resetSearchEngine() {
+  defaultInstance = null;
+}
+
 module.exports = {
   FlightSearchEngine,
   getSearchEngine,
+  resetSearchEngine,
   removeVietnameseTones,
 };

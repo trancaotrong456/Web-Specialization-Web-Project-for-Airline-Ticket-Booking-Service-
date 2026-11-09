@@ -7,7 +7,7 @@ class PaymentController {
     if (!service) throw new TypeError('A Payment service is required');
     this.service = service;
     this.apiResponse = apiResponse;
-    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'initiatePayment', 'getCustomerPaymentStatus', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
+    for (const name of ['getAllPayments', 'getPaymentById', 'getReconciliationCases', 'getReconciliationCaseById', 'getReconciliationMetrics', 'getReconciliationMetricsPrometheus', 'recordManualReviewAction', 'createManualPayosRefund', 'listManualPayosRefunds', 'getManualPayosRefund', 'settleManualPayosRefund', 'rejectManualPayosRefund', 'initiatePayment', 'getCustomerPaymentStatus', 'vnpayReturn', 'vnpayIpn', 'payosWebhook', 'payosDemoWebhook', 'payosReturn', 'getRevenue', 'refund', 'queryVnpay', 'refundVnpay']) {
       this[name] = this[name].bind(this);
     }
   }
@@ -48,6 +48,11 @@ class PaymentController {
     try { return this.apiResponse.success(res, await this.service.recordManualReviewAction(req.params.id, req.body, req.user), 'Manual-review action recorded successfully'); }
     catch (error) { next(error); }
   }
+  async createManualPayosRefund(req, res, next) { try { return this.apiResponse.success(res, await this.service.createManualPayosRefund(req.params.paymentId, req.body, req.user), 'Manual payOS refund request created'); } catch (error) { next(error); } }
+  async listManualPayosRefunds(req, res, next) { try { return this.apiResponse.paginated(res, await this.service.listManualPayosRefunds(req.query, req.user), 'Manual payOS refunds retrieved'); } catch (error) { next(error); } }
+  async getManualPayosRefund(req, res, next) { try { return this.apiResponse.success(res, await this.service.getManualPayosRefund(req.params.id, req.user), 'Manual payOS refund retrieved'); } catch (error) { next(error); } }
+  async settleManualPayosRefund(req, res, next) { try { return this.apiResponse.success(res, await this.service.settleManualPayosRefund(req.params.id, req.body, req.user), 'Manual payOS refund settled'); } catch (error) { next(error); } }
+  async rejectManualPayosRefund(req, res, next) { try { return this.apiResponse.success(res, await this.service.rejectManualPayosRefund(req.params.id, req.body, req.user), 'Manual payOS refund rejected'); } catch (error) { next(error); } }
 
   async initiatePayment(req, res, next) {
     try {

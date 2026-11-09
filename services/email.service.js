@@ -1,9 +1,16 @@
 const { Resend } = require('resend');
+const crypto = require('node:crypto');
 const { Op } = require('sequelize');
 const path = require('path');
 const ejs = require('ejs');
 const { Booking, BookingSegment, Flight, Airline, Airport, FareClass, BookingPassenger, User, Payment, BookingAncillary } = require('../models');
 const { redactString } = require('../shared/security/redactSensitive');
+
+function escapeHtml(value) {
+  return String(value).replace(/[&<>"']/g, (character) => ({
+    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+  })[character]);
+}
 
 let resendClient = null;
 
@@ -20,12 +27,18 @@ const noopEmailAdapter = {
 };
 
 const createResendAdapter = () => ({
-  async send(email) {
-    const { data, error } = await getResendClient().emails.send(email);
+  async send(email, { idempotencyKey } = {}) {
+    const options = idempotencyKey ? { idempotencyKey } : undefined;
+    const { data, error } = await getResendClient().emails.send(email, options);
     if (error) throw new Error(error.message || 'Resend rejected the email request.');
     return data;
   },
 });
+
+function deriveEmailIdempotencyKey(logicalEventKey) {
+  if (!logicalEventKey || typeof logicalEventKey !== 'string') return undefined;
+  return `booking-email-${crypto.createHash('sha256').update(logicalEventKey, 'utf8').digest('hex')}`;
+}
 
 class EmailService {
   setAdapter(adapter) {
@@ -47,7 +60,7 @@ class EmailService {
   /**
    * Send booking confirmation email after payment success
    */
-  async sendBookingConfirmation(bookingId, pdfBuffer = null) {
+  async sendBookingConfirmation(bookingId, pdfBuffer = null, { logicalEventKey } = {}) {
     const booking = await Booking.findByPk(bookingId, {
       include: [
         {
@@ -120,8 +133,8 @@ class EmailService {
       // Fallback: send plain text
       htmlContent = `
         <h2>Xác nhận đặt vé thành công</h2>
-        <p>Kính gửi ${recipientName},</p>
-        <p>Mã đặt vé của bạn: <strong>${booking.booking_code}</strong></p>
+        <p>Kính gửi ${escapeHtml(recipientName)},</p>
+        <p>Mã đặt vé của bạn: <strong>${escapeHtml(booking.booking_code)}</strong></p>
         <p>Tổng tiền: ${Number(booking.total_amount).toLocaleString('vi-VN')} VND</p>
         <p>Cảm ơn bạn đã sử dụng dịch vụ!</p>
       `;
@@ -140,7 +153,9 @@ class EmailService {
         content: pdfBuffer.toString('base64'),
       }];
 
-      const data = await this._getAdapter().send(email);
+      const data = await this._getAdapter().send(email, {
+        idempotencyKey: deriveEmailIdempotencyKey(logicalEventKey),
+      });
       console.log(`[EMAIL] SUCCESS - messageId: ${data && data.id}`);
     } catch (error) {
       console.error(`[EMAIL] FAILED: ${redactString(error.message)}`);
@@ -162,3 +177,4 @@ class EmailService {
 }
 
 module.exports = new EmailService();
+module.exports.deriveEmailIdempotencyKey = deriveEmailIdempotencyKey;

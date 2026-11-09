@@ -29,7 +29,7 @@ const getErrorFields = (error) => {
   if (Array.isArray(source)) return Object.fromEntries(source.map((item) => [item.path || item.param || '', item.msg || item.message || 'Thông tin chưa hợp lệ.']));
   return source;
 };
-const errorMessage = (error, fallback) => error?.message || fallback;
+const errorMessage = (error, fallback) => (typeof error === 'string' ? error : error?.message || fallback);
 const localDateTime = (value) => isoToVnDateTimeInput(value);
 const isoDateTime = (value) => vnDateTimeInputToIso(value);
 
@@ -842,6 +842,8 @@ export function FlightFormPage({ mode }) {
   const editing = mode === 'edit';
   const [form, setForm] = useState({ airline_id: '', departure_airport_id: '', arrival_airport_id: '', departure_time: '', arrival_time: '', total_seats: '', status: 'scheduled' });
   const [options, setOptions] = useState({ airlines: [], airports: [] });
+  const [flightData, setFlightData] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(false);
   const [state, setState] = useState({ loading: true, submitting: false, error: '', fields: {} });
   useEffect(() => {
     let active = true;
@@ -857,16 +859,21 @@ export function FlightFormPage({ mode }) {
         }
         if (!active) return;
         setOptions({ airlines: responseRows(airlinesResult), airports: responseRows(airportsResult) });
-        if (flight) setForm({ airline_id: '', departure_airport_id: '', arrival_airport_id: '', departure_time: localDateTime(flight.departure_time), arrival_time: localDateTime(flight.arrival_time), total_seats: '', status: flight.status || 'scheduled' });
+        if (flight) {
+          setFlightData(flight);
+          setForm({ airline_id: '', departure_airport_id: '', arrival_airport_id: '', departure_time: localDateTime(flight.departure_time), arrival_time: localDateTime(flight.arrival_time), total_seats: '', status: flight.status || 'scheduled' });
+        }
         setState((current) => ({ ...current, loading: false }));
       } catch (error) { if (active) setState((current) => ({ ...current, loading: false, error: errorMessage(error, 'Không thể tải dữ liệu biểu mẫu.') })); }
     };
     void load();
     return () => { active = false; };
   }, [api, editing, id]);
+  const bookedSeats = flightData ? Math.max(0, (flightData.total_seats || 0) - (flightData.available_seats || 0)) : 0;
   const setValue = (key) => (event) => setForm((current) => ({ ...current, [key]: event.target.value }));
-  const submit = async (event) => {
-    event.preventDefault();
+
+  const performSave = async () => {
+    setConfirmDialog(false);
     setState((current) => ({ ...current, submitting: true, error: '', fields: {} }));
     const payload = editing ? {
       departure_time: isoDateTime(form.departure_time),
@@ -887,25 +894,61 @@ export function FlightFormPage({ mode }) {
       setState((current) => ({ ...current, submitting: false, error: errorMessage(error, 'Không thể lưu chuyến bay.'), fields: error?.status === 422 ? getErrorFields(error) : {} }));
     }
   };
+
+  const submit = async (event) => {
+    event.preventDefault();
+    setState((current) => ({ ...current, error: '', fields: {} }));
+
+    if (form.departure_time && form.arrival_time) {
+      const depDate = new Date(form.departure_time);
+      const arrDate = new Date(form.arrival_time);
+      if (arrDate <= depDate) {
+        setState((current) => ({
+          ...current,
+          submitting: false,
+          error: 'Thời gian đến phải sau thời gian khởi hành.',
+          fields: { ...current.fields, arrival_time: 'Thời gian đến phải sau thời gian khởi hành.' },
+        }));
+        return;
+      }
+    }
+
+    if (editing && bookedSeats > 0) {
+      setConfirmDialog(true);
+      return;
+    }
+
+    await performSave();
+  };
   if (state.loading) return <ManagementShell><LoadingView label={editing ? 'Đang tải dữ liệu chuyến bay…' : 'Đang tải hãng hàng không và sân bay…'} /></ManagementShell>;
   const idError = (key) => state.fields[key] || state.fields[`body.${key}`];
   return <ManagementShell><PageFrame title={editing ? 'Chỉnh sửa chuyến bay' : 'Tạo chuyến bay'} description={editing ? 'Chỉ cập nhật thời gian bay và trạng thái khai thác.' : 'Chọn hãng, sân bay, thời gian và tổng sức chứa chuyến bay.'} actions={<Link className="button button-outline" to={editing ? `/admin/flights/${id}` : '/admin/flights'}>{editing ? 'Quay lại chi tiết' : 'Hủy'}</Link>}>
     <section className="surface-card admin-card flight-form-card"><RouteError error={state.error} fallback="Không thể lưu chuyến bay." />
-      <form className="flight-form" onSubmit={submit}>
+      <form className="flight-form" onSubmit={submit} noValidate>
         {!editing ? <>
           <SelectField id="flight-airline" label="Hãng hàng không" value={form.airline_id} options={options.airlines.map((airline) => ({ value: airline.id, label: `${airline.iata_code ? `${airline.iata_code} · ` : ''}${airline.name}` }))} onChange={setValue('airline_id')} error={idError('airline_id')} placeholder="Chọn hãng hàng không" />
           <SelectField id="flight-origin" label="Sân bay đi" value={form.departure_airport_id} options={options.airports.map((airport) => ({ value: airport.id, label: `${airport.iata_code ? `${airport.iata_code} · ` : ''}${airport.name}${airport.city ? `, ${airport.city}` : ''}` }))} onChange={setValue('departure_airport_id')} error={idError('departure_airport_id')} placeholder="Chọn sân bay khởi hành" />
           <SelectField id="flight-destination" label="Sân bay đến" value={form.arrival_airport_id} options={options.airports.map((airport) => ({ value: airport.id, label: `${airport.iata_code ? `${airport.iata_code} · ` : ''}${airport.name}${airport.city ? `, ${airport.city}` : ''}` }))} onChange={setValue('arrival_airport_id')} error={idError('arrival_airport_id')} placeholder="Chọn sân bay đến" />
-        </> : <div className="flight-edit-context"><span className="eyebrow">MÃ CHUYẾN BAY</span><strong>#{id}</strong><p>Hãng hàng không, sân bay, tổng ghế và số ghế còn trống không chỉnh sửa tại đây.</p></div>}
+        </> : <div className="flight-edit-context"><span className="eyebrow">MÃ CHUYẾN BAY</span><strong>#{id}</strong><p>Hãng hàng không, sân bay, tổng ghế và số ghế còn trống không chỉnh sửa tại đây.</p>{bookedSeats > 0 ? <div style={{ marginTop: '0.75rem' }}><Notice type="warning">Chuyến bay này hiện đã có <strong>{bookedSeats}</strong> chỗ được đặt. Việc thay đổi thời gian bay có thể ảnh hưởng trực tiếp đến lịch trình của hành khách.</Notice></div> : null}</div>}
         <Field id="flight-departure-time" label="Thời gian khởi hành" type="datetime-local" value={form.departure_time} onChange={setValue('departure_time')} required aria-invalid={Boolean(idError('departure_time'))} />
         {idError('departure_time') ? <small className="field-error">{idError('departure_time')}</small> : null}
-        <Field id="flight-arrival-time" label="Thời gian đến" type="datetime-local" value={form.arrival_time} onChange={setValue('arrival_time')} required aria-invalid={Boolean(idError('arrival_time'))} />
+        <Field id="flight-arrival-time" label="Thời gian đến" type="datetime-local" value={form.arrival_time} onChange={setValue('arrival_time')} min={form.departure_time || undefined} required aria-invalid={Boolean(idError('arrival_time'))} />
         {idError('arrival_time') ? <small className="field-error">{idError('arrival_time')}</small> : null}
         {!editing ? <Field id="flight-total-seats" label="Tổng số ghế" type="number" min="1" step="1" value={form.total_seats} onChange={setValue('total_seats')} required error={idError('total_seats')} /> : null}
         {!editing ? <SelectField id="flight-form-status" label="Trạng thái" value={form.status} options={[{ value: 'scheduled', label: statusLabels.scheduled }]} onChange={setValue('status')} error={idError('status')} /> : <p className="field-hint">Trạng thái được cập nhật riêng tại trang chi tiết để lưu lịch sử điều hành.</p>}
         <div className="flight-form-actions"><button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang lưu…' : editing ? 'Lưu thay đổi' : 'Tạo chuyến bay'}</button></div>
       </form>
     </section>
+    <ConfirmDialog
+      open={confirmDialog}
+      title="Xác nhận thay đổi thông tin chuyến bay"
+      description={`Chuyến bay này hiện đã có ${bookedSeats} hành khách đặt chỗ. Việc thay đổi thông tin chuyến bay, đặc biệt là thời gian khởi hành và thời gian đến, có thể ảnh hưởng đến lịch trình của hành khách. Bạn có chắc chắn muốn tiếp tục cập nhật không?`}
+      confirmLabel="Xác nhận cập nhật"
+      danger={false}
+      pending={state.submitting}
+      onConfirm={() => void performSave()}
+      onCancel={() => setConfirmDialog(false)}
+    />
   </PageFrame></ManagementShell>;
 }
 

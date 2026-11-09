@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { Field } from '../../components/Field';
 import { Notice } from '../../components/Notice';
@@ -25,6 +26,8 @@ export function ProfilePage() {
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
+  const [activeTab, setActiveTab] = useState('personal'); // 'personal' | 'account'
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -63,21 +66,228 @@ export function ProfilePage() {
     }
   };
 
+  // Helper parsing names inspired by Vietjet Air
+  const parseFullName = (fullName) => {
+    const trimmed = (fullName || '').trim();
+    if (!trimmed) return { ho: '-', ten: '-' };
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) return { ho: '-', ten: parts[0] };
+    return {
+      ho: parts[0],
+      ten: parts.slice(1).join(' '),
+    };
+  };
+
+  const nameParts = parseFullName(form.full_name || user?.full_name);
+  const memberCode = user?.id ? `SJ${String(user.id).padStart(8, '0')}` : 'SJ3339716268';
+
+  const handleCopyCode = () => {
+    try {
+      if (navigator.clipboard) {
+        navigator.clipboard.writeText(memberCode);
+      }
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback
+    }
+  };
+
   return (
-    <ProfileLayout title="Hồ sơ cá nhân" description="Quản lý thông tin dùng khi đặt vé và nhận thông báo hành trình.">
-      <section className="surface-card account-card">
-        <div className="profile-summary">
-          <div className="profile-avatar" aria-hidden="true">{(form.full_name || user?.email || 'K').trim().charAt(0).toUpperCase()}</div>
-          <div><strong>{form.full_name || user?.full_name || 'Khách hàng'}</strong><span>{form.email || user?.email}</span></div>
-        </div>
-        <Notice type={message.includes('đã được') ? 'success' : 'error'}>{message}</Notice>
-        <form className="form-stack" onSubmit={submit} noValidate>
-          <Field id="profile-name" name="full_name" label="Họ và tên" value={form.full_name} onChange={update} error={errors.full_name} />
-          <Field id="profile-email" name="email" label="Email" value={form.email} readOnly hint="Email định danh tài khoản không thể thay đổi tại đây." />
-          <Field id="profile-phone" name="phone" label="Số điện thoại" value={form.phone} onChange={update} error={errors.phone} hint="Có thể bỏ trống hoặc nhập số điện thoại Việt Nam." />
-          <div><button className="button button-primary" type="submit" disabled={pending}>{pending ? 'Đang lưu…' : 'Lưu thay đổi'}</button></div>
-        </form>
-      </section>
+    <ProfileLayout title="Hồ sơ cá nhân" description="Quản lý thông tin định danh dùng khi đặt vé và nhận thông báo hành trình.">
+      {/* Subtabs bar matching Vietjet Air */}
+      <div className="subtabs-bar" role="tablist" aria-label="Phân loại hồ sơ">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'personal'}
+          className={`subtab-btn ${activeTab === 'personal' ? 'active' : ''}`}
+          onClick={() => setActiveTab('personal')}
+        >
+          <span>📋</span>
+          <span>Thông tin cá nhân</span>
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={activeTab === 'account'}
+          className={`subtab-btn ${activeTab === 'account' ? 'active' : ''}`}
+          onClick={() => setActiveTab('account')}
+        >
+          <span>👑</span>
+          <span>Thông tin tài khoản</span>
+        </button>
+      </div>
+
+      {activeTab === 'personal' && (
+        <>
+          {/* Card 1: Thông tin cá nhân (Vietjet Air Style) */}
+          <section className="vj-card">
+            <div className="vj-card-header">
+              <h2 className="vj-card-title">
+                <span>📋</span>
+                <span>Thông tin cá nhân</span>
+              </h2>
+              <span className="vj-info-label">Dữ liệu định danh hành khách</span>
+            </div>
+            <div className="vj-info-grid">
+              <div className="vj-info-item">
+                <span className="vj-info-label">Danh xưng</span>
+                <span className="vj-info-value">Ông / Anh</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Họ</span>
+                <span className="vj-info-value">{nameParts.ho}</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Tên đệm và tên</span>
+                <span className="vj-info-value">{nameParts.ten}</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Ngày sinh</span>
+                <span className="vj-info-value">04/05/2006</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Số hộ chiếu/CMND</span>
+                <span className="vj-info-value">-</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Quốc tịch</span>
+                <span className="vj-info-value">Việt Nam 🇻🇳</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Card 2: Cập nhật thông tin liên hệ (Form Stack & Account Card) */}
+          <section className="surface-card account-card vj-card">
+            <div className="vj-card-header">
+              <h2 className="vj-card-title">
+                <span>✏️</span>
+                <span>Thông tin liên hệ & Cập nhật</span>
+              </h2>
+            </div>
+            <div className="profile-summary">
+              <div className="profile-avatar" aria-hidden="true">
+                {(form.full_name || user?.email || 'K').trim().charAt(0).toUpperCase()}
+              </div>
+              <div>
+                <strong>{form.full_name || user?.full_name || 'Khách hàng'}</strong>
+                <span>{form.email || user?.email}</span>
+              </div>
+            </div>
+            <Notice type={message.includes('đã được') ? 'success' : 'error'}>{message}</Notice>
+            <form className="form-stack" onSubmit={submit} noValidate>
+              <Field
+                id="profile-name"
+                name="full_name"
+                label="Họ và tên"
+                value={form.full_name}
+                onChange={update}
+                error={errors.full_name}
+              />
+              <Field
+                id="profile-email"
+                name="email"
+                label="Email"
+                value={form.email}
+                readOnly
+                hint="Email định danh tài khoản không thể thay đổi tại đây."
+              />
+              <Field
+                id="profile-phone"
+                name="phone"
+                label="Số điện thoại"
+                value={form.phone}
+                onChange={update}
+                error={errors.phone}
+                hint="Có thể bỏ trống hoặc nhập số điện thoại Việt Nam."
+              />
+              <div>
+                <button className="button button-primary" type="submit" disabled={pending}>
+                  {pending ? 'Đang lưu…' : 'Lưu thay đổi'}
+                </button>
+              </div>
+            </form>
+          </section>
+        </>
+      )}
+
+      {activeTab === 'account' && (
+        <>
+          {/* Card 1: Thông tin tài khoản (Vietjet Air Style) */}
+          <section className="vj-card">
+            <div className="vj-card-header">
+              <h2 className="vj-card-title">
+                <span>👑</span>
+                <span>Thông tin tài khoản</span>
+              </h2>
+            </div>
+            <div className="vj-info-grid">
+              <div className="vj-info-item">
+                <span className="vj-info-label">Mã số thành viên</span>
+                <span className="vj-info-value">
+                  <code>{memberCode}</code>
+                  <button
+                    type="button"
+                    className="copy-badge"
+                    onClick={handleCopyCode}
+                    title="Sao chép mã hội viên"
+                  >
+                    {copied ? '✓ Đã chép' : '📋 Chép'}
+                  </button>
+                </span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Số điện thoại</span>
+                <span className="vj-info-value">{form.phone || '+84915780867'}</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Email</span>
+                <span className="vj-info-value">{form.email || 'trancaotrong456@gmail.com'}</span>
+              </div>
+              <div className="vj-info-item">
+                <span className="vj-info-label">Quốc tịch</span>
+                <span className="vj-info-value">Việt Nam 🇻🇳</span>
+              </div>
+            </div>
+          </section>
+
+          {/* Card 2: Cài đặt tài khoản (Vietjet Air Style) */}
+          <section className="vj-card">
+            <div className="vj-card-header">
+              <h2 className="vj-card-title">
+                <span>⚙️</span>
+                <span>Cài đặt tài khoản</span>
+              </h2>
+            </div>
+            <div className="vj-settings-list">
+              <div className="vj-settings-row">
+                <div>
+                  <div className="vj-info-label">Mật khẩu đăng nhập</div>
+                  <div className="vj-info-value">•••••••••••••</div>
+                </div>
+                <Link to="/profile/security" className="vj-action-link">
+                  <span>Đổi mật khẩu</span>
+                  <span>✏️</span>
+                </Link>
+              </div>
+              <div className="vj-settings-row">
+                <div>
+                  <div className="vj-info-label">Yêu cầu bảo vệ / Đóng tài khoản</div>
+                  <div className="vj-info-value text-sm text-slate-500">Khóa tài khoản tạm thời khi có dấu hiệu bất thường</div>
+                </div>
+                <button
+                  type="button"
+                  className="vj-action-link"
+                  onClick={() => alert('Vui lòng liên hệ tổng đài hỗ trợ 1900 1886 hoặc gửi email cskh@sereneflightways.vn để xác nhận đóng tài khoản.')}
+                >
+                  Gửi yêu cầu
+                </button>
+              </div>
+            </div>
+          </section>
+        </>
+      )}
     </ProfileLayout>
   );
 }

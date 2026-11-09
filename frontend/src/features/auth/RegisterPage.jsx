@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
 import { AuthLayout } from '../../components/AuthLayout';
 import { Field } from '../../components/Field';
@@ -15,6 +16,8 @@ export function RegisterPage() {
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   const update = (event) => {
     const { name, value } = event.target;
@@ -64,8 +67,47 @@ export function RegisterPage() {
           <Field id="register-phone" name="phone" label="Số điện thoại" type="tel" autoComplete="tel" value={form.phone} onChange={update} error={errors.phone} hint="Không bắt buộc" />
         </div>
         <div className="form-grid">
-          <Field id="register-password" name="password" label="Mật khẩu" type="password" autoComplete="new-password" value={form.password} onChange={update} error={errors.password} hint="Tối thiểu 6 ký tự" />
-          <Field id="register-confirm" name="password_confirmation" label="Xác nhận mật khẩu" type="password" autoComplete="new-password" value={form.password_confirmation} onChange={update} error={errors.password_confirmation} />
+          <Field
+            id="register-password"
+            name="password"
+            label="Mật khẩu"
+            type={showPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={form.password}
+            onChange={update}
+            error={errors.password}
+            hint="Tối thiểu 6 ký tự"
+            suffix={
+              <button
+                className="field-icon-button"
+                type="button"
+                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                onClick={() => setShowPassword((value) => !value)}
+              >
+                {showPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+              </button>
+            }
+          />
+          <Field
+            id="register-confirm"
+            name="password_confirmation"
+            label="Xác nhận mật khẩu"
+            type={showConfirmPassword ? 'text' : 'password'}
+            autoComplete="new-password"
+            value={form.password_confirmation}
+            onChange={update}
+            error={errors.password_confirmation}
+            suffix={
+              <button
+                className="field-icon-button"
+                type="button"
+                aria-label={showConfirmPassword ? 'Ẩn xác nhận mật khẩu' : 'Hiện xác nhận mật khẩu'}
+                onClick={() => setShowConfirmPassword((value) => !value)}
+              >
+                {showConfirmPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}
+              </button>
+            }
+          />
         </div>
         <button className="button button-secondary auth-submit" type="submit" disabled={pending}>{pending ? 'Đang tạo tài khoản…' : 'Tạo tài khoản'}</button>
       </form>

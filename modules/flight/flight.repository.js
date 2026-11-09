@@ -8,14 +8,30 @@ class SequelizeFlightRepository {
     Object.assign(this, { sequelize, Flight, Airline, Airport, FareClass, Booking, BookingSegment, FlightStatusHistory, User, Op });
   }
 
-  searchPage({
+  async searchPage({
     departure_airport_id, arrival_airport_id, airline_id, min_seats, dateStart, dateEnd,
     min_price, max_price, fare_class, departure_time_from, departure_time_to,
     arrival_time_from, arrival_time_to, min_duration_minutes, max_duration_minutes,
-    sort_by = 'departure_earliest', page, limit, matchingFlightIds,
+    sort_by = 'departure_earliest', page, limit, matchingFlightIds, fromElasticsearch,
+    searchKeyword, fromDatabaseFallback,
   }) {
     const where = { status: 'scheduled' };
-    if (matchingFlightIds && matchingFlightIds.length > 0) {
+    if (fromElasticsearch) {
+      where.id = { [this.Op.in]: matchingFlightIds || [] };
+    } else if (fromDatabaseFallback && searchKeyword) {
+      // Database Fallback khi Elasticsearch gặp sự cố: dùng SQL LIKE trên các trường và quan hệ
+      where[this.Op.or] = [
+        { flight_number: { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$airline.name$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$airline.iata_code$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$departureAirport.name$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$departureAirport.city$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$departureAirport.iata_code$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$arrivalAirport.name$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$arrivalAirport.city$': { [this.Op.like]: `%${searchKeyword}%` } },
+        { '$arrivalAirport.iata_code$': { [this.Op.like]: `%${searchKeyword}%` } },
+      ];
+    } else if (matchingFlightIds && matchingFlightIds.length > 0) {
       where.id = { [this.Op.in]: matchingFlightIds };
     }
     const fareWhere = {};
@@ -81,8 +97,9 @@ class SequelizeFlightRepository {
       duration_shortest: durationOrder,
       price_low: priceOrder,
       price_high: priceOrder,
+      relevance: [['departure_time', 'ASC']],
     };
-    return this.Flight.findAndCountAll({
+    const result = await this.Flight.findAndCountAll({
       where, distinct: true, limit: Number(limit), offset: Number((page - 1) * limit),
       order: orders[sort_by] || orders.departure_earliest,
       include: [
@@ -92,6 +109,20 @@ class SequelizeFlightRepository {
         { model: this.FareClass, as: 'fareClasses', attributes: ['id', 'class_name', 'price', 'seat_quota'], where: fareWhere, required: true },
       ],
     });
+
+    // Khi tìm kiếm bằng Elasticsearch, bảo toàn thứ tự xếp hạng theo _score nếu không có bộ sắp xếp cụ thể
+    if (fromElasticsearch && Array.isArray(matchingFlightIds) && matchingFlightIds.length > 0 && Array.isArray(result?.rows)) {
+      if (!sort_by || sort_by === 'relevance') {
+        const idOrderMap = new Map(matchingFlightIds.map((id, index) => [Number(id), index]));
+        result.rows.sort((a, b) => {
+          const orderA = idOrderMap.has(Number(a.id)) ? idOrderMap.get(Number(a.id)) : 999999;
+          const orderB = idOrderMap.has(Number(b.id)) ? idOrderMap.get(Number(b.id)) : 999999;
+          return orderA - orderB;
+        });
+      }
+    }
+
+    return result;
   }
 
   findDetail(id) {

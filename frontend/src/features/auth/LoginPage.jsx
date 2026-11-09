@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
 import { AuthLayout } from '../../components/AuthLayout';
 import { Field } from '../../components/Field';
@@ -72,7 +73,7 @@ export function LoginPage() {
           value={form.password}
           onChange={update}
           error={errors.password}
-          suffix={<button className="field-icon-button" type="button" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} onClick={() => setShowPassword((value) => !value)}>{showPassword ? '◉' : '◌'}</button>}
+          suffix={<button className="field-icon-button" type="button" aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'} onClick={() => setShowPassword((value) => !value)}>{showPassword ? <EyeOff size={20} aria-hidden="true" /> : <Eye size={20} aria-hidden="true" />}</button>}
         />
         <div className="form-row form-row-between">
           <label className="checkbox-label"><input name="remember" type="checkbox" checked={form.remember} onChange={update} /> Ghi nhớ đăng nhập</label>

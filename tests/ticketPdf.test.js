@@ -49,19 +49,24 @@ test('generates a confirmed Vietnamese e-ticket with the embedded Unicode font',
 test('multi-leg e-ticket includes every flight, passenger, fare class and booking total', async () => {
   const renderedText = [];
   class RecordingPdfDocument {
-    constructor() { this.y = 0; }
+    constructor() { this.y = 0; this.page = { height: 842 }; }
     on(event, callback) { if (event === 'data') this.onData = callback; if (event === 'end') this.onEnd = callback; return this; }
     registerFont() { return this; }
     font() { return this; }
     fontSize() { return this; }
     fillColor() { return this; }
     text(value) { renderedText.push(String(value)); return this; }
+    heightOfString(value) { return String(value).length > 35 ? 24 : 12; }
     moveDown() { return this; }
     moveTo() { return this; }
     lineTo() { return this; }
     strokeColor() { return this; }
     lineWidth() { return this; }
     stroke() { return this; }
+    roundedRect() { return this; }
+    fill() { return this; }
+    fillAndStroke() { return this; }
+    addPage() { this.y = 0; return this; }
     end() { this.onData(Buffer.from('%PDF-test')); this.onEnd(); }
   }
   const flight = (airline, from, to) => ({
