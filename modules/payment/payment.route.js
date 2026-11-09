@@ -13,16 +13,20 @@ const {
     reconciliationReviewActionValidator,
     reconciliationCaseListValidator,
     revenueValidator,
+    manualRefundCreateValidator,
+    manualRefundIdValidator,
+    manualRefundSettleValidator,
+    manualRefundRejectValidator,
 } = require('../../validators/payment.validator');
 
 const defaultGuards = { authenticate, optionalAuth, authorize };
-const defaultValidators = { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator };
+const defaultValidators = { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator, manualRefundCreateValidator, manualRefundIdValidator, manualRefundSettleValidator, manualRefundRejectValidator };
 const defaultValidation = { validate };
 
 function createPaymentRouter({ paymentController, guards = defaultGuards, validators = defaultValidators, validation = defaultValidation, expressModule = express } = {}) {
 const router = expressModule.Router();
 const { authenticate, optionalAuth, authorize } = guards;
-const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator } = validators;
+const { initiatePaymentValidator, refundValidator, paymentListValidator, paymentIdValidator, paymentStatusValidator, revenueValidator, reconciliationCaseIdValidator, reconciliationCaseListValidator, reconciliationReviewActionValidator, manualRefundCreateValidator, manualRefundIdValidator, manualRefundSettleValidator, manualRefundRejectValidator } = { ...defaultValidators, ...validators };
 const { validate } = validation;
 const resolvedPaymentStatusValidator = paymentStatusValidator || defaultValidators.paymentStatusValidator;
 const customerPaymentStatusHandler = paymentController.getCustomerPaymentStatus || ((_req, _res, next) => next());
@@ -42,6 +46,11 @@ router.get('/reconciliation-cases/:id', authenticate, authorize('admin', 'staff'
 router.get('/reconciliation-metrics', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetrics);
 router.get('/reconciliation-metrics/prometheus', authenticate, authorize('admin', 'staff'), paymentController.getReconciliationMetricsPrometheus);
 router.post('/reconciliation-cases/:id/manual-review', authenticate, authorize('admin', 'staff'), reconciliationReviewActionValidator, validate, paymentController.recordManualReviewAction);
+router.post('/:paymentId/manual-refund', authenticate, authorize('admin'), manualRefundCreateValidator, validate, paymentController.createManualPayosRefund);
+router.get('/manual-refunds', authenticate, authorize('admin'), paymentController.listManualPayosRefunds);
+router.get('/manual-refunds/:id', authenticate, authorize('admin'), manualRefundIdValidator, validate, paymentController.getManualPayosRefund);
+router.post('/manual-refunds/:id/settle', authenticate, authorize('admin'), manualRefundSettleValidator, validate, paymentController.settleManualPayosRefund);
+router.post('/manual-refunds/:id/reject', authenticate, authorize('admin'), manualRefundRejectValidator, validate, paymentController.rejectManualPayosRefund);
 
 // Initiate payment (customer or guest — booking must belong to them)
 router.post('/initiate', optionalAuth, initiatePaymentValidator, validate, paymentController.initiatePayment);

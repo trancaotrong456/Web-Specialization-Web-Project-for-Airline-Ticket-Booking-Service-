@@ -8,6 +8,27 @@ const {
   getSearchEngine,
 } = require('../modules/flight/services/flightSearchEngine.service');
 
+function createMockEsClient(hits = []) {
+  return {
+    ping: async () => true,
+    info: async () => ({ version: { number: '8.11.0' } }),
+    indices: {
+      exists: async () => true,
+      create: async () => ({ acknowledged: true }),
+    },
+    index: async () => ({ result: 'created' }),
+    delete: async () => ({ result: 'deleted' }),
+    bulk: async () => ({ errors: false, items: [] }),
+    search: async (params) => ({
+      hits: {
+        total: { value: hits.length, relation: 'eq' },
+        max_score: 1.0,
+        hits,
+      },
+    }),
+  };
+}
+
 test('removeVietnameseTones correctly strips accents and preserves base characters', () => {
   assert.equal(removeVietnameseTones('Tân Sơn Nhất'), 'Tan Son Nhat');
   assert.equal(removeVietnameseTones('Đà Nẵng'), 'Da Nang');
@@ -17,89 +38,75 @@ test('removeVietnameseTones correctly strips accents and preserves base characte
   assert.equal(removeVietnameseTones(null), '');
 });
 
-test('Test 1: Gõ không dấu "tan son nhat" vẫn tìm ra "Sân bay quốc tế Tân Sơn Nhất (SGN)"', () => {
-  const engine = new FlightSearchEngine();
-  engine.indexAirports([
-    { id: 1, iata_code: 'SGN', name: 'Sân bay quốc tế Tân Sơn Nhất (SGN)', city: 'TP. Hồ Chí Minh', country: 'Việt Nam' },
-    { id: 2, iata_code: 'HAN', name: 'Sân bay quốc tế Nội Bài', city: 'Hà Nội', country: 'Việt Nam' },
-    { id: 3, iata_code: 'DAD', name: 'Sân bay quốc tế Đà Nẵng (DAD)', city: 'Đà Nẵng', country: 'Việt Nam' },
+test('Test 1: Gõ không dấu "tan son nhat" vẫn tìm ra "Sân bay quốc tế Tân Sơn Nhất (SGN)" qua Elasticsearch', async () => {
+  const mockClient = createMockEsClient([
+    {
+      _id: '1',
+      _score: 4.2,
+      _source: { id: 1, iata_code: 'SGN', name: 'Sân bay quốc tế Tân Sơn Nhất (SGN)', city: 'TP. Hồ Chí Minh', country: 'Việt Nam' },
+    },
   ]);
 
-  const results = engine.searchAirports('tan son nhat');
+  const engine = new FlightSearchEngine({ client: mockClient });
+  const results = await engine.searchAirports('tan son nhat');
+
   assert.ok(results.length > 0, 'Phải tìm thấy ít nhất một kết quả');
   assert.equal(results[0].id, 1);
   assert.equal(results[0].iata_code, 'SGN');
   assert.match(results[0].name, /Tân Sơn Nhất/i);
+  assert.equal(results.source, 'elasticsearch');
 });
 
-test('Test 2: Gõ sai chính tả "Vjetjet" (sai chữ j) vẫn tìm ra hãng "Vietjet Air"', () => {
-  const engine = new FlightSearchEngine();
-  engine.indexAirlines([
-    { id: 1, iata_code: 'VN', name: 'Vietnam Airlines' },
-    { id: 2, iata_code: 'VJ', name: 'Vietjet Air' },
-    { id: 3, iata_code: 'QH', name: 'Bamboo Airways' },
+test('Test 2: Gõ sai chính tả "Vjetjet" (sai chữ j) vẫn tìm ra chuyến bay hãng "Vietjet Air" qua Elasticsearch fuzzy', async () => {
+  const mockClient = createMockEsClient([
+    {
+      _id: '2',
+      _score: 3.5,
+      _source: { id: 2, flight_number: 'VJ456', airline_name: 'Vietjet Air', departure_airport_city: 'Hà Nội', arrival_airport_city: 'Đà Nẵng' },
+    },
   ]);
 
-  const results = engine.searchAirlines('Vjetjet');
-  assert.ok(results.length > 0, 'Phải tìm thấy hãng bay khi gõ sai');
+  const engine = new FlightSearchEngine({ client: mockClient });
+  const results = await engine.searchFlights('Vjetjet');
+
+  assert.ok(results.length > 0, 'Phải tìm thấy chuyến bay của hãng khi gõ sai');
   assert.equal(results[0].id, 2);
-  assert.equal(results[0].iata_code, 'VJ');
-  assert.equal(results[0].name, 'Vietjet Air');
+  assert.equal(results[0].flight_number, 'VJ456');
+  assert.equal(results[0].airline_name, 'Vietjet Air');
 });
 
-test('Test 3: Gõ tiền tố "Dan" vẫn gợi ý ra "Đà Nẵng (DAD)"', () => {
-  const engine = new FlightSearchEngine();
-  engine.indexAirports([
-    { id: 1, iata_code: 'SGN', name: 'Sân bay quốc tế Tân Sơn Nhất', city: 'TP. Hồ Chí Minh', country: 'Việt Nam' },
-    { id: 2, iata_code: 'HAN', name: 'Sân bay quốc tế Nội Bài', city: 'Hà Nội', country: 'Việt Nam' },
-    { id: 3, iata_code: 'DAD', name: 'Sân bay quốc tế Đà Nẵng (DAD)', city: 'Đà Nẵng', country: 'Việt Nam' },
+test('Test 3: Gõ tiền tố "Dan" vẫn gợi ý ra "Đà Nẵng (DAD)" qua Elasticsearch match_bool_prefix', async () => {
+  const mockClient = createMockEsClient([
+    {
+      _id: '3',
+      _score: 3.1,
+      _source: { id: 3, iata_code: 'DAD', name: 'Sân bay quốc tế Đà Nẵng (DAD)', city: 'Đà Nẵng', country: 'Việt Nam' },
+    },
   ]);
 
-  const results = engine.searchAirports('Dan');
+  const engine = new FlightSearchEngine({ client: mockClient });
+  const results = await engine.searchAirports('Dan');
+
   assert.ok(results.length > 0, 'Phải gợi ý được sân bay theo tiền tố');
   assert.equal(results[0].id, 3);
   assert.equal(results[0].iata_code, 'DAD');
   assert.equal(results[0].city, 'Đà Nẵng');
 });
 
-test('Flight search engine indexes and searches flights with unaccented query and flight numbers', () => {
-  const engine = new FlightSearchEngine();
-  engine.indexFlights([
+test('Flight search engine searches flights with flight number via Elasticsearch', async () => {
+  const mockClient = createMockEsClient([
     {
-      id: 101,
-      flight_number: 'VN123',
-      departure_airport_id: 1,
-      arrival_airport_id: 2,
-      airline_id: 1,
-      departureAirport: { iata_code: 'SGN', city: 'TP. Hồ Chí Minh', name: 'Tân Sơn Nhất' },
-      arrivalAirport: { iata_code: 'HAN', city: 'Hà Nội', name: 'Nội Bài' },
-      airline: { iata_code: 'VN', name: 'Vietnam Airlines' },
-      fareClasses: [{ class_name: 'Economy' }, { class_name: 'Business' }],
-    },
-    {
-      id: 102,
-      flight_number: 'VJ456',
-      departure_airport_id: 2,
-      arrival_airport_id: 3,
-      airline_id: 2,
-      departureAirport: { iata_code: 'HAN', city: 'Hà Nội', name: 'Nội Bài' },
-      arrivalAirport: { iata_code: 'DAD', city: 'Đà Nẵng', name: 'Đà Nẵng' },
-      airline: { iata_code: 'VJ', name: 'Vietjet Air' },
-      fareClasses: [{ class_name: 'Eco' }],
+      _id: '101',
+      _score: 5.0,
+      _source: { id: 101, flight_number: 'VN123', airline_name: 'Vietnam Airlines', departure_airport_city: 'TP. Hồ Chí Minh', arrival_airport_city: 'Hà Nội' },
     },
   ]);
 
-  // Tìm theo số hiệu chuyến bay
-  const byFlightNo = engine.searchFlights('VN123');
+  const engine = new FlightSearchEngine({ client: mockClient });
+
+  const byFlightNo = await engine.searchFlights('VN123');
   assert.equal(byFlightNo[0].id, 101);
-
-  // Tìm theo tên thành phố không dấu
-  const byCity = engine.searchFlights('ha noi');
-  assert.ok(byCity.length >= 1);
-
-  // Tìm theo tên hãng mờ
-  const byAirline = engine.searchFlights('Vjetjet');
-  assert.equal(byAirline[0].id, 102);
+  assert.equal(byFlightNo[0].flight_number, 'VN123');
 });
 
 test('getSearchEngine returns a stable singleton instance', () => {

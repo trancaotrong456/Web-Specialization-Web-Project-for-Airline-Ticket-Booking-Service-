@@ -134,6 +134,8 @@ async function cleanupTrackedFixtures() {
     ...discoveredBookings.map(({ id }) => id),
   ])];
   if (bookingIds.length > 0) {
+    if (models.Notification) await models.Notification.destroy({ where: { user_id: { [Op.in]: await models.Booking.findAll({ where: { id: bookingIds }, attributes: ['user_id'], raw: true }).then((rows) => rows.map((row) => row.user_id).filter(Boolean)) } }, force: true });
+    if (models.NotificationOutbox) await models.NotificationOutbox.destroy({ where: { aggregate_id: bookingIds }, force: true });
     if (models.PaymentGatewayOperation) {
       const paymentIds = await models.Payment.findAll({ where: { booking_id: bookingIds }, attributes: ['id'], raw: true });
       const operationPaymentIds = paymentIds.map(({ id }) => id);
@@ -147,6 +149,15 @@ async function cleanupTrackedFixtures() {
           await models.PaymentReconciliationCase.destroy({ where: { payment_id: operationPaymentIds }, force: true });
         }
       }
+    }
+    if (models.ManualPaymentRefundRequest) {
+      const paymentIds = await models.Payment.findAll({ where: { booking_id: bookingIds }, attributes: ['id'], raw: true });
+      const ids = paymentIds.map(({ id }) => id);
+      if (ids.length > 0 && models.ManualPaymentRefundAuditLog) {
+        const requests = await models.ManualPaymentRefundRequest.findAll({ where: { payment_id: ids }, attributes: ['id'], raw: true });
+        if (requests.length > 0) await models.ManualPaymentRefundAuditLog.destroy({ where: { refund_request_id: requests.map(({ id }) => id) }, force: true });
+      }
+      if (ids.length > 0) await models.ManualPaymentRefundRequest.destroy({ where: { payment_id: ids }, force: true });
     }
     await models.Payment.destroy({ where: { booking_id: bookingIds }, force: true });
     await models.BookingPassenger.destroy({ where: { booking_id: bookingIds }, force: true });

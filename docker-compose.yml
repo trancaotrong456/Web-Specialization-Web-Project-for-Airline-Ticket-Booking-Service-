@@ -63,8 +63,9 @@ services:
       DISABLE_CRON: ${DISABLE_CRON:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
-      RESEND_API_KEY: ""
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
       EMAIL_FROM: "Airline Booking <onboarding@resend.dev>"
+      EMAIL_DELIVERY_MODE: ${EMAIL_DELIVERY_MODE:-disabled}
     ports:
       - "${APP_PORT:-5000}:5000"
     volumes:

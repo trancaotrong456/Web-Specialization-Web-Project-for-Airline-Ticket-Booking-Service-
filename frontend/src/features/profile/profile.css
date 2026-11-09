@@ -1,0 +1,381 @@
+/* Serene Flightways - User Profile Portal Styles (Vietjet Air inspired) */
+
+.vietjet-portal-page {
+  background: #f8fafc;
+  min-height: 100vh;
+}
+
+.portal-container {
+  max-width: 1240px;
+  margin: 0 auto;
+  padding: 2rem 1.25rem 4rem 1.25rem;
+}
+
+.portal-grid {
+  display: grid;
+  grid-template-columns: 290px 1fr;
+  gap: 2rem;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .portal-grid {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* Left Sidebar */
+.portal-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  position: sticky;
+  top: 5rem;
+}
+
+.sidebar-profile-card {
+  background: #ffffff;
+  border-radius: 1.25rem;
+  padding: 1.5rem 1.25rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  border: 1px solid #eef2f6;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.sidebar-avatar {
+  width: 58px;
+  height: 58px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #00514d 0%, #0d9488 100%);
+  color: #ffffff;
+  font-size: 1.5rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 14px rgba(0, 81, 77, 0.25);
+  flex-shrink: 0;
+}
+
+.sidebar-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+}
+
+.sidebar-greeting {
+  font-size: 0.8rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.sidebar-user-name {
+  font-size: 1.1rem;
+  color: #0f172a;
+  font-weight: 700;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sidebar-user-tier {
+  font-size: 0.75rem;
+  color: #d97706;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-top: 0.15rem;
+}
+
+.portal-nav {
+  background: #ffffff;
+  border-radius: 1.25rem;
+  padding: 1.25rem 0.75rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  border: 1px solid #eef2f6;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.nav-group-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+  padding: 0.75rem 0.75rem 0.35rem 0.75rem;
+}
+
+.portal-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.85rem;
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: #334155;
+  text-decoration: none;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+}
+
+.portal-nav-item:hover {
+  background: #f8fafc;
+  color: #0f172a;
+  transform: translateX(2px);
+}
+
+.portal-nav-item.active {
+  background: linear-gradient(135deg, #e02424 0%, #c81e1e 100%) !important;
+  color: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(224, 36, 36, 0.25);
+}
+
+.portal-nav-item.active .portal-icon {
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15));
+}
+
+.portal-nav-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.portal-nav-disabled:hover {
+  background: transparent;
+  transform: none;
+}
+
+/* Right Content Area */
+.portal-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+/* Sub-Tab Navigation */
+.subtabs-bar {
+  display: flex;
+  gap: 0.5rem;
+  background: #ffffff;
+  padding: 0.4rem;
+  border-radius: 1rem;
+  border: 1px solid #eef2f6;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.03);
+}
+
+.subtab-btn {
+  padding: 0.65rem 1.25rem;
+  border-radius: 0.75rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.subtab-btn:hover {
+  color: #0f172a;
+  background: #f8fafc;
+}
+
+.subtab-btn.active {
+  background: #00514d;
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(0, 81, 77, 0.25);
+}
+
+/* Cards (Vietjet Style) */
+.vj-card {
+  background: #ffffff;
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  border: 1px solid #eef2f6;
+}
+
+.vj-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.vj-card-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.vj-info-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1.25rem 1.5rem;
+}
+
+@media (max-width: 768px) {
+  .vj-info-grid {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+}
+
+.vj-info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.vj-info-label {
+  font-size: 0.82rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.vj-info-value {
+  font-size: 0.98rem;
+  color: #0f172a;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.copy-badge {
+  padding: 0.2rem 0.5rem;
+  background: #f1f5f9;
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  color: #475569;
+  cursor: pointer;
+  border: 1px solid #cbd5e1;
+  transition: all 0.15s ease;
+}
+
+.copy-badge:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.tier-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #fee2e2;
+  color: #dc2626;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.points-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #d97706;
+  font-weight: 700;
+}
+
+.points-link {
+  font-size: 0.8rem;
+  color: #dc2626;
+  font-weight: 600;
+  text-decoration: none;
+  margin-left: 0.5rem;
+}
+
+.points-link:hover {
+  text-decoration: underline;
+}
+
+/* Security Settings Section */
+.vj-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.vj-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 0;
+  border-bottom: 1px dashed #e2e8f0;
+}
+
+.vj-settings-row:last-child {
+  border-bottom: none;
+}
+
+.vj-action-link {
+  color: #e02424;
+  font-weight: 600;
+  font-size: 0.9rem;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  cursor: pointer;
+}
+
+.vj-action-link:hover {
+  text-decoration: underline;
+}
+
+/* Security Page Supplementary Grid */
+.security-page-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.security-overview-card {
+  background: #ffffff;
+  border-radius: 1.25rem;
+  padding: 1.75rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  border: 1px solid #eef2f6;
+}
+
+.security-status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  margin-top: 1rem;
+}
+
+.security-status-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 0.75rem;
+  border-radius: 0.75rem;
+  background: #f8fafc;
+}
+
+.status-icon {
+  font-size: 1.4rem;
+  flex-shrink: 0;
+}

@@ -81,10 +81,16 @@ class FlightService {
     }
     const keyword = (search || q)?.trim?.();
     let matchingFlightIds;
+    let fromElasticsearch = false;
+    let fromDatabaseFallback = false;
     if (keyword && this.searchEngine) {
-      const results = this.searchEngine.searchFlights(keyword);
-      if (results && results.length > 0) {
+      const searchResult = await this.searchEngine.searchFlights(keyword);
+      if (searchResult && !searchResult.fallback) {
+        fromElasticsearch = true;
+        const results = Array.isArray(searchResult) ? searchResult : searchResult.items || [];
         matchingFlightIds = results.map((r) => r.id);
+      } else {
+        fromDatabaseFallback = true;
       }
     }
     const query = {
@@ -97,8 +103,12 @@ class FlightService {
       max_duration_minutes: max_duration_minutes === undefined ? undefined : Number(max_duration_minutes),
       sort_by, page, limit,
     };
-    if (matchingFlightIds) {
-      query.matchingFlightIds = matchingFlightIds;
+    if (fromElasticsearch) {
+      query.matchingFlightIds = matchingFlightIds || [];
+      query.fromElasticsearch = true;
+    } else if (fromDatabaseFallback && keyword) {
+      query.searchKeyword = keyword;
+      query.fromDatabaseFallback = true;
     }
     const { count, rows } = await this.repository.searchPage(query);
     return { total: count, page, limit, data: rows };

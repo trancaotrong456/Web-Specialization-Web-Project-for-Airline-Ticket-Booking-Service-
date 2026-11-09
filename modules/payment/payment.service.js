@@ -646,11 +646,11 @@ class PaymentService {
   /**
    * Helper to send booking confirmed email in background
    */
-  async _triggerBookingConfirmationEmail(bookingId) {
+  async _triggerBookingConfirmationEmail(bookingId, logicalEventKey = null) {
     try {
       // Lazy load to avoid circular dependency
       const emailService = this.emailProvider || require('../../services/email.service');
-      await emailService.sendBookingConfirmation(bookingId);
+      await emailService.sendBookingConfirmation(bookingId, null, { logicalEventKey });
     } catch (error) {
       console.error(`[Email] Failed to send ticket confirmation email for booking #${bookingId}:`, redactString(error.message));
     }
@@ -1115,6 +1115,7 @@ class PaymentService {
     }
 
     let bookingIdToEmail = null;
+    let emailLogicalEventKey = null;
     let seatUpdates = [];
     let transactionOutcome = 'processed';
 
@@ -1217,6 +1218,7 @@ class PaymentService {
         await this.repository.save(lockedBooking, { transaction: t });
 
         bookingIdToEmail = lockedBooking.id;
+        emailLogicalEventKey = `payment:${lockedPayment.id}:succeeded`;
       } else {
         // Báo cáo Chương 2.3 (Ngoại lệ, Chức năng 2):
         // Khách hủy giữa chừng hoặc thanh toán thất bại tại cổng:
@@ -1268,7 +1270,7 @@ class PaymentService {
     await this._emitSeatUpdates(seatUpdates);
 
     if (bookingIdToEmail) {
-      this._triggerBookingConfirmationEmail(bookingIdToEmail);
+      this._triggerBookingConfirmationEmail(bookingIdToEmail, emailLogicalEventKey);
     }
 
     return { RspCode: '00', Message: 'Confirm Success' };
@@ -1365,6 +1367,7 @@ class PaymentService {
     }
 
     let bookingIdToEmail = null;
+    let emailLogicalEventKey = null;
     let seatUpdates = [];
     let requiresManualReview = false;
 
@@ -1444,6 +1447,7 @@ class PaymentService {
         await this.repository.save(lockedBooking, { transaction: t });
 
         bookingIdToEmail = lockedBooking.id;
+        emailLogicalEventKey = `payment:${lockedPayment.id}:succeeded`;
       } else {
         // payOS reports a non-success payment or cancellation.
         lockedPayment.status = 'failed';
@@ -1466,7 +1470,7 @@ class PaymentService {
     await this._emitSeatUpdates(seatUpdates);
 
     if (bookingIdToEmail) {
-      this._triggerBookingConfirmationEmail(bookingIdToEmail);
+      this._triggerBookingConfirmationEmail(bookingIdToEmail, emailLogicalEventKey);
     }
 
     return {
@@ -1546,6 +1550,7 @@ class PaymentService {
 
   async _applyVnpayQueryResult(paymentId, result, { reconciliationCaseId = null } = {}) {
     let bookingIdToEmail = null;
+    let emailLogicalEventKey = null;
     let seatUpdates = [];
     await this.transactionManager.transaction(async (transaction) => {
       const payment = await this.repository.findLockedPaymentById(paymentId, transaction);
@@ -1574,6 +1579,7 @@ class PaymentService {
           booking.status = 'confirmed';
           await this.repository.save(booking, { transaction });
           bookingIdToEmail = booking.id;
+          emailLogicalEventKey = `payment:${payment.id}:succeeded`;
         } else {
           const exception = await this._recordFinancialException(payment, booking, transaction, {
             status: 'PAID', reason: itineraryError || 'Late PAID payment requires financial reconciliation',
@@ -1600,7 +1606,7 @@ class PaymentService {
       }
     });
     await this._emitSeatUpdates(seatUpdates);
-    if (bookingIdToEmail) this._triggerBookingConfirmationEmail(bookingIdToEmail);
+    if (bookingIdToEmail) this._triggerBookingConfirmationEmail(bookingIdToEmail, emailLogicalEventKey);
     return { bookingIdToEmail, seatUpdates };
   }
 
@@ -1838,6 +1844,64 @@ class PaymentService {
         revenue: Number(row.revenue || 0),
       })),
     };
+  }
+
+  _assertManualRefundAdmin(admin) {
+    const role = typeof admin?.role === 'string' ? admin.role : admin?.role?.name;
+    if (!admin?.id || role !== 'admin') { const error = new Error('Admin authorization is required'); error.statusCode = 403; throw error; }
+  }
+
+  _safeManualRefund(row) {
+    const value = row?.toJSON ? row.toJSON() : row;
+    return { id: value.id, payment_id: value.payment_id, booking_id: value.booking_id, provider: value.provider, amount: value.amount, status: value.status, reason: value.reason, evidence_reference: value.evidence_reference, settlement_reference: value.settlement_reference, requested_by_admin_id: value.requested_by_admin_id, resolved_by_admin_id: value.resolved_by_admin_id, rejection_reason: value.rejection_reason, created_at: value.created_at, updated_at: value.updated_at, settled_at: value.settled_at, rejected_at: value.rejected_at, payment: value.payment, booking: value.booking, auditLogs: value.auditLogs };
+  }
+
+  async createManualPayosRefund(paymentId, { reason, evidence_reference: evidenceReference = null } = {}, admin) {
+    this._assertManualRefundAdmin(admin);
+    if (!reason || String(reason).trim().length < 3) { const e = new Error('A refund reason is required'); e.statusCode = 422; throw e; }
+    return this.transactionManager.transaction(async (t) => {
+      const payment = await this.repository.findLockedPaymentById(paymentId, t);
+      if (!payment) { const e = new Error('Payment not found'); e.statusCode = 404; throw e; }
+      if (payment.payment_method !== 'payos') { const e = new Error('Manual refund is only supported for payOS payments'); e.statusCode = 409; throw e; }
+      if (payment.status !== 'success') { const e = new Error('Only successful payments can request a manual refund'); e.statusCode = 409; throw e; }
+      const existing = await this.repository.findManualRefundRequestByPayment(paymentId, t);
+      if (existing) { const e = new Error('A manual refund request already exists for this payment'); e.statusCode = 409; throw e; }
+      let request;
+      try { request = await this.repository.createManualRefundRequest({ payment_id: payment.id, booking_id: payment.booking_id, provider: 'payos', amount: payment.amount, status: 'pending', reason: String(reason).trim().slice(0, 500), evidence_reference: evidenceReference ? String(evidenceReference).trim().slice(0, 500) : null, requested_by_admin_id: admin.id }, { transaction: t }); } catch (error) { if (error.name === 'SequelizeUniqueConstraintError') { const e = new Error('A manual refund request already exists for this payment'); e.statusCode = 409; throw e; } throw error; }
+      await this.repository.createManualRefundAuditLog({ refund_request_id: request.id, admin_user_id: admin.id, action: 'created', evidence_reference: request.evidence_reference, reason: request.reason }, { transaction: t });
+      return this._safeManualRefund(request);
+    });
+  }
+
+  async listManualPayosRefunds({ page = 1, limit = 20, status } = {}, admin) {
+    this._assertManualRefundAdmin(admin); const normalizedPage = Math.max(1, Number(page) || 1); const normalizedLimit = Math.min(100, Math.max(1, Number(limit) || 20));
+    const result = await this.repository.listManualRefundRequests({ where: status ? { status } : {}, limit: normalizedLimit, offset: (normalizedPage - 1) * normalizedLimit });
+    return { data: result.rows.map((row) => this._safeManualRefund(row)), total: result.count, page: normalizedPage, limit: normalizedLimit };
+  }
+  async getManualPayosRefund(id, admin) { this._assertManualRefundAdmin(admin); const row = await this.repository.findManualRefundDetail(id); if (!row) { const e = new Error('Manual refund request not found'); e.statusCode = 404; throw e; } return this._safeManualRefund(row); }
+
+  async settleManualPayosRefund(id, { evidence_reference: evidenceReference, settlement_reference: settlementReference } = {}, admin) {
+    this._assertManualRefundAdmin(admin); if (!evidenceReference || String(evidenceReference).trim().length < 3 || !settlementReference || String(settlementReference).trim().length < 3) { const e = new Error('Verified evidence and settlement reference are required'); e.statusCode = 422; throw e; }
+    return this.transactionManager.transaction(async (t) => {
+      // Keep the payment-first order used by gateway callbacks and VNPay refunds.
+      const requestPreview = await this.repository.findManualRefundDetail(id);
+      if (!requestPreview) { const e = new Error('Manual refund request not found'); e.statusCode = 404; throw e; }
+      const payment = await this.repository.findLockedPaymentById(requestPreview.payment_id, t);
+      const request = await this.repository.findLockedManualRefundRequest(id, t); if (!request) { const e = new Error('Manual refund request not found'); e.statusCode = 404; throw e; }
+      if (request.status === 'settled') { if (request.settlement_reference === String(settlementReference).trim()) return this._safeManualRefund(request); const e = new Error('Manual refund is already settled with a different reference'); e.statusCode = 409; throw e; }
+      if (request.status !== 'pending') { const e = new Error('Only pending manual refunds can be settled'); e.statusCode = 409; throw e; }
+      if (!payment || payment.status !== 'success' || payment.payment_method !== 'payos') { const e = new Error('Payment is no longer eligible for manual settlement'); e.statusCode = 409; throw e; }
+      const booking = await this.repository.findRefundBooking(request.booking_id, t); if (!booking) { const e = new Error('Booking not found'); e.statusCode = 404; throw e; }
+      request.status = 'settled'; request.evidence_reference = String(evidenceReference).trim().slice(0, 500); request.settlement_reference = String(settlementReference).trim().slice(0, 150); request.resolved_by_admin_id = admin.id; request.settled_at = new Date(); await this.repository.saveManualRefundRequest(request, { transaction: t });
+      payment.status = 'refunded'; await this.repository.save(payment, { transaction: t });
+      if (['confirmed', 'pending_payment'].includes(booking.status)) { booking.status = 'cancelled'; await this.repository.save(booking, { transaction: t }); await releaseBookingFlightSeats(booking, { repository: this.repository, transaction: t, findFlight: this.repository.findLockedFlight.bind(this.repository) }); if (booking.promotion_id) { const promo = await this.repository.findLockedPromotion(booking.promotion_id, t); if (promo && Number(promo.used_count) > 0) await this.repository.decrement(promo, 'used_count', { by: 1, transaction: t }); } }
+      await this.repository.createManualRefundAuditLog({ refund_request_id: request.id, admin_user_id: admin.id, action: 'settled', evidence_reference: request.evidence_reference, settlement_reference: request.settlement_reference }, { transaction: t }); return this._safeManualRefund(request);
+    });
+  }
+
+  async rejectManualPayosRefund(id, { reason } = {}, admin) {
+    this._assertManualRefundAdmin(admin); if (!reason || String(reason).trim().length < 3) { const e = new Error('A rejection reason is required'); e.statusCode = 422; throw e; }
+    return this.transactionManager.transaction(async (t) => { const preview = await this.repository.findManualRefundDetail(id); if (!preview) { const e = new Error('Manual refund request not found'); e.statusCode = 404; throw e; } const payment = await this.repository.findLockedPaymentById(preview.payment_id, t); const request = await this.repository.findLockedManualRefundRequest(id, t); if (!request) { const e = new Error('Manual refund request not found'); e.statusCode = 404; throw e; } if (!payment || payment.payment_method !== 'payos') { const e = new Error('Payment is no longer eligible for manual refund'); e.statusCode = 409; throw e; } if (request.status === 'rejected') return this._safeManualRefund(request); if (request.status !== 'pending') { const e = new Error('Only pending manual refunds can be rejected'); e.statusCode = 409; throw e; } request.status = 'rejected'; request.rejection_reason = String(reason).trim().slice(0, 500); request.resolved_by_admin_id = admin.id; request.rejected_at = new Date(); await this.repository.saveManualRefundRequest(request, { transaction: t }); await this.repository.createManualRefundAuditLog({ refund_request_id: request.id, admin_user_id: admin.id, action: 'rejected', reason: request.rejection_reason }, { transaction: t }); return this._safeManualRefund(request); });
   }
 
   /**

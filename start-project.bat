@@ -15,7 +15,7 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo [2/4] Khoi dong MySQL + Backend (Docker Compose)...
+echo [2/4] Khoi dong MySQL + Backend + Frontend (Docker Compose)...
 docker compose up -d
 if errorlevel 1 (
     echo [LOI] Docker Compose khoi dong that bai.
@@ -74,13 +74,13 @@ echo   API Docs    : http://localhost:5000/api/v1/health
 echo.
 echo   TAI KHOAN DEMO:
 echo     Admin    : admin@airline-booking.local
-echo     Password : Admin123456
+echo     Password : DemoAdmin@2026!
 echo.
 echo     Staff    : staff.demo@airline-booking.local
-echo     Password : Staff123456
+echo     Password : DemoStaff@2026!
 echo.
 echo     Customer : customer.demo@airline-booking.local
-echo     Password : Customer123456
+echo     Password : DemoCustomer@2026!
 echo ============================================================
 echo.
 pause
