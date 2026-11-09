@@ -1,13 +1,6 @@
 name: Integration Verification
 
 on:
-  push:
-    branches:
-      - integration/serene-eight-features-20261017
-      - develop
-  pull_request:
-    branches:
-      - develop
   workflow_dispatch:
 
 permissions:
