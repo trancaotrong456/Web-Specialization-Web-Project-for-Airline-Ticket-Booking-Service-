@@ -141,6 +141,20 @@ test('real MySQL business and concurrency integration', { skip: !authorizedCiDat
     if (roleId) await db.Role.destroy({ where: { id: roleId } });
   }
 
+  const originalTest = t.test.bind(t);
+  t.test = async (name, fn) => {
+    return originalTest(name, async (subT) => {
+      console.log(`>>> [TEST START] ${name}`);
+      try {
+        await fn(subT);
+        console.log(`<<< [TEST PASS]  ${name}`);
+      } catch (err) {
+        console.error(`XXX [TEST FAIL]  ${name}:\n`, err.stack || err);
+        throw err;
+      }
+    });
+  };
+
   try {
     await t.test('real concurrent booking holds cannot oversell fare quota', async () => {
       const f = await createFixture();
