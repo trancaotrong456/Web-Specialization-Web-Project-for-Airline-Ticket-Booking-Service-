@@ -19,6 +19,8 @@ function appForRole(role) {
     getReconciliationMetricsPrometheus(req, res) { return res.type('text/plain').send('# metrics\n'); },
     getAllPayments() {}, initiatePayment() {}, vnpayReturn() {}, vnpayIpn() {}, payosWebhook() {},
     payosDemoWebhook() {}, payosReturn() {}, getRevenue() {}, refund() {}, queryVnpay() {}, refundVnpay() {},
+    createManualPayosRefund() {}, listManualPayosRefunds() {}, getManualPayosRefund() {},
+    settleManualPayosRefund() {}, rejectManualPayosRefund() {},
   };
   const guards = {
     authenticate(req, _res, next) { req.user = role ? { role: { name: role } } : null; next(); },

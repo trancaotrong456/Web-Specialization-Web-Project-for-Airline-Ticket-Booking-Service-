@@ -64,6 +64,7 @@ test('multi-leg e-ticket includes every flight, passenger, fare class and bookin
     lineWidth() { return this; }
     stroke() { return this; }
     roundedRect() { return this; }
+    rect() { return this; }
     fill() { return this; }
     fillAndStroke() { return this; }
     addPage() { this.y = 0; return this; }
