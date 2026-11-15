@@ -1,50 +1,970 @@
-.my-bookings-view > .booking-heading {
-  min-height: 10rem;
-  align-items: center !important;
-  margin-bottom: 1.25rem !important;
-  padding: 1rem 0 1.5rem;
+/* ==========================================================================
+   SERENE FLIGHTWAYS — MODERN AIRLINE MINIMAL STYLES
+   Features: Booking Lookup & My Bookings Dashboard
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. BOOKING LOOKUP PAGE (Tra cứu đặt chỗ)
+   -------------------------------------------------------------------------- */
+.lookup-page-wrapper {
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: 0 1rem 3rem;
 }
 
-.my-bookings-view .booking-heading > div:first-child { max-width: 48rem; }
-.my-bookings-view .booking-heading-actions { flex: 0 0 auto; }
-.my-bookings-view .booking-heading-actions .button { min-width: 9rem; min-height: 2.9rem; }
-.my-bookings-view .my-bookings-panel { padding: clamp(1.1rem, 2.6vw, 2rem) !important; }
-.my-bookings-view .booking-card-list { gap: .9rem; }
-.my-bookings-view .my-booking-card { padding: clamp(1rem, 2vw, 1.4rem); border-radius: .9rem; }
-.my-bookings-view .my-booking-card h2 { color: #0c4a45; font-size: 1.08rem; letter-spacing: .015em; }
-.my-bookings-view .my-booking-itinerary { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: .7rem; margin: .85rem 0 1.1rem; padding: 0; list-style: none; }
-.my-booking-itinerary li { display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: .65rem; row-gap: .25rem; padding: .75rem .85rem; border-left: 2px solid #c5e2db; background: #f7faf9; }
-.my-booking-leg-label { color: #64748b; font-size: .72rem; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
-.my-booking-itinerary li > strong { justify-self: end; color: #102e38; font-size: .98rem; }
-.my-booking-itinerary li > span:nth-of-type(2) { color: #425b61; font-size: .8rem; font-variant-numeric: tabular-nums; }
-.my-booking-itinerary li > small { justify-self: end; color: #64748b; font-size: .76rem; }
-.my-booking-card-actions { align-items: center; }
-.my-booking-card-actions > strong { color: #0b5147; font-size: 1rem; font-variant-numeric: tabular-nums; }
-.my-booking-card-actions > div { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: .55rem; }
-.my-booking-card-actions .button { min-height: 2.5rem; }
-.my-bookings-view .my-bookings-empty { min-height: 17rem; padding: 2rem 1rem !important; }
-.my-bookings-view .my-bookings-empty::before { content: none; }
-.my-bookings-empty-icon,
-.my-bookings-message-icon { display: grid; width: 3rem; height: 3rem; place-items: center; margin: 0 auto .9rem; border: 1px solid #cfe3de; border-radius: 50%; color: #0b6254; background: #f0f7f5; font-size: 1.1rem; }
-.my-bookings-view .my-bookings-empty h2,
-.my-bookings-view .my-bookings-message h2 { margin: 0 0 .35rem; color: #123b3b; font-size: 1.2rem; }
-.my-bookings-view .my-bookings-empty p,
-.my-bookings-view .my-bookings-message p { max-width: 33rem; margin: 0 0 1.15rem; color: #5c7075; }
-.my-bookings-view .my-bookings-message { max-width: 48rem; min-height: 17rem; margin-inline: auto; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; }
-.my-bookings-message-icon { border-color: #f0d9ca; color: #9a4c25; background: #fff8f2; font-weight: 800; }
-
-@media (max-width: 48rem) {
-  .my-bookings-view > .booking-heading { min-height: 8.5rem; align-items: flex-start !important; padding-block: .6rem 1rem; }
-  .my-bookings-view .booking-heading-actions { width: auto !important; }
-  .my-bookings-view .booking-heading-actions .button { min-width: 0; }
-  .my-bookings-view .my-booking-card-actions { align-items: flex-start; flex-direction: column; }
-  .my-bookings-view .my-booking-card-actions > div { width: 100%; justify-content: flex-start; }
+.lookup-hero-header {
+  text-align: center;
+  margin-bottom: 2rem;
 }
 
-@media (max-width: 36rem) {
-  .my-bookings-view > .booking-heading { gap: .8rem !important; }
-  .my-bookings-view .booking-heading h1 { font-size: 1.8rem !important; }
-  .my-bookings-view .booking-heading-actions .button { min-height: 2.55rem; }
-  .my-booking-itinerary li { padding-inline: .65rem; }
-  .my-booking-card-actions > div { display: grid; grid-template-columns: 1fr; }
+.lookup-security-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.85rem;
+  border-radius: 9999px;
+  background: #e6f4f1;
+  color: #0a4946;
+  border: 1px solid #a2f1ea;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  margin-bottom: 0.75rem;
+}
+
+.lookup-hero-header h1 {
+  font-size: clamp(1.6rem, 3.5vw, 2.2rem);
+  font-weight: 800;
+  color: #0a4946;
+  margin: 0 0 0.5rem;
+  letter-spacing: -0.02em;
+}
+
+.lookup-hero-header p {
+  max-width: 36rem;
+  margin: 0 auto;
+  color: #5c7075;
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+
+/* Thẻ Form tra cứu */
+.lookup-form-card {
+  background: #ffffff;
+  border: 1px solid #d1dbec;
+  border-radius: 16px;
+  padding: clamp(1.5rem, 3vw, 2.25rem);
+  box-shadow: 0 10px 25px -5px rgba(15, 107, 102, 0.06), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
+  margin-bottom: 1.5rem;
+}
+
+.lookup-card-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid #eef4f2;
+}
+
+.lookup-card-title-row .title-left {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  color: #0a4946;
+  font-weight: 700;
+  font-size: 1.1rem;
+}
+
+.lookup-card-title-row .guest-badge {
+  font-size: 0.75rem;
+  background: #eef4ff;
+  color: #4b5563;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-weight: 600;
+}
+
+.lookup-form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.lookup-input-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lookup-input-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.lookup-input-label-row label {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #121c28;
+}
+
+.lookup-input-label-row .hint-badge {
+  font-size: 0.75rem;
+  color: #0f6b66;
+  font-weight: 600;
+}
+
+.lookup-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.lookup-input-icon {
+  position: absolute;
+  left: 0.95rem;
+  color: #0f6b66;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.lookup-input-wrapper input {
+  width: 100%;
+  height: 3.15rem;
+  padding-left: 3.15rem !important;
+  padding-right: 1.15rem !important;
+  border-radius: 10px;
+  border: 1px solid #d1dbec;
+  background: #ffffff;
+  color: #121c28;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.lookup-input-wrapper input.pnr-input {
+  font-family: var(--font-mono, 'SF Mono', Consolas, monospace);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.lookup-input-wrapper input:focus {
+  outline: none;
+  border-color: #0f6b66;
+  box-shadow: 0 0 0 3px rgba(15, 107, 102, 0.15);
+}
+
+.lookup-input-hint {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0.1rem 0 0;
+}
+
+.lookup-submit-button {
+  width: 100%;
+  height: 3.1rem;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #0f6b66 0%, #0a4946 100%);
+  color: #ffffff;
+  font-size: 1rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.6rem;
+  border: none;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(15, 107, 102, 0.22);
+  transition: all 0.2s ease;
+  margin-top: 0.5rem;
+}
+
+.lookup-submit-button:hover:not(:disabled) {
+  background: linear-gradient(135deg, #0c5955 0%, #083c39 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(15, 107, 102, 0.3);
+}
+
+.lookup-submit-button:active:not(:disabled) {
+  transform: scale(0.99);
+}
+
+.lookup-submit-button:disabled {
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+/* Thẻ hỗ trợ thông tin phụ */
+.lookup-help-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.lookup-help-card {
+  background: #ffffff;
+  border: 1px solid #eef4f2;
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.lookup-help-icon {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  background: #e6f4f1;
+  color: #0f6b66;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.lookup-help-icon.accent-icon {
+  background: #fff6eb;
+  color: #835400;
+}
+
+.lookup-help-text strong {
+  display: block;
+  font-size: 0.88rem;
+  color: #121c28;
+  margin-bottom: 0.2rem;
+}
+
+.lookup-help-text p {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+  line-height: 1.45;
+}
+
+/* Thẻ kết quả tra cứu (Boarding Pass Ticket Card) */
+.lookup-ticket-card {
+  margin-top: 2rem;
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #d1dbec;
+  box-shadow: 0 12px 28px -6px rgba(15, 107, 102, 0.12), 0 4px 12px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  animation: slideUpFade 0.3s ease-out;
+}
+
+@keyframes slideUpFade {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.lookup-ticket-header {
+  background: linear-gradient(135deg, #0a4946 0%, #0f6b66 100%);
+  color: #ffffff;
+  padding: 1.15rem 1.5rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.lookup-ticket-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.ticket-icon-box {
+  width: 2.25rem;
+  height: 2.25rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+}
+
+.lookup-ticket-brand-text .eyebrow {
+  display: block;
+  font-size: 0.72rem;
+  color: #a2f1ea;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.lookup-ticket-brand-text h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.lookup-ticket-pnr-box {
+  text-align: right;
+}
+
+.lookup-ticket-pnr-box .pnr-code {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #feb64e;
+  letter-spacing: 0.06em;
+}
+
+.lookup-ticket-body {
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+/* Lộ trình bay trực quan */
+.flight-route-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.flight-endpoint {
+  display: flex;
+  flex-direction: column;
+  min-width: 6rem;
+}
+
+.flight-endpoint.align-right {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.flight-endpoint .iata-code {
+  font-family: var(--font-mono, monospace);
+  font-size: clamp(1.5rem, 3vw, 2rem);
+  font-weight: 800;
+  color: #0a4946;
+  line-height: 1;
+}
+
+.flight-endpoint .city-name {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #121c28;
+  margin-top: 0.25rem;
+}
+
+.flight-endpoint .flight-time {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f6b66;
+  margin-top: 0.35rem;
+}
+
+.flight-mid-line {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 14rem;
+  padding: 0 0.5rem;
+}
+
+.flight-mid-line .flight-type-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+
+.flight-track-bar {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  position: relative;
+}
+
+.flight-track-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #0f6b66;
+  flex-shrink: 0;
+}
+
+.flight-track-line {
+  flex: 1;
+  height: 2px;
+  background: #d1dbec;
+}
+
+.flight-track-icon {
+  margin: 0 0.4rem;
+  color: #0f6b66;
+  display: inline-flex;
+  transform: rotate(90deg);
+}
+
+.lookup-ticket-info-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.85rem 1rem;
+  background: #f7faf9;
+  border: 1px solid #eef4f2;
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #334155;
+}
+
+.lookup-ticket-info-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.lookup-ticket-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding-top: 1rem;
+  border-top: 1px dashed #d1dbec;
+}
+
+.lookup-ticket-total .label {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.lookup-ticket-total .amount {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0a4946;
+}
+
+.lookup-detail-button {
+  padding: 0.65rem 1.4rem;
+  border-radius: 10px;
+  background: #0f6b66;
+  color: #ffffff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  border: none;
+  cursor: pointer;
+  text-decoration: none;
+  box-shadow: 0 2px 8px rgba(15, 107, 102, 0.2);
+  transition: all 0.2s ease;
+}
+
+.lookup-detail-button:hover {
+  background: #0a4946;
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   2. MY BOOKINGS PAGE (Đặt chỗ của tôi)
+   -------------------------------------------------------------------------- */
+.my-bookings-container {
+  max-width: 68rem;
+  margin: 0 auto;
+  padding-bottom: 3.5rem;
+}
+
+/* Segmented Control Tabs */
+.my-bookings-tabs-wrapper {
+  margin-bottom: 1.25rem;
+}
+
+.my-bookings-segmented-tabs {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  background: #eef4f2;
+  border-radius: 12px;
+  border: 1px solid #dfe9e6;
+}
+
+.my-bookings-tab-button {
+  padding: 0.55rem 1.15rem;
+  border-radius: 9px;
+  border: none;
+  background: transparent;
+  color: #5c7075;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.my-bookings-tab-button:hover:not(.is-active) {
+  color: #0a4946;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.my-bookings-tab-button.is-active {
+  background: #ffffff;
+  color: #0a4946;
+  box-shadow: 0 2px 6px rgba(15, 107, 102, 0.08);
+}
+
+/* Toolbar tìm kiếm & lọc */
+.my-bookings-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 1rem 1.25rem;
+  background: #ffffff;
+  border: 1px solid #d1dbec;
+  border-radius: 12px;
+}
+
+.my-bookings-search-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+  min-width: min(100%, 18rem);
+}
+
+.my-bookings-search-input-box {
+  position: relative;
+  flex: 1;
+}
+
+.my-bookings-search-input-box input {
+  width: 100%;
+  height: 2.6rem;
+  padding-left: 2.75rem !important;
+  padding-right: 0.85rem !important;
+  border-radius: 9px;
+  border: 1px solid #d1dbec;
+  font-size: 0.88rem;
+  color: #121c28;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.my-bookings-search-input-box input:focus {
+  outline: none;
+  border-color: #0f6b66;
+  box-shadow: 0 0 0 3px rgba(15, 107, 102, 0.12);
+}
+
+.my-bookings-search-input-box .search-icon {
+  position: absolute;
+  left: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+}
+
+.my-bookings-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.my-bookings-select-wrapper select {
+  height: 2.6rem;
+  padding: 0 2.2rem 0 0.85rem;
+  border-radius: 9px;
+  border: 1px solid #d1dbec;
+  background: #ffffff;
+  font-size: 0.88rem;
+  color: #121c28;
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%230f6b66' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  transition: all 0.2s ease;
+}
+
+.my-bookings-select-wrapper select:focus {
+  outline: none;
+  border-color: #0f6b66;
+  box-shadow: 0 0 0 3px rgba(15, 107, 102, 0.12);
+}
+
+.my-bookings-count-chip {
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+  background: #eef4f2;
+  color: #0a4946;
+  font-size: 0.82rem;
+  font-weight: 700;
+  font-family: var(--font-mono, monospace);
+  white-space: nowrap;
+}
+
+/* Thẻ Booking Card (Modern Airline Dashboard Style) */
+.booking-card-modern {
+  background: #ffffff;
+  border: 1px solid #d1dbec;
+  border-radius: 14px;
+  box-shadow: 0 2px 8px rgba(15, 107, 102, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+  margin-bottom: 1rem;
+}
+
+.booking-card-modern:hover {
+  border-color: #0f6b66;
+  box-shadow: 0 8px 24px -4px rgba(15, 107, 102, 0.12), 0 4px 8px -2px rgba(0, 0, 0, 0.04);
+  transform: translateY(-2px);
+}
+
+.booking-card-top-bar {
+  padding: 0.85rem 1.25rem;
+  background: #f8fbfb;
+  border-bottom: 1px solid #eef4f2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.booking-card-id-group {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.booking-card-id-group .pnr-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--font-mono, monospace);
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f6b66;
+  letter-spacing: 0.04em;
+}
+
+.booking-card-id-group .created-date {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.booking-card-status-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.booking-card-main-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+}
+
+.booking-card-flight-row {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 1.25rem;
+  min-width: min(100%, 20rem);
+}
+
+.airline-avatar-box {
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 12px;
+  background: #eef4f2;
+  border: 1px solid #d1e5e0;
+  color: #0a4946;
+  font-weight: 800;
+  font-size: 1.05rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-family: var(--font-mono, monospace);
+}
+
+.airline-avatar-box small {
+  font-size: 0.62rem;
+  color: #5c7075;
+  font-weight: 600;
+  line-height: 1;
+}
+
+.booking-card-route-segment {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.route-point {
+  display: flex;
+  flex-direction: column;
+}
+
+.route-point.text-right {
+  text-align: right;
+  align-items: flex-end;
+}
+
+.route-point .time {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.2rem;
+  font-weight: 800;
+  color: #121c28;
+  line-height: 1.1;
+}
+
+.route-point .code {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f6b66;
+  margin-top: 0.15rem;
+}
+
+.route-point .city {
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.route-connector {
+  flex: 1;
+  max-width: 10rem;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0 0.5rem;
+}
+
+.route-connector .route-badge {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.route-connector .connector-line {
+  width: 100%;
+  display: flex;
+  align-items: center;
+}
+
+.route-connector .line {
+  flex: 1;
+  height: 2px;
+  background: #d1dbec;
+}
+
+.route-connector .plane-icon {
+  margin: 0 0.35rem;
+  color: #0f6b66;
+  display: inline-flex;
+  transform: rotate(90deg);
+}
+
+.booking-card-side-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.65rem;
+  min-width: 9rem;
+}
+
+.booking-card-price-box {
+  text-align: right;
+}
+
+.booking-card-price-box .passenger-count {
+  display: block;
+  font-size: 0.78rem;
+  color: #64748b;
+}
+
+.booking-card-price-box .total-amount {
+  font-family: var(--font-mono, monospace);
+  font-size: 1.28rem;
+  font-weight: 800;
+  color: #0a4946;
+}
+
+.booking-card-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.btn-card-detail {
+  padding: 0.55rem 1rem;
+  border-radius: 9px;
+  background: #ffffff;
+  border: 1px solid #d1dbec;
+  color: #0a4946;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  transition: all 0.2s ease;
+}
+
+.btn-card-detail:hover {
+  border-color: #0f6b66;
+  background: #f0f7f5;
+  color: #0a4946;
+}
+
+.btn-card-pay {
+  padding: 0.55rem 1.15rem;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #d9622b 0%, #c2501d 100%);
+  color: #ffffff;
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  box-shadow: 0 3px 10px rgba(217, 98, 43, 0.25);
+  transition: all 0.2s ease;
+}
+
+.btn-card-pay:hover {
+  background: linear-gradient(135deg, #c2501d 0%, #a84013 100%);
+  transform: translateY(-1px);
+}
+
+/* --------------------------------------------------------------------------
+   3. FOOTER COMPACT & BALANCED ADJUSTMENTS
+   -------------------------------------------------------------------------- */
+.serene-full-footer {
+  padding-top: 2rem !important;
+  padding-bottom: 1.5rem !important;
+}
+
+.serene-full-footer .footer-top-columns {
+  gap: 1.5rem !important;
+}
+
+.serene-full-footer .footer-col h4 {
+  font-size: 0.92rem !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.serene-full-footer .footer-nav-links a {
+  font-size: 0.84rem !important;
+  line-height: 1.6 !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. RESPONSIVE BREAKPOINTS (Mobile & Tablet)
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  .lookup-form-card {
+    padding: 1.25rem;
+  }
+
+  .flight-route-strip {
+    gap: 0.5rem;
+  }
+
+  .flight-endpoint .iata-code {
+    font-size: 1.4rem;
+  }
+
+  .flight-mid-line {
+    max-width: 8rem;
+  }
+
+  .booking-card-main-body {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .booking-card-side-actions {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    padding-top: 0.85rem;
+    border-top: 1px dashed #eef4f2;
+  }
+
+  .booking-card-price-box {
+    text-align: left;
+  }
+}
+
+@media (max-width: 480px) {
+  .lookup-hero-header h1 {
+    font-size: 1.5rem;
+  }
+
+  .my-bookings-segmented-tabs {
+    width: 100%;
+  }
+
+  .my-bookings-tab-button {
+    flex: 1;
+    text-align: center;
+    padding: 0.5rem 0.65rem;
+    font-size: 0.8rem;
+  }
+
+  .my-bookings-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .my-bookings-search-form {
+    width: 100%;
+  }
+
+  .my-bookings-filter-group {
+    justify-content: space-between;
+    width: 100%;
+  }
+
+  .airline-avatar-box {
+    width: 2.75rem;
+    height: 2.75rem;
+    font-size: 0.9rem;
+  }
+
+  .route-point .time {
+    font-size: 1.05rem;
+  }
 }

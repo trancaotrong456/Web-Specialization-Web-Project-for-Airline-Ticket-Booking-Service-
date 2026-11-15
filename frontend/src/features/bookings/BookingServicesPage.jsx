@@ -8,6 +8,19 @@ import { Notice } from '../../components/Notice';
 import { money } from '../../lib/formatters';
 import { createBookingsApi } from './bookingsApi';
 import { SearchSummaryBanner } from '../flights/FlightResultsPage';
+import {
+  IconLuggage,
+  IconMeal,
+  IconTaxi,
+  IconShield,
+  IconUser,
+  IconArmchair,
+  IconChevronDown,
+  IconChevronUp,
+  IconChevronRight,
+  IconArrowRight,
+  IconPlane,
+} from '../../components/AppIcons';
 import './bookingServices.css';
 
 export function BookingServicesPage() {
@@ -139,7 +152,7 @@ export function BookingServicesPage() {
     <div className="public-page booking-page" style={{ background: '#f4f1ea', minHeight: '100vh' }}>
       <AppHeader />
 
-      <main className="booking-main" style={{ maxWidth: 1200, margin: '0 auto', padding: '1rem' }}>
+      <main className="booking-main" style={{ maxWidth: 1200, margin: '0 auto', padding: '1rem 1rem 6rem' }}>
         {/* 1. Header Banner Tuyến bay chuẩn đồng bộ 100% với trang Kết quả tìm kiếm */}
         <SearchSummaryBanner
           tripType={isRoundTrip ? 'round_trip' : 'one_way'}
@@ -175,7 +188,7 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square seat" style={{ background: '#eef7f5', color: '#0f6b66' }}>💺</div>
+                    <div className="service-icon-square seat" style={{ background: '#eef7f5', color: '#0f6b66', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconArmchair size={22} /></div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Chọn chỗ ngồi yêu thích</span>
@@ -184,7 +197,7 @@ export function BookingServicesPage() {
                     </div>
                   </div>
                   <div className="service-card-action-group">
-                    <div className="service-toggle-icon">{expandedCard === 'seat' ? '▲' : '❯'}</div>
+                    <div className="service-toggle-icon">{expandedCard === 'seat' ? <IconChevronUp size={16} /> : <IconChevronRight size={16} />}</div>
                   </div>
                 </div>
                 {expandedCard === 'seat' ? (
@@ -201,7 +214,7 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square baggage">🧳</div>
+                    <div className="service-icon-square baggage" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconLuggage size={22} /></div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Hành lý ký gửi & Tiện ích hành trình</span>
@@ -211,7 +224,7 @@ export function BookingServicesPage() {
                       <div className="service-routes-grid">
                         <div className="service-route-col">
                           <span className="service-route-header">
-                            {originCode} <span style={{ color: '#0f6b66' }}>✈</span> {destCode}
+                            {originCode} <span style={{ color: '#0f6b66', display: 'inline-flex' }}><IconPlane size={13} style={{ transform: 'rotate(90deg)' }} /></span> {destCode}
                           </span>
                           <span className="service-route-detail">
                             Đã bao gồm 20kg hành lý ký gửi tiêu chuẩn
@@ -220,7 +233,7 @@ export function BookingServicesPage() {
                         {isRoundTrip ? (
                           <div className="service-route-col">
                             <span className="service-route-header">
-                              {destCode} <span style={{ color: '#0f6b66' }}>✈</span> {originCode}
+                              {destCode} <span style={{ color: '#0f6b66', display: 'inline-flex' }}><IconPlane size={13} style={{ transform: 'rotate(90deg)' }} /></span> {originCode}
                             </span>
                             <span className="service-route-detail">
                               Đã bao gồm 20kg hành lý ký gửi tiêu chuẩn
@@ -232,7 +245,7 @@ export function BookingServicesPage() {
                   </div>
                   <div className="service-card-action-group">
                     <span className="service-price-highlight">{money(baggagePrice)}</span>
-                    <div className="service-toggle-icon">{expandedCard === 'baggage' ? '▲' : '❯'}</div>
+                    <div className="service-toggle-icon">{expandedCard === 'baggage' ? <IconChevronUp size={16} /> : <IconChevronRight size={16} />}</div>
                   </div>
                 </div>
                 {expandedCard === 'baggage' ? (
@@ -280,7 +293,7 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square meal">🍱</div>
+                    <div className="service-icon-square meal" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconMeal size={22} /></div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Suất ăn ẩm thực</span>
@@ -290,14 +303,14 @@ export function BookingServicesPage() {
                       <div className="service-routes-grid">
                         <div className="service-route-col">
                           <span className="service-route-header">
-                            {originCode} <span style={{ color: '#0f6b66' }}>✈</span> {destCode}
+                            {originCode} <span style={{ color: '#0f6b66', display: 'inline-flex' }}><IconPlane size={13} style={{ transform: 'rotate(90deg)' }} /></span> {destCode}
                           </span>
                           <span className="service-route-detail">{selectedMeal === 'standard' ? 'Suất ăn nhẹ theo tiêu chuẩn hãng' : 'Set ẩm thực cao cấp + Thức uống'}</span>
                         </div>
                         {isRoundTrip ? (
                           <div className="service-route-col">
                             <span className="service-route-header">
-                              {destCode} <span style={{ color: '#0f6b66' }}>✈</span> {originCode}
+                              {destCode} <span style={{ color: '#0f6b66', display: 'inline-flex' }}><IconPlane size={13} style={{ transform: 'rotate(90deg)' }} /></span> {originCode}
                             </span>
                             <span className="service-route-detail">{selectedMeal === 'standard' ? 'Suất ăn nhẹ theo tiêu chuẩn hãng' : 'Set ẩm thực cao cấp + Thức uống'}</span>
                           </div>
@@ -307,7 +320,7 @@ export function BookingServicesPage() {
                   </div>
                   <div className="service-card-action-group">
                     <span className="service-price-highlight">{money(mealPrice)}</span>
-                    <div className="service-toggle-icon">{expandedCard === 'meal' ? '▲' : '❯'}</div>
+                    <div className="service-toggle-icon">{expandedCard === 'meal' ? <IconChevronUp size={16} /> : <IconChevronRight size={16} />}</div>
                   </div>
                 </div>
                 {expandedCard === 'meal' ? (
@@ -345,7 +358,7 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square taxi">🚕</div>
+                    <div className="service-icon-square taxi" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconTaxi size={22} /></div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Xe đưa đón sân bay (Airport Transfer)</span>
@@ -355,7 +368,7 @@ export function BookingServicesPage() {
                   </div>
                   <div className="service-card-action-group">
                     <span className="service-price-highlight">{selectedTaxi ? '250.000 VND' : 'Chưa chọn'}</span>
-                    <div className="service-toggle-icon">{expandedCard === 'taxi' ? '▲' : '❯'}</div>
+                    <div className="service-toggle-icon">{expandedCard === 'taxi' ? <IconChevronUp size={16} /> : <IconChevronRight size={16} />}</div>
                   </div>
                 </div>
                 {expandedCard === 'taxi' ? (
@@ -383,14 +396,14 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square insurance">🛡️</div>
+                    <div className="service-icon-square insurance" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconShield size={22} /></div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Bảo hiểm hành trình Serene Travel Shield</span>
                       </div>
                       <div className="service-routes-grid" style={{ border: 'none', margin: 0, padding: 0 }}>
                         <span className="service-route-header">
-                          {originCode} <span style={{ color: '#0f6b66' }}>✈</span> {destCode}
+                          {originCode} <span style={{ color: '#0f6b66', display: 'inline-flex' }}><IconPlane size={13} style={{ transform: 'rotate(90deg)' }} /></span> {destCode}
                         </span>
                       </div>
                       <p className="service-card-desc">
@@ -400,7 +413,7 @@ export function BookingServicesPage() {
                   </div>
                   <div className="service-card-action-group">
                     <span className="service-price-highlight">{money(insurancePrice)}</span>
-                    <div className="service-toggle-icon">{expandedCard === 'insurance' ? '▲' : '❯'}</div>
+                    <div className="service-toggle-icon">{expandedCard === 'insurance' ? <IconChevronUp size={16} /> : <IconChevronRight size={16} />}</div>
                   </div>
                 </div>
                 {expandedCard === 'insurance' ? (
@@ -428,7 +441,7 @@ export function BookingServicesPage() {
               >
                 <div className="service-card-main-row">
                   <div className="service-card-left-group">
-                    <div className="service-icon-square vip">👤</div>
+                    <div className="service-icon-square vip" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconUser size={22} /></div>
                     <div className="service-text-group">
                       <div className="service-title-container">
                         <span className="service-card-heading">Dịch vụ ưu tiên & Phòng chờ</span>
@@ -439,7 +452,7 @@ export function BookingServicesPage() {
                   </div>
                   <div className="service-card-action-group">
                     <span className="service-price-highlight">{money(priorityPrice)}</span>
-                    <div className="service-toggle-icon">{expandedCard === 'vip' ? '▲' : '❯'}</div>
+                    <div className="service-toggle-icon">{expandedCard === 'vip' ? <IconChevronUp size={16} /> : <IconChevronRight size={16} />}</div>
                   </div>
                 </div>
                 {expandedCard === 'vip' ? (
@@ -487,7 +500,7 @@ export function BookingServicesPage() {
                 </div>
                 <div className="summary-leg-route">
                   <span className="summary-leg-city">{originCity} ({originCode})</span>
-                  <span className="summary-leg-arrow" aria-hidden="true">➔</span>
+                  <span className="summary-leg-arrow" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center' }}><IconArrowRight size={13} /></span>
                   <span className="summary-leg-city">{destCity} ({destCode})</span>
                 </div>
                 <div className="summary-leg-details">
@@ -519,7 +532,7 @@ export function BookingServicesPage() {
                   </div>
                   <div className="summary-leg-route">
                     <span className="summary-leg-city">{destCity} ({destCode})</span>
-                    <span className="summary-leg-arrow" aria-hidden="true">➔</span>
+                    <span className="summary-leg-arrow" aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center' }}><IconArrowRight size={13} /></span>
                     <span className="summary-leg-city">{originCity} ({originCode})</span>
                   </div>
                   <div className="summary-leg-details">
@@ -572,15 +585,15 @@ export function BookingServicesPage() {
         </div>
       </main>
 
-      {/* Thanh Bottom Action Bar Cố định (Fixed Bottom Bar đồng bộ theo Ảnh 1) */}
+      {/* Thanh Bottom Action Bar Cố định (Fixed Bottom Bar đồng bộ theo Ảnh 2) */}
       <div className="passenger-bottom-actions">
         <div className="passenger-bottom-actions-container">
-          <Link to="/bookings/new" className="button-back">
+          <Link to={id ? `/bookings/${id}` : "/bookings/new"} className="button-back">
             ‹ Quay lại
           </Link>
           <div className="passenger-bottom-submit-group">
             <div className="passenger-bottom-total-display">
-              <span>Tổng tiền thanh toán</span>
+              <span>TỔNG TIỀN THANH TOÁN</span>
               <strong>{money(grandTotal)}</strong>
             </div>
             <button
@@ -589,7 +602,7 @@ export function BookingServicesPage() {
               disabled={submitting}
               onClick={handleProceedToPayment}
             >
-              {submitting ? 'Đang chuyển tiếp…' : 'Đi tiếp ➔'}
+              {submitting ? 'Đang chuyển tiếp…' : <>Đi tiếp <IconArrowRight size={16} /></>}
             </button>
           </div>
         </div>

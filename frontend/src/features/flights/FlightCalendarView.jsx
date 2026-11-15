@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { IconCalendar } from '../../components/AppIcons';
 import './flightCalendar.css';
 
 const WEEKDAYS = [
@@ -288,14 +289,14 @@ export function FlightCalendarView({
               type="button"
               onClick={() => setViewMode('week')}
             >
-              <span aria-hidden="true">📅</span> Theo tuần
+              <IconCalendar size={15} style={{ marginRight: '0.35rem', verticalAlign: '-2px' }} /> Theo tuần
             </button>
             <button
               className={`calendar-mode-btn ${viewMode === 'month' ? 'is-active' : ''}`}
               type="button"
               onClick={() => setViewMode('month')}
             >
-              <span aria-hidden="true">🗓️</span> Theo tháng
+              <IconCalendar size={15} style={{ marginRight: '0.35rem', verticalAlign: '-2px' }} /> Theo tháng
             </button>
           </div>
         </div>

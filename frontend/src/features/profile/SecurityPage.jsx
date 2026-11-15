@@ -4,6 +4,7 @@ import { Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '../../app/AuthProvider';
 import { Field } from '../../components/Field';
 import { Notice } from '../../components/Notice';
+import { IconLock, IconShieldCheck, IconCheckCircle, IconKey, IconAlertTriangle } from '../../components/AppIcons';
 import { mapApiFieldErrors } from '../../lib/validation';
 import { ProfileLayout } from './ProfileLayout';
 import { createProfileApi } from './profileApi';
@@ -61,7 +62,7 @@ export function SecurityPage() {
         <section className="surface-card account-card account-card-narrow vj-card">
           <div className="vj-card-header">
             <h2 className="vj-card-title">
-              <span>🔒</span>
+              <span className="card-title-icon"><IconLock size={18} /></span>
               <span>Đổi mật khẩu</span>
             </h2>
           </div>
@@ -138,13 +139,13 @@ export function SecurityPage() {
         <section className="vj-card security-overview-card">
           <div className="vj-card-header">
             <h2 className="vj-card-title">
-              <span>🛡️</span>
+              <span className="card-title-icon"><IconShieldCheck size={18} /></span>
               <span>Cài đặt an toàn & Trạng thái tài khoản</span>
             </h2>
           </div>
           <div className="security-status-list">
             <div className="security-status-item">
-              <div className="status-icon">✅</div>
+              <div className="status-icon" style={{ color: '#0d9488' }}><IconCheckCircle size={20} /></div>
               <div>
                 <strong>Xác thực phiên làm việc an toàn</strong>
                 <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
@@ -153,7 +154,7 @@ export function SecurityPage() {
               </div>
             </div>
             <div className="security-status-item">
-              <div className="status-icon">🔐</div>
+              <div className="status-icon" style={{ color: '#0284c7' }}><IconKey size={20} /></div>
               <div>
                 <strong>Khuyến nghị mật khẩu</strong>
                 <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>
@@ -162,7 +163,7 @@ export function SecurityPage() {
               </div>
             </div>
             <div className="security-status-item">
-              <div className="status-icon">⚠️</div>
+              <div className="status-icon" style={{ color: '#d97706' }}><IconAlertTriangle size={20} /></div>
               <div>
                 <strong>Yêu cầu khóa / Đóng tài khoản khẩn cấp</strong>
                 <p style={{ margin: '0.25rem 0 0', color: '#64748b', fontSize: '0.85rem' }}>

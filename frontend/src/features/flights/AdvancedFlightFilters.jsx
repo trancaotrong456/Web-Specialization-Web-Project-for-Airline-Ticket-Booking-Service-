@@ -9,6 +9,9 @@ import {
   RotateCcw,
   Filter,
   SlidersHorizontal,
+  MapPin,
+  ArrowRight,
+  ArrowLeftRight,
 } from 'lucide-react';
 import './AdvancedFlightFilters.css';
 
@@ -87,9 +90,9 @@ export function AdvancedFlightFilters({
             {departureAirport?.iata_code ? <small>({departureAirport.iata_code})</small> : null}
           </span>
           <span className="journey-bar-arrow" aria-hidden="true">
-            {tripType === 'round_trip' ? '⇄' : '➔'}
+            {tripType === 'round_trip' ? <ArrowLeftRight size={14} /> : <ArrowRight size={14} />}
           </span>
-          <span className="journey-bar-dot destination" aria-hidden="true">📍</span>
+          <span className="journey-bar-dot destination" aria-hidden="true"><MapPin size={14} /></span>
           <span className="journey-bar-place">
             <strong>{destText || 'Điểm đến'}</strong>
             {arrivalAirport?.iata_code ? <small>({arrivalAirport.iata_code})</small> : null}

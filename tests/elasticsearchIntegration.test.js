@@ -100,8 +100,8 @@ test('2. ensureIndicesExist creates airports and flights indices with vi_analyze
   const mockClient = createMockEsClient();
   const result = await ensureIndicesExist(mockClient);
 
-  assert.deepEqual(result.created, [INDEX_NAMES.AIRPORTS, INDEX_NAMES.FLIGHTS]);
-  assert.equal(mockClient.operations.length, 4); // 2 exists checks + 2 creates
+  assert.deepEqual(result.created, Object.values(INDEX_NAMES));
+  assert.equal(mockClient.operations.length, Object.keys(INDEX_NAMES).length * 2); // exists checks + creates
 
   // Kiểm tra mapping & analyzer của airports
   const airportCreateOp = mockClient.operations.find((op) => op.action === 'indices.create' && op.index === 'airports');

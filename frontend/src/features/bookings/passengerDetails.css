@@ -1,159 +1,71 @@
 /* ═══════════════════════════════════════════════════════════════════════
-   SERENE FLIGHTWAYS — THÔNG TIN HÀNH KHÁCH (VIETJET AIR INSPIRATION)
+   SERENE FLIGHTWAYS — THÔNG TIN HÀNH KHÁCH & TẠO ĐẶT CHỖ
+   Chuẩn thiết kế Hiện đại: Bố cục 2 CỘT (Main Form + Sticky Sidebar)
+   Đồng bộ 100% phong cách Modern Airline Minimal (Teal #0a4946, Gold & Amber)
    ═══════════════════════════════════════════════════════════════════════ */
 
-/* ── 1. Header Banner Tuyến bay & Stepper Quy trình ── */
-.passenger-step-header {
-  background: linear-gradient(135deg, #0e3d36 0%, #164e46 60%, #1d5f55 100%);
-  color: #ffffff;
-  padding: 1.15rem 1.75rem;
-  border-radius: 0.75rem 0.75rem 0 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1.5rem;
-  box-shadow: 0 4px 14px rgba(14, 61, 54, 0.2);
-  margin-bottom: 0;
-}
-
-.passenger-step-route-info {
-  display: flex;
-  flex-direction: column;
-  gap: 0.35rem;
-  min-width: 0;
-}
-
-.passenger-step-trip-badge {
-  font-size: 0.78rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: #fef08a;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.passenger-step-route-title {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  font-size: 1.15rem;
-  font-weight: 800;
-  color: #ffffff;
-  margin: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.passenger-step-route-title .route-arrow {
-  color: #fde047;
-  font-size: 1.1rem;
-}
-
-/* Stepper tròn bên phải của Header */
-.passenger-stepper-badges {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  flex-shrink: 0;
-}
-
-.stepper-circle-step {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.35rem;
-  height: 2.35rem;
-  border-radius: 50%;
-  font-size: 1rem;
-  color: #ffffff;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1.5px solid rgba(255, 255, 255, 0.3);
-  transition: all 0.25s ease;
-  position: relative;
-}
-
-.stepper-circle-step.is-done {
-  background: #10b981;
-  border-color: #10b981;
-  color: #ffffff;
-  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
-}
-
-.stepper-circle-step.is-active {
-  background: #f59e0b;
-  border-color: #fef08a;
-  color: #0f172a;
-  font-weight: 800;
-  transform: scale(1.1);
-  box-shadow: 0 4px 12px rgba(245, 158, 11, 0.45);
-}
-
-.stepper-circle-step span.step-tooltip {
-  display: none;
-}
-
-/* ── 2. Layout 2 cột: Cột Form bên trái, Sidebar bên phải ── */
+/* ── Container tổng thể ── */
 .passenger-checkout-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.85fr) minmax(320px, 1.15fr);
-  gap: 1.5rem;
+  gap: 1.75rem;
   align-items: start;
-  margin-top: 1.25rem;
-  padding-bottom: 6.5rem;
+  max-width: 1200px;
+  margin: 1.5rem auto 6rem;
+  padding: 0 1rem;
+  font-family: 'Be Vietnam Pro', 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
+/* ── Cột trái: Form thông tin chính ── */
 .passenger-main-form-col {
   display: flex;
   flex-direction: column;
-  gap: 1.25rem;
+  gap: 1.5rem;
   min-width: 0;
 }
 
 .passenger-page-title {
-  font-size: 1.45rem;
+  font-size: 1.35rem;
   font-weight: 800;
   color: #0f172a;
-  margin: 0.25rem 0 0.5rem;
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 0.5rem;
 }
 
-/* ── 3. Thẻ Card cho từng Hành khách ── */
+/* ── Thẻ Card hành khách ── */
 .passenger-vj-card {
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
-  border-radius: 0.75rem;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.04);
+  border-radius: 1rem;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   overflow: hidden;
-  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  transition: all 0.2s ease;
 }
 
 .passenger-vj-card:hover {
   border-color: #cbd5e1;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.06);
 }
 
 .passenger-vj-card-header {
   background: #f8fafc;
-  padding: 0.9rem 1.35rem;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 1.15rem 1.5rem;
+  border-bottom: 1.5px solid #e2e8f0;
   display: flex;
   align-items: center;
   justify-content: space-between;
 }
 
 .passenger-vj-card-title {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
   display: flex;
   align-items: center;
   gap: 0.65rem;
-  font-size: 1.05rem;
-  font-weight: 750;
-  color: #0f172a;
-  margin: 0;
 }
 
 .passenger-vj-card-title svg {
@@ -161,42 +73,36 @@
 }
 
 .passenger-self-booking-toggle {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.84rem;
+  font-size: 0.88rem;
   font-weight: 600;
-  color: #475569;
+  color: #0f766e;
   cursor: pointer;
-  user-select: none;
+  transition: opacity 0.2s ease;
 }
 
-.passenger-self-booking-toggle input[type="checkbox"] {
-  width: 1.15rem;
-  height: 1.15rem;
-  accent-color: #0d9488;
-  cursor: pointer;
+.passenger-self-booking-toggle:hover {
+  opacity: 0.8;
 }
 
 .passenger-vj-card-body {
-  padding: 1.35rem 1.5rem 1.5rem;
+  padding: 1.5rem;
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
 }
 
-/* Nhóm chọn Giới tính */
+/* Giới tính Radio Buttons */
 .gender-selection-row {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1.75rem;
   padding-bottom: 0.5rem;
 }
 
 .gender-radio-item {
   display: inline-flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
   font-size: 0.92rem;
   font-weight: 600;
   color: #334155;
@@ -206,326 +112,443 @@
 .gender-radio-item input[type="radio"] {
   width: 1.15rem;
   height: 1.15rem;
-  accent-color: #0d9488;
+  accent-color: #0a4946;
   cursor: pointer;
-  margin: 0;
 }
 
-/* Lưới các ô nhập thông tin */
+/* Grid input 2 cột */
 .passenger-input-grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.15rem 1.35rem;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.25rem 1.5rem;
+}
+
+@media (max-width: 640px) {
+  .passenger-input-grid-2 {
+    grid-template-columns: 1fr;
+  }
 }
 
 .passenger-vj-field {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  min-width: 0;
+  gap: 0.45rem;
 }
 
-.passenger-vj-field > label {
-  font-size: 0.83rem;
+.passenger-vj-field label {
+  font-size: 0.88rem;
   font-weight: 700;
   color: #334155;
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
 }
 
-.passenger-vj-field > label .req-star {
-  color: #e11d48;
+.passenger-vj-field .req-star {
+  color: #dc2626;
   font-weight: 800;
 }
 
 .passenger-vj-field input,
 .passenger-vj-field select {
-  height: 3.25rem;
-  min-height: 3.25rem;
-  padding: 0.65rem 0.95rem;
-  border: 1.5px solid #dce5ed;
-  border-radius: 0.55rem;
-  background: #f8fafc;
+  height: 2.85rem;
+  padding: 0 1rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  font-size: 0.95rem;
   color: #0f172a;
-  font-size: 0.92rem;
-  font-weight: 600;
-  box-sizing: border-box;
   transition: all 0.2s ease;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .passenger-vj-field input:focus,
 .passenger-vj-field select:focus {
-  border-color: #0d9488;
+  border-color: #0a4946;
   outline: none;
-  background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(13, 148, 136, 0.16);
+  box-shadow: 0 0 0 3px rgba(10, 73, 70, 0.12);
 }
 
-.passenger-phone-wrap {
-  display: grid;
-  grid-template-columns: 5.5rem 1fr;
-  gap: 0.5rem;
-}
-
-.passenger-phone-prefix {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 3.25rem;
+.passenger-vj-field input:disabled {
   background: #f1f5f9;
-  border: 1.5px solid #dce5ed;
-  border-radius: 0.55rem;
-  font-weight: 700;
-  font-size: 0.9rem;
-  color: #334155;
+  color: #64748b;
+  cursor: not-allowed;
 }
 
 .passenger-field-hint {
-  font-size: 0.74rem;
+  font-size: 0.78rem;
   color: #64748b;
   margin: 0;
-  line-height: 1.25;
 }
 
-/* ── 4. Phần Điều khoản & Quyền riêng tư ── */
-.passenger-policies-card {
+.passenger-phone-wrap {
+  display: flex;
+  align-items: center;
+  border: 1.5px solid #cbd5e1;
+  border-radius: 0.5rem;
+  overflow: hidden;
+  background: #ffffff;
+  transition: all 0.2s ease;
+}
+
+.passenger-phone-wrap:focus-within {
+  border-color: #0a4946;
+  box-shadow: 0 0 0 3px rgba(10, 73, 70, 0.12);
+}
+
+.passenger-phone-prefix {
+  padding: 0 0.85rem;
   background: #f8fafc;
-  border: 1px solid #e2e8f0;
+  border-right: 1.5px solid #cbd5e1;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #334155;
+  height: 2.85rem;
+  display: flex;
+  align-items: center;
+}
+
+.passenger-phone-wrap input {
+  border: none;
+  height: 2.85rem;
+  padding: 0 1rem;
+  flex: 1;
+  font-size: 0.95rem;
+}
+
+.passenger-phone-wrap input:focus {
+  outline: none;
+  box-shadow: none;
+}
+
+/* ── Card Mã khuyến mại ── */
+.booking-promotion-entry {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
   border-radius: 0.75rem;
-  padding: 1.15rem 1.35rem;
+  padding: 1.25rem 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 1rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
+}
+
+.booking-promotion-entry > div {
+  flex: 1;
+  min-width: 240px;
+}
+
+.booking-promotion-entry .button-outline {
+  height: 2.85rem;
+  padding: 0 1.25rem;
+  border-radius: 0.5rem;
+  border: 1.5px solid #0a4946;
+  color: #0a4946;
+  font-weight: 700;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.booking-promotion-entry .button-outline:hover:not(:disabled) {
+  background: #f0fdfa;
+}
+
+.booking-promotion-entry .button-outline:disabled {
+  border-color: #cbd5e1;
+  color: #94a3b8;
+  cursor: not-allowed;
+}
+
+.booking-promotion-message {
+  width: 100%;
+  margin: 0.25rem 0 0;
+  font-size: 0.82rem;
+  color: #0f766e;
+  font-weight: 600;
+}
+
+.booking-promotion-message.is-error {
+  color: #dc2626;
+}
+
+/* ── Card Chính sách & Điều khoản ── */
+.passenger-policies-card {
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.75rem;
+  padding: 1.25rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.03);
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
 }
 
 .policy-privacy-note {
-  font-size: 0.82rem;
-  line-height: 1.45;
-  color: #475569;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: #334155;
   margin: 0;
 }
 
 .policy-checkbox-item {
   display: flex;
   align-items: flex-start;
-  gap: 0.65rem;
-  font-size: 0.85rem;
-  color: #334155;
-  line-height: 1.4;
-  cursor: pointer;
-  user-select: none;
+  gap: 0.55rem;
+  font-size: 0.84rem;
+  line-height: 1.45;
+  color: #475569;
 }
 
-.policy-checkbox-item input[type="checkbox"] {
+.policy-checkbox-item.is-interactive {
+  cursor: pointer;
+  user-select: none;
+  gap: 0.65rem;
+  padding: 0.15rem 0;
+  transition: color 0.15s ease;
+}
+
+.policy-checkbox-item.is-interactive:hover {
+  color: #0f172a;
+}
+
+/* Custom Teal Checkbox đồng bộ chuẩn Serene Flightways */
+.custom-teal-checkbox {
+  appearance: none;
+  -webkit-appearance: none;
   width: 1.15rem;
   height: 1.15rem;
-  accent-color: #0d9488;
+  min-width: 1.15rem;
+  border: 1.8px solid #cbd5e1;
+  border-radius: 4px;
+  background-color: #ffffff;
   cursor: pointer;
-  margin-top: 0.15rem;
+  display: inline-grid;
+  place-content: center;
+  margin: 2px 0 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  vertical-align: middle;
   flex-shrink: 0;
 }
 
-.policy-checkbox-item strong {
-  color: #0f172a;
+.custom-teal-checkbox:hover {
+  border-color: #0d9488;
+  background-color: #f0fdfa;
+}
+
+.custom-teal-checkbox:checked {
+  background-color: #0d9488;
+  border-color: #0d9488;
+  box-shadow: 0 2px 6px rgba(13, 148, 136, 0.25);
+}
+
+.custom-teal-checkbox:checked::before {
+  content: "";
+  width: 0.3rem;
+  height: 0.55rem;
+  border: solid #ffffff;
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+  margin-top: -2px;
+}
+
+.custom-teal-checkbox:focus-visible {
+  outline: 2px solid #0d9488;
+  outline-offset: 2px;
 }
 
 .policy-checkbox-item a {
-  color: #0d9488;
-  font-weight: 600;
+  color: #0a4946;
+  font-weight: 700;
   text-decoration: underline;
+  cursor: pointer;
 }
 
-/* ── 5. Sidebar THÔNG TIN ĐẶT CHỖ (Vietjet / Serene Style) ── */
+/* ═══════════════════════════════════════════════════════════════════════
+   CỘT PHẢI: SIDEBAR THÔNG TIN ĐẶT CHỖ (STICKY)
+   ═══════════════════════════════════════════════════════════════════════ */
 .passenger-vj-summary-sidebar {
-  background: #ffffff;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 0.75rem;
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
   position: sticky;
   top: 1.5rem;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 0.85rem;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
 }
 
 .passenger-vj-summary-header {
-  background: linear-gradient(135deg, #073533 0%, #0a4946 60%, #0f6b66 100%);
-  padding: 0.85rem 1.25rem;
-  text-align: center;
-  border-bottom: 2.5px solid #e8a33d;
+  background: linear-gradient(135deg, #0a4946 0%, #0e3d36 100%);
   color: #ffffff;
+  padding: 1rem 1.35rem;
+  margin: 0;
   font-size: 0.95rem;
   font-weight: 800;
-  letter-spacing: 0.06em;
+  letter-spacing: 0.05em;
   text-transform: uppercase;
-  margin: 0;
   display: flex;
   align-items: center;
-  justify-content: center;
+  justify-content: space-between;
 }
 
 .passenger-vj-summary-content {
-  padding: 1.1rem;
+  padding: 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.85rem;
+  gap: 1rem;
 }
 
 .summary-passenger-badge {
-  background: #f0fdfa;
-  border-radius: 0.5rem;
-  padding: 0.75rem 1rem;
-  border: 1px solid #ccfbf1;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #0f6b66;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+  font-size: 0.88rem;
+  color: #334155;
 }
 
 .summary-leg-block {
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.5rem;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
 }
 
 .summary-leg-title-bar {
-  background: #f0fdfa;
-  padding: 0.65rem 0.95rem;
-  border-bottom: 1px solid #ccfbf1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-size: 0.86rem;
-  font-weight: 750;
-  color: #0f6b66;
+  font-size: 0.95rem;
+  font-weight: 800;
+  color: #0f172a;
 }
 
-.summary-leg-title-bar .summary-leg-price {
-  font-size: 0.96rem;
+.summary-leg-price {
+  color: #0a4946;
   font-weight: 800;
-  color: #0f6b66;
 }
 
 .summary-leg-route-details {
-  padding: 0.85rem 0.95rem;
+  background: #f8fafc;
+  border-radius: 0.5rem;
+  padding: 0.75rem 1rem;
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
-  font-size: 0.84rem;
-  color: #334155;
-  border-bottom: 1px dashed #e2e8f0;
 }
 
-.summary-leg-route-details .route-airports {
-  font-size: 0.95rem;
-  font-weight: 750;
-  color: #0f172a;
+.route-airports {
   display: flex;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.5rem;
+  font-size: 0.92rem;
+  font-weight: 750;
+  color: #0f172a;
 }
 
-.summary-leg-route-details .route-timing {
+.route-timing {
+  font-size: 0.78rem;
   color: #64748b;
-  font-size: 0.82rem;
 }
 
 .summary-price-breakdown {
-  padding: 0.75rem 0.95rem;
   display: flex;
   flex-direction: column;
-  gap: 0.45rem;
-  font-size: 0.83rem;
+  gap: 0.4rem;
+  padding: 0.5rem 0;
+  border-top: 1px dashed #e2e8f0;
 }
 
 .summary-price-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  font-size: 0.82rem;
   color: #475569;
 }
 
 .summary-price-row strong {
   color: #0f172a;
+  font-weight: 700;
 }
 
-/* Hộp tổng tiền Teal & Amber chuẩn */
-.passenger-vj-total-box {
-  background: linear-gradient(135deg, #073533 0%, #0a4946 100%);
-  color: #ffffff;
-  border-radius: 0.5rem;
-  padding: 0.85rem 1.15rem;
+.booking-total-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-top: 0.45rem;
-  box-shadow: 0 4px 16px rgba(10, 73, 70, 0.25);
-  border: 1px solid rgba(254, 182, 78, 0.3);
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.passenger-vj-total-box {
+  background: #0a4946;
+  color: #ffffff;
+  padding: 1.15rem 1.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
 }
 
 .passenger-vj-total-box .total-label {
-  font-size: 0.95rem;
-  font-weight: 700;
+  font-size: 0.92rem;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.05em;
   color: #ffffff;
 }
 
 .passenger-vj-total-box .total-amount {
-  font-size: 1.25rem;
+  font-size: 1.35rem;
   font-weight: 900;
-  letter-spacing: -0.01em;
-  color: #feb64e;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  color: #fef08a;
   font-variant-numeric: tabular-nums;
 }
 
-/* ── 6. Thanh Bottom Action Bar Cố định (Fixed Bottom Bar theo Ảnh 3) ── */
+/* ═══════════════════════════════════════════════════════════════════════
+   THANH BOTTOM ACTION BAR CỐ ĐỊNH (FIXED BOTTOM ACTION BAR ĐỒNG BỘ 100%)
+   ═══════════════════════════════════════════════════════════════════════ */
 .passenger-bottom-actions {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
   background: #ffffff;
   border-top: 1px solid #e2e8f0;
-  padding: 0.95rem 1.5rem;
   box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.08);
-  margin-top: 0;
-  border-radius: 0;
+  padding: 0.85rem 1.5rem;
+  z-index: 999;
 }
 
 .passenger-bottom-actions-container {
   max-width: 1200px;
-  width: 100%;
   margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 1.5rem;
 }
 
-.passenger-bottom-actions .button-back {
+.passenger-bottom-actions-container .button-back {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.75rem 1.5rem;
+  gap: 0.45rem;
+  padding: 0.65rem 1.35rem;
   border: 1.5px solid #cbd5e1;
-  border-radius: 0.55rem;
   background: #ffffff;
-  color: #475569;
+  color: #334155;
   font-size: 0.92rem;
   font-weight: 700;
+  border-radius: 8px;
   cursor: pointer;
-  transition: all 0.2s ease;
   text-decoration: none;
+  transition: all 0.2s ease;
 }
 
-.passenger-bottom-actions .button-back:hover {
+.passenger-bottom-actions-container .button-back:hover {
+  background: #f8fafc;
   border-color: #94a3b8;
   color: #0f172a;
-  background: #f8fafc;
 }
 
 .passenger-bottom-submit-group {
@@ -541,51 +564,60 @@
   gap: 0.15rem;
 }
 
-.passenger-bottom-total-display span {
+.passenger-bottom-total-display .total-caption,
+.passenger-bottom-total-display span:first-child {
   font-size: 0.78rem;
-  font-weight: 600;
   color: #64748b;
+  font-weight: 700;
   text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
+.passenger-bottom-total-display .total-val,
 .passenger-bottom-total-display strong {
   font-size: 1.35rem;
-  font-weight: 900;
-  color: #0f172a;
+  font-weight: 850;
+  color: #0a4946;
   font-variant-numeric: tabular-nums;
 }
 
-.passenger-bottom-actions .button-continue {
+.passenger-bottom-actions-container .button-continue,
+.passenger-bottom-actions-container .button-submit-order {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.85rem 2.25rem;
+  padding: 0.75rem 2rem;
   border: none;
-  border-radius: 0.5rem;
-  background: linear-gradient(135deg, #e8a33d 0%, #d97706 100%);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #d97706 0%, #ea580c 100%);
   color: #ffffff;
   font-size: 1rem;
   font-weight: 800;
   cursor: pointer;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(232, 163, 61, 0.35);
+  box-shadow: 0 4px 14px rgba(217, 119, 6, 0.35);
+  transition: all 0.2s ease;
 }
 
-.passenger-bottom-actions .button-continue:hover:not(:disabled) {
-  background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+.passenger-bottom-actions-container .button-continue:hover:not(:disabled),
+.passenger-bottom-actions-container .button-submit-order:hover:not(:disabled) {
+  background: linear-gradient(135deg, #ea580c 0%, #c2410c 100%);
   color: #ffffff;
   transform: translateY(-1px);
   box-shadow: 0 6px 18px rgba(217, 119, 6, 0.45);
 }
 
-.passenger-bottom-actions .button-continue:disabled {
+.passenger-bottom-actions-container .button-continue:disabled,
+.passenger-bottom-actions-container .button-submit-order:disabled {
   opacity: 0.55;
+  background: #cbd5e1;
+  color: #94a3b8;
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
 }
 
+/* Responsive */
 @media (max-width: 960px) {
   .passenger-checkout-layout {
     grid-template-columns: 1fr;
@@ -593,52 +625,4 @@
   .passenger-vj-summary-sidebar {
     position: static;
   }
-  .passenger-step-header {
-    flex-direction: column;
-    align-items: flex-start;
-  }
-  .passenger-stepper-badges {
-    align-self: flex-start;
-  }
-  .passenger-input-grid-2 {
-    grid-template-columns: 1fr;
-  }
-  .passenger-bottom-actions {
-    flex-direction: column-reverse;
-    gap: 1rem;
-    align-items: stretch;
-  }
-  .passenger-bottom-submit-group {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .passenger-bottom-total-display {
-    align-items: center;
-  }
-}
-
-
-.passenger-bottom-actions .button-add-more {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  padding: 0.85rem 1.85rem;
-  border: none;
-  border-radius: 0.5rem;
-  background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
-  color: #ffffff;
-  font-size: 1rem;
-  font-weight: 800;
-  cursor: pointer;
-  text-decoration: none;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.35);
-}
-
-.passenger-bottom-actions .button-add-more:hover {
-  background: linear-gradient(135deg, #15803d 0%, #166534 100%);
-  color: #ffffff;
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(21, 128, 61, 0.45);
 }

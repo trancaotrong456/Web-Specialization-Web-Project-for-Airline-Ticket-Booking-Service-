@@ -129,11 +129,23 @@ export function UserDetailPage() {
               <p className="field-hint">Email, vai trò, trạng thái và thông tin bảo mật được quản lý riêng.</p>
               <div className="flight-form-actions"><button className="button button-outline" type="button" disabled={pending} onClick={() => { setEditingProfile(false); setProfileForm({ full_name: target.full_name || '', phone: target.phone || '' }); }}>Hủy</button><button className="button button-primary" type="submit" disabled={pending}>{pending ? 'Đang lưu…' : 'Lưu thông tin'}</button></div>
             </form> : <>
-              {!isSelf ? <div className="flight-detail-actions"><button className="button button-secondary" type="button" onClick={startProfileEdit}>Chỉnh sửa thông tin</button></div> : null}
               <dl className="detail-list"><div><dt>Họ và tên</dt><dd>{target.full_name}</dd></div><div><dt>Email</dt><dd>{target.email}</dd></div><div><dt>Số điện thoại</dt><dd>{target.phone || 'Chưa cập nhật'}</dd></div><div><dt>Trạng thái</dt><dd><StatusBadge status={target.status} /></dd></div><div><dt>Vai trò</dt><dd>{target.role?.name || '—'}</dd></div></dl>
+              {!isSelf ? <div className="flight-detail-actions"><button className="button button-secondary" type="button" onClick={startProfileEdit}>Chỉnh sửa thông tin</button></div> : null}
             </>}
           </section>
-          {!isSelf ? <section className="surface-card admin-card action-card"><h2>Quản lý truy cập</h2><label>Vai trò<select aria-label="Vai trò" value={selectedRoleIsAssignable ? roleId : ''} onChange={(event) => setRoleId(event.target.value)}><option value="" disabled>Chọn vai trò hệ thống</option>{assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label><p className="field-hint">Chỉ các vai trò customer, staff và admin có quyền truy cập được cấu hình. Vai trò tùy chỉnh chưa có chính sách quyền.</p><button className="button button-primary" type="button" disabled={!roleCanBeUpdated} onClick={() => setDialog('role')}>Cập nhật vai trò</button><hr /><button className="button button-outline" type="button" onClick={() => setDialog('status')}>{target.status === 'active' ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}</button><button className="button button-danger" type="button" onClick={() => setDialog('delete')}>Xóa người dùng</button></section> : null}
+          {!isSelf ? <section className="surface-card admin-card action-card">
+            <h2>Quản lý truy cập</h2>
+            <div className="access-role-group">
+              <label>Vai trò<select aria-label="Vai trò" value={selectedRoleIsAssignable ? roleId : ''} onChange={(event) => setRoleId(event.target.value)}><option value="" disabled>Chọn vai trò hệ thống</option>{assignableRoles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
+              <p className="field-hint">Chỉ các vai trò customer, staff và admin có quyền truy cập được cấu hình. Vai trò tùy chỉnh chưa có chính sách quyền.</p>
+              <button className="button button-primary" type="button" disabled={!roleCanBeUpdated} onClick={() => setDialog('role')}>Cập nhật vai trò</button>
+            </div>
+            <hr />
+            <div className="access-danger-group">
+              <button className="button button-outline" type="button" onClick={() => setDialog('status')}>{target.status === 'active' ? 'Khóa tài khoản' : 'Mở khóa tài khoản'}</button>
+              <button className="button button-danger" type="button" onClick={() => setDialog('delete')}>Xóa người dùng</button>
+            </div>
+          </section> : null}
         </div>
       </main>
       <ConfirmDialog open={Boolean(dialog)} {...(dialogs[dialog] || {})} pending={pending} onCancel={() => setDialog(null)} onConfirm={perform} />

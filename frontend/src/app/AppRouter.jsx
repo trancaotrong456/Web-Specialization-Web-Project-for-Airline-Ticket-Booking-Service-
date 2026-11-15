@@ -152,6 +152,7 @@ export function AppRouter() {
       <ScrollToTop />
       <AppRoutes />
       <SereneChatbot />
+      <SereneChatbot />
     </BrowserRouter>
   );
 }

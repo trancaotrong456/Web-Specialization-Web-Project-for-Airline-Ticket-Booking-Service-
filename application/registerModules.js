@@ -16,6 +16,7 @@ const routeDefinitions = [
   ['promotions', '/promotions', '../routes/promotion.route'],
   ['notifications', '/notifications', '../routes/notification.route'],
   ['chat', '/chat', '../routes/chat.route'],
+  ['chat', '/chat', '../routes/chat.route'],
 ];
 
 const loadDefaultRouteModules = (overrides = {}) => Object.fromEntries(

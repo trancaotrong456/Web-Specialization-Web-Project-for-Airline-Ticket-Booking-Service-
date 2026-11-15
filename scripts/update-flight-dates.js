@@ -120,41 +120,47 @@ const INTERNATIONAL_ROUTES = [
 const DOMESTIC_AIRLINE_IDS = [1, 2, 3, 4, 5]; // VN, VJ, QH, VU, BL
 
 async function updateFlightDates() {
-  console.log('=== BẮT ĐẦU CẬP NHẬT DỮ LIỆU CHUYẾN BAY MỚI (11/2026 - 02/2027) ===');
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0);
+  const endDate = new Date(startDate);
+  endDate.setDate(endDate.getDate() + 90); // 90 ngày tiếp theo kể từ hôm nay
+
+  const nowCutoff = `${startDate.getFullYear()}-${pad(startDate.getMonth() + 1)}-${pad(startDate.getDate())} 00:00:00`;
+  const endCutoff = `${endDate.getFullYear()}-${pad(endDate.getMonth() + 1)}-${pad(endDate.getDate())} 23:59:59`;
+
+  console.log(`=== BẮT ĐẦU CẬP NHẬT LỊCH BAY ĐỘNG (${nowCutoff} -> ${endCutoff}) ===`);
 
   const transaction = await sequelize.transaction();
   try {
-    // 1. Cập nhật các chuyến bay trước ngày hiện tại (06/11/2026) thành 'completed'
+    // 1. Cập nhật các chuyến bay trước ngày hiện tại thành 'completed'
     await sequelize.query(`
       UPDATE flights 
       SET status = 'completed' 
-      WHERE departure_time < '2026-11-06 00:00:00' AND status = 'scheduled';
-    `, { transaction });
-    console.log(`Đã cập nhật các chuyến bay trong quá khứ thành 'completed'.`);
+      WHERE departure_time < :nowCutoff AND status = 'scheduled';
+    `, { replacements: { nowCutoff }, transaction });
+    console.log(`Đã cập nhật các chuyến bay trước ${nowCutoff} thành 'completed'.`);
 
-    // 2. Xóa các chuyến bay chưa có booking từ 06/11/2026 trở đi để nạp lại dữ liệu hoàn chỉnh
+    // 2. Xóa các chuyến bay chưa có booking từ hôm nay trở đi để nạp lại dữ liệu đồng bộ
     await sequelize.query(`
-      DELETE FROM fare_classes 
+      DELETE FROM fare_classes
       WHERE flight_id IN (
-        SELECT id FROM flights 
-        WHERE departure_time >= '2026-11-06 00:00:00' 
+        SELECT id FROM flights
+        WHERE departure_time >= :nowCutoff
           AND id NOT IN (SELECT flight_id FROM bookings)
       );
-    `, { transaction });
+    `, { replacements: { nowCutoff }, transaction });
 
     await sequelize.query(`
-      DELETE FROM flights 
-      WHERE departure_time >= '2026-11-06 00:00:00' 
+      DELETE FROM flights
+      WHERE departure_time >= :nowCutoff
         AND id NOT IN (SELECT flight_id FROM bookings);
-    `, { transaction });
-    console.log(`Đã chuẩn bị làm sạch các chuyến bay tương lai để nạp lịch bay mới.`);
+    `, { replacements: { nowCutoff }, transaction });
+    console.log(`Đã làm sạch các chuyến bay chưa có booking từ ${nowCutoff} để nạp mới.`);
 
-    // 3. Tạo danh sách chuyến bay từ 06/11/2026 đến hết 28/02/2027 (gần 4 tháng: 115 ngày)
+    // 3. Tạo danh sách chuyến bay cho 90 ngày tới
     const flightsToInsert = [];
     const fareClassesToInsert = [];
-
-    const startDate = new Date('2026-11-06T00:00:00+07:00');
-    const endDate = new Date('2027-02-28T23:59:59+07:00');
 
     let currentDay = new Date(startDate);
     let dayIndex = 0;
@@ -227,7 +233,7 @@ async function updateFlightDates() {
       dayIndex++;
     }
 
-    console.log(`Tổng số chuyến bay sẽ được nạp mới (từ 06/11/2026 đến 28/02/2027): ${flightsToInsert.length}`);
+    console.log(`Tổng số chuyến bay sẽ được nạp mới (từ ${nowCutoff} đến ${endCutoff}): ${flightsToInsert.length}`);
 
     // Bulk insert từng lô 500 bản ghi
     const BATCH_SIZE = 500;

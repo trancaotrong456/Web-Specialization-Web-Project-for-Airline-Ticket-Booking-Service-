@@ -255,16 +255,16 @@ export function AdminDashboardPage() {
           <div className="admin-metrics-grid">
             {/* Card 1: Doanh thu hôm nay */}
             <article className="admin-metric-card infobox-style" aria-labelledby="metric-revenue-today">
-              <div className="infobox-icon-wrap bg-emerald">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
-                </svg>
+              <div className="admin-metric-card-header">
+                <div className="infobox-icon-wrap bg-emerald">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+                  </svg>
+                </div>
+                <span className="admin-metric-badge accent-green">Hôm nay</span>
               </div>
               <div className="infobox-content">
-                <div className="admin-metric-top">
-                  <span className="admin-metric-label" id="metric-revenue-today">Doanh thu hôm nay</span>
-                  <span className="admin-metric-badge accent-green">Hôm nay</span>
-                </div>
+                <span className="admin-metric-label" id="metric-revenue-today">Doanh thu hôm nay</span>
                 {metrics.todayRevenue.loading ? (
                   <MetricSkeleton />
                 ) : metrics.todayRevenue.error ? (
@@ -276,7 +276,7 @@ export function AdminDashboardPage() {
                     <strong className="admin-metric-value table-mono-cell tabular-nums">
                       {formatCurrency(metrics.todayRevenue.value)}
                     </strong>
-                    <span className="admin-metric-caption">Thanh toán thành công</span>
+                    <span className="admin-metric-caption">Thanh toán thành công trong ngày</span>
                   </div>
                 )}
                 <div className="admin-metric-footer">
@@ -287,16 +287,16 @@ export function AdminDashboardPage() {
 
             {/* Card 2: Doanh thu tháng này */}
             <article className="admin-metric-card infobox-style" aria-labelledby="metric-revenue-month">
-              <div className="infobox-icon-wrap bg-blue">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="m3 3 7 7-4 4 7 7 4-4" /><polyline points="14 3 21 3 21 10" /><path d="m21 3-9 9" />
-                </svg>
+              <div className="admin-metric-card-header">
+                <div className="infobox-icon-wrap bg-blue">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="m3 3 7 7-4 4 7 7 4-4" /><polyline points="14 3 21 3 21 10" /><path d="m21 3-9 9" />
+                  </svg>
+                </div>
+                <span className="admin-metric-badge accent-blue">Tháng này</span>
               </div>
               <div className="infobox-content">
-                <div className="admin-metric-top">
-                  <span className="admin-metric-label" id="metric-revenue-month">Doanh thu tháng này</span>
-                  <span className="admin-metric-badge accent-blue">Tháng này</span>
-                </div>
+                <span className="admin-metric-label" id="metric-revenue-month">Doanh thu tháng này</span>
                 {metrics.monthRevenue.loading ? (
                   <MetricSkeleton />
                 ) : metrics.monthRevenue.error ? (
@@ -319,16 +319,16 @@ export function AdminDashboardPage() {
 
             {/* Card 3: Chuyến bay trong 24h & tỉ lệ ghế đã đặt hoặc đang giữ */}
             <article className="admin-metric-card infobox-style" aria-labelledby="metric-flights-24h">
-              <div className="infobox-icon-wrap bg-amber">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8l-8.2-1.8a1.2 1.2 0 0 0-1.3 1.7l3.2 5.3-2.9 2.9a2.1 2.1 0 0 0 1.5 3.6h.1l2.9-2.9 5.3 3.2a1.2 1.2 0 0 0 1.7-1.3Z" />
-                </svg>
+              <div className="admin-metric-card-header">
+                <div className="infobox-icon-wrap bg-amber">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M17.8 19.2 16 11l3.5-3.5a2.1 2.1 0 0 0-3-3L13 8l-8.2-1.8a1.2 1.2 0 0 0-1.3 1.7l3.2 5.3-2.9 2.9a2.1 2.1 0 0 0 1.5 3.6h.1l2.9-2.9 5.3 3.2a1.2 1.2 0 0 0 1.7-1.3Z" />
+                  </svg>
+                </div>
+                <span className="admin-metric-badge accent-amber">100 chuyến gần nhất</span>
               </div>
               <div className="infobox-content">
-                <div className="admin-metric-top">
-                  <span className="admin-metric-label" id="metric-flights-24h">Khởi hành trong 24 giờ</span>
-                  <span className="admin-metric-badge accent-amber">100 chuyến gần nhất</span>
-                </div>
+                <span className="admin-metric-label" id="metric-flights-24h">Khởi hành trong 24 giờ</span>
                 {metrics.flightsSummary.loading ? (
                   <MetricSkeleton />
                 ) : metrics.flightsSummary.error ? (
@@ -343,8 +343,8 @@ export function AdminDashboardPage() {
                     <span className="admin-metric-caption">
                       Tỉ lệ ghế đã đặt hoặc đang giữ: <b className="table-mono-cell tabular-nums">{metrics.flightsSummary.soldRate}%</b>
                     </span>
-                    <small className="admin-metric-subtext" style={{ display: 'block', marginTop: '0.25rem', color: 'var(--text-muted, #64748b)', fontSize: '0.75rem' }}>
-                      * Khảo sát trong 100 chuyến gần nhất từ API (API chưa có lọc theo thời gian khởi hành).
+                    <small className="admin-metric-subtext" title="Khảo sát trong 100 chuyến gần nhất từ API">
+                      * Dựa trên 100 chuyến gần nhất
                     </small>
                   </div>
                 )}
@@ -356,21 +356,21 @@ export function AdminDashboardPage() {
 
             {/* Card 4: Đặt chỗ theo 5 trạng thái */}
             <article className="admin-metric-card infobox-style span-responsive" aria-labelledby="metric-bookings-status">
-              <div className="infobox-icon-wrap bg-navy">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-                  <line x1="16" y1="2" x2="16" y2="6" />
-                  <line x1="8" y1="2" x2="8" y2="6" />
-                  <line x1="3" y1="10" x2="21" y2="10" />
-                </svg>
+              <div className="admin-metric-card-header">
+                <div className="infobox-icon-wrap bg-navy">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                    <line x1="16" y1="2" x2="16" y2="6" />
+                    <line x1="8" y1="2" x2="8" y2="6" />
+                    <line x1="3" y1="10" x2="21" y2="10" />
+                  </svg>
+                </div>
+                <span className="admin-metric-badge accent-navy">
+                  Tổng: <b className="table-mono-cell tabular-nums">{totalBookings}</b>
+                </span>
               </div>
               <div className="infobox-content">
-                <div className="admin-metric-top">
-                  <span className="admin-metric-label" id="metric-bookings-status">Đặt chỗ theo trạng thái</span>
-                  <span className="admin-metric-badge accent-navy">
-                    Tổng: <b className="table-mono-cell tabular-nums">{totalBookings}</b>
-                  </span>
-                </div>
+                <span className="admin-metric-label" id="metric-bookings-status">Đặt chỗ theo trạng thái</span>
                 {metrics.bookingStatuses.loading ? (
                   <MetricSkeleton />
                 ) : metrics.bookingStatuses.error ? (
@@ -379,6 +379,9 @@ export function AdminDashboardPage() {
                   </div>
                 ) : (
                   <div className="admin-metric-body">
+                    <strong className="admin-metric-value table-mono-cell tabular-nums">
+                      {totalBookings} <span className="admin-metric-unit">đơn đặt</span>
+                    </strong>
                     <div className="admin-booking-breakdown">
                       {Object.entries(metrics.bookingStatuses.counts).map(([statusKey, count]) => {
                         const meta = statusDisplay[statusKey] || { label: statusKey, class: '' };

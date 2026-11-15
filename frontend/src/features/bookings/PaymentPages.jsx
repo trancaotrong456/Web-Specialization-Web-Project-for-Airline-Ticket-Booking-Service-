@@ -23,6 +23,7 @@ import {
 import { isSafeCheckoutUrl } from './paymentQr';
 import { PaymentQr } from './PaymentQr.jsx';
 import { SearchSummaryBanner } from '../flights/FlightResultsPage';
+import { IconCreditCard, IconArrowRight } from '../../components/AppIcons';
 import './bookingServices.css';
 
 const time = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
@@ -176,7 +177,7 @@ export function PaymentInitiatePage() {
         <div className="service-vj-card" style={{ cursor: 'default' }}>
           <div className="service-card-main-row" style={{ borderBottom: '1px solid #e2e8f0' }}>
             <div className="service-card-left-group">
-              <div className="service-icon-square meal" style={{ background: '#e6f4f1', color: '#0e3d36' }}>💳</div>
+              <div className="service-icon-square meal" style={{ background: '#e6f4f1', color: '#0e3d36', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><IconCreditCard size={20} /></div>
               <div className="service-text-group">
                 <span className="service-card-heading">Phương thức thanh toán trực tuyến</span>
                 <p className="service-card-desc">Cổng thanh toán bảo mật Serene Pay · Hỗ trợ thanh toán nhanh qua mã QR và Thẻ ngân hàng</p>
@@ -233,8 +234,8 @@ export function PaymentInitiatePage() {
           <div className="summary-leg-card is-current">
             <div className="summary-leg-header">
               <span className="summary-leg-name">Chi tiết đặt chỗ</span>
-              <Link to={`/bookings/${id}`} state={{ guestEmail }} style={{ fontSize: '0.8rem', color: '#0f6b66', fontWeight: 700, textDecoration: 'none' }}>
-                Chi Tiết ➔
+              <Link to={`/bookings/${id}`} state={{ guestEmail }} style={{ fontSize: '0.8rem', color: '#0f6b66', fontWeight: 700, textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                Chi Tiết <IconArrowRight size={13} />
               </Link>
             </div>
 
@@ -299,8 +300,9 @@ export function PaymentInitiatePage() {
             className="button-continue"
             disabled={state.submitting || Boolean(state.result) || booking?.status !== 'holding'}
             onClick={startPayment}
+            style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem' }}
           >
-            {state.submitting ? 'Đang kết nối…' : 'Thanh toán ➔'}
+            {state.submitting ? 'Đang kết nối…' : <>Thanh toán <IconArrowRight size={15} /></>}
           </button>
         </div>
       </div>

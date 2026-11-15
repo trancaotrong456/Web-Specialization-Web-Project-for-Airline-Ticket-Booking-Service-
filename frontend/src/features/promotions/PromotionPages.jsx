@@ -78,19 +78,20 @@ export function PromotionListPage() {
   const page = Math.max(1, Number(params.get('page')) || 1);
   const limit = Math.min(100, Math.max(1, Number(params.get('limit')) || PAGE_LIMIT));
   const activeOnly = params.get('active_only') === 'true';
-  const [searchText, setSearchText] = useState('');
+  const searchParam = params.get('search') || '';
+  const [searchText, setSearchText] = useState(searchParam);
   const [state, setState] = useState({ loading: true, rows: [], pagination: null, error: '' });
   const load = useCallback(async () => {
     setState((current) => ({ ...current, loading: true, error: '' }));
     try {
-      const result = await api.list({ page, limit, activeOnly });
+      const result = await api.list({ page, limit, activeOnly, search: searchParam || undefined });
       const rows = rowsFrom(result);
       const fallback = { page, limit, total: rows.length, totalPages: 1, hasNextPage: false, hasPrevPage: false };
       setState({ loading: false, rows, pagination: result?.pagination || fallback, error: '' });
     } catch (error) {
       setState((current) => ({ ...current, loading: false, error: messageFrom(error, 'Không thể tải danh sách khuyến mại.') }));
     }
-  }, [activeOnly, api, limit, page]);
+  }, [activeOnly, api, limit, page, searchParam]);
   useEffect(() => { void load(); }, [load]);
 
   const updateParams = (changes) => setParams((current) => {
@@ -113,7 +114,7 @@ export function PromotionListPage() {
         </label>
         <span className="promotion-total">{state.pagination?.total ?? state.rows.length} mã</span>
       </div>
-      <p className="promotion-search-note">Tìm kiếm chỉ lọc dữ liệu của trang hiện tại; API chưa hỗ trợ tìm kiếm toàn bộ danh sách.</p>
+      <p className="promotion-search-note">Tìm kiếm chỉ lọc dữ liệu của trang hiện tại; hỗ trợ tìm kiếm toàn bộ danh sách qua Elasticsearch tại API.</p>
       <p className="promotion-filter-note">Bộ lọc thời hạn dựa trên ngày bắt đầu/kết thúc; trạng thái giới hạn lượt được hiển thị riêng.</p>
       {state.rows.length === 0 ? <div className="empty-state promotion-empty"><span aria-hidden="true">%</span><h2>Chưa có khuyến mại nào</h2><p>Tạo mã khuyến mại đầu tiên để bắt đầu quản lý ưu đãi.</p><Link className="button button-secondary" to="/admin/promotions/new">Tạo khuyến mại</Link></div>
         : visibleRows.length === 0 ? <div className="empty-state promotion-empty"><span aria-hidden="true">⌕</span><h2>Không tìm thấy mã phù hợp trên trang này</h2><p>Thử từ khóa khác hoặc chuyển trang để tìm mã khác.</p></div>
