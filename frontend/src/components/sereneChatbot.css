@@ -1,4 +1,20 @@
-/* Serene Flightways AI Chatbot - Đồng bộ 100% Brand Identity */
+/* Serene Flightways AI Chatbot - Đồng bộ 100% Brand Identity & Tông màu Trang Chủ */
+
+:root {
+  --chatbot-emerald-dark: #04241c;
+  --chatbot-emerald-mid: #0a2d23;
+  --chatbot-emerald-light: #16382c;
+  --chatbot-terracotta: #d9622b;
+  --chatbot-gold: #f5c76b;
+  --chatbot-gold-subtle: rgba(245, 199, 107, 0.4);
+  --chatbot-linen-bg: #f4f1ea;
+  --chatbot-surface-warm: #fcfbf9;
+  --chatbot-surface-muted: #efebe2;
+  --chatbot-border-warm: #d8d2c6;
+  --chatbot-border-subtle: #e5e0d6;
+  --chatbot-text-main: #1a1a17;
+  --chatbot-text-muted: #736f66;
+}
 
 .serene-chatbot-container {
   position: fixed;
@@ -16,9 +32,9 @@
   width: 58px;
   height: 58px;
   border-radius: 16px; /* Vuông bo góc chuẩn phong cách Serene Flightways */
-  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
-  border: 1.5px solid rgba(245, 158, 11, 0.6);
-  box-shadow: 0 10px 25px -4px rgba(7, 91, 73, 0.4), 0 4px 12px rgba(245, 158, 11, 0.25);
+  background: linear-gradient(135deg, var(--chatbot-emerald-dark) 0%, var(--chatbot-emerald-mid) 50%, var(--chatbot-emerald-light) 100%);
+  border: 1.5px solid rgba(217, 98, 43, 0.45);
+  box-shadow: 0 10px 26px -4px rgba(4, 36, 28, 0.45), 0 4px 12px rgba(217, 98, 43, 0.2);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -30,8 +46,8 @@
 
 .serene-chatbot-launcher:hover {
   transform: translateY(-3px) scale(1.05);
-  box-shadow: 0 14px 32px rgba(7, 91, 73, 0.5), 0 6px 16px rgba(245, 158, 11, 0.35);
-  border-color: #f59e0b;
+  box-shadow: 0 14px 34px rgba(4, 36, 28, 0.55), 0 6px 16px rgba(217, 98, 43, 0.35);
+  border-color: var(--chatbot-terracotta);
 }
 
 .serene-chatbot-launcher:active {
@@ -41,8 +57,8 @@
 .serene-chatbot-launcher-mark {
   font-size: 1.65rem;
   line-height: 1;
-  color: #f5c76b;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  color: var(--chatbot-gold);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   display: inline-block;
   transform: rotate(-10deg);
   transition: transform 0.3s ease;
@@ -77,17 +93,17 @@
 }
 
 /* ========================================================
-   2. DIALOG WINDOW (Khung cửa sổ Chatbot)
+   2. DIALOG WINDOW (Khung cửa sổ Chatbot đồng bộ ấm áp)
    ======================================================== */
 .serene-chatbot-dialog {
   width: 390px;
   height: 570px;
   max-width: calc(100vw - 32px);
   max-height: calc(100vh - 90px);
-  background: #ffffff;
+  background: var(--chatbot-surface-warm);
   border-radius: 18px;
-  box-shadow: 0 20px 45px -10px rgba(7, 91, 73, 0.35), 0 8px 20px -4px rgba(0, 0, 0, 0.12);
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  box-shadow: 0 22px 50px -12px rgba(4, 36, 28, 0.32), 0 8px 24px -4px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--chatbot-border-warm);
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -109,13 +125,13 @@
    3. HEADER (Đồng bộ Header Trang Chủ)
    ======================================================== */
 .serene-chatbot-header {
-  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
+  background: linear-gradient(135deg, var(--chatbot-emerald-dark) 0%, var(--chatbot-emerald-mid) 50%, var(--chatbot-emerald-light) 100%);
   color: #ffffff;
   padding: 13px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 2px solid #f59e0b;
+  border-bottom: 2.5px solid var(--chatbot-terracotta);
 }
 
 .serene-chatbot-header-info {
@@ -129,9 +145,9 @@
   width: 34px;
   height: 34px;
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.15);
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  color: #f5c76b;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  color: var(--chatbot-gold);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -156,7 +172,7 @@
 
 .serene-chatbot-status {
   font-size: 11px;
-  color: #cbd5e1;
+  color: #e5e0d6;
   display: flex;
   align-items: center;
   gap: 5px;
@@ -179,7 +195,7 @@
 .serene-chatbot-btn-icon {
   background: transparent;
   border: none;
-  color: #cbd5e1;
+  color: #e5e0d6;
   cursor: pointer;
   padding: 6px;
   border-radius: 6px;
@@ -195,44 +211,45 @@
 }
 
 /* ========================================================
-   4. QUICK PROMPTS (Gợi ý câu hỏi nhanh)
+   4. SUGGESTIONS IN FEED (Dạng viên thuốc xếp dọc theo ảnh mẫu)
    ======================================================== */
-.serene-chatbot-quick-prompts {
-  background-color: #f8fafc;
-  border-bottom: 1px solid #e2e8f0;
-  padding: 8px 12px;
+.serene-chatbot-suggestions-flow {
   display: flex;
-  gap: 6px;
-  overflow-x: auto;
-  white-space: nowrap;
-  scrollbar-width: none; /* Ẩn scrollbar thô */
+  flex-direction: column;
+  align-items: flex-end; /* Căn sang bên phải giống y như ảnh mẫu Amy */
+  gap: 7px;
+  margin: 4px 0 8px 0;
+  width: 100%;
 }
 
-.serene-chatbot-quick-prompts::-webkit-scrollbar {
-  display: none;
-}
-
-.serene-chatbot-chip {
+.serene-chatbot-suggestion-pill {
   background: #ffffff;
-  border: 1px solid #cbd5e1;
-  border-radius: 16px;
-  padding: 5px 11px;
-  font-size: 11.5px;
-  color: #1e293b;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+  color: var(--chatbot-terracotta, #d9622b); /* Màu cam đất nổi bật chuẩn thương hiệu như chữ đỏ trong ảnh mẫu */
+  border: 1px solid rgba(217, 98, 43, 0.28);
+  border-radius: 999px; /* Dạng viên thuốc bo tròn hoàn hảo */
+  padding: 8px 16px;
+  font-size: 12.5px;
+  line-height: 1.35;
   font-weight: 500;
+  text-align: right;
+  max-width: 92%;
+  cursor: pointer;
+  box-shadow: 0 2px 7px rgba(0, 0, 0, 0.05);
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  word-break: break-word;
+  outline: none;
 }
 
-.serene-chatbot-chip:hover {
-  background: #075b49;
+.serene-chatbot-suggestion-pill:hover {
+  background: var(--chatbot-emerald-dark, #04241c);
   color: #ffffff;
-  border-color: #075b49;
-  transform: translateY(-1px);
+  border-color: var(--chatbot-emerald-dark, #04241c);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(4, 36, 28, 0.2);
+}
+
+.serene-chatbot-suggestion-pill:active {
+  transform: translateY(0);
 }
 
 /* ========================================================
@@ -245,9 +262,9 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-  background-color: #f8fafc;
+  background-color: var(--chatbot-linen-bg);
   scrollbar-width: thin;
-  scrollbar-color: rgba(7, 91, 73, 0.2) transparent;
+  scrollbar-color: rgba(4, 36, 28, 0.25) transparent;
 }
 
 /* Slim scrollbar mỏng tinh tế thay cho scrollbar mặc định */
@@ -260,12 +277,12 @@
 }
 
 .serene-chatbot-messages::-webkit-scrollbar-thumb {
-  background: rgba(7, 91, 73, 0.2);
+  background: rgba(4, 36, 28, 0.25);
   border-radius: 10px;
 }
 
 .serene-chatbot-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(7, 91, 73, 0.4);
+  background: rgba(4, 36, 28, 0.45);
 }
 
 .serene-chat-row {
@@ -293,28 +310,28 @@
 }
 
 .serene-chat-row-user .serene-chat-bubble {
-  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
+  background: linear-gradient(135deg, var(--chatbot-emerald-dark) 0%, var(--chatbot-emerald-mid) 50%, var(--chatbot-emerald-light) 100%);
   color: #ffffff;
   border-bottom-right-radius: 3px;
-  box-shadow: 0 2px 8px rgba(7, 91, 73, 0.25);
+  box-shadow: 0 2px 8px rgba(4, 36, 28, 0.22);
 }
 
 .serene-chat-row-bot .serene-chat-bubble {
   background: #ffffff;
-  color: #1e293b;
-  border: 1px solid rgba(226, 232, 240, 0.9);
+  color: var(--chatbot-text-main);
+  border: 1px solid var(--chatbot-border-subtle);
   border-bottom-left-radius: 3px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+  box-shadow: 0 2px 6px rgba(4, 36, 28, 0.05);
 }
 
 /* Định dạng Markdown sạch đẹp, in đậm nổi bật */
 .serene-chat-bubble strong {
   font-weight: 700;
-  color: #075b49;
+  color: var(--chatbot-emerald-dark);
 }
 
 .serene-chat-row-user .serene-chat-bubble strong {
-  color: #f5c76b;
+  color: var(--chatbot-gold);
 }
 
 .serene-chat-text-line {
@@ -329,9 +346,15 @@
   gap: 6px;
 }
 
+.serene-chat-bullet-symbol {
+  color: var(--chatbot-emerald-dark);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
 .serene-chat-time {
   font-size: 10.5px;
-  color: #94a3b8;
+  color: var(--chatbot-text-muted);
   margin-top: 3px;
   padding: 0 4px;
 }
@@ -340,17 +363,18 @@
 .serene-chat-citations {
   margin-top: 9px;
   padding: 9px 11px;
-  background-color: #f1f5f9;
-  border-left: 3px solid #f59e0b;
+  background-color: var(--chatbot-surface-muted);
+  border: 1px solid var(--chatbot-border-warm);
+  border-left: 3px solid var(--chatbot-terracotta);
   border-radius: 6px;
   font-size: 11.5px;
-  color: #334155;
+  color: #2d2c28;
   width: 100%;
 }
 
 .serene-chat-citation-title {
   font-weight: 700;
-  color: #075b49;
+  color: var(--chatbot-emerald-dark);
   display: flex;
   align-items: center;
   gap: 5px;
@@ -358,7 +382,7 @@
 }
 
 .serene-chat-citation-item {
-  color: #475569;
+  color: #5c584e;
   font-size: 11px;
   margin-top: 2px;
 }
@@ -370,7 +394,7 @@
   gap: 4px;
   padding: 9px 13px;
   background: #ffffff;
-  border: 1px solid #e2e8f0;
+  border: 1px solid var(--chatbot-border-subtle);
   border-radius: 14px;
   border-bottom-left-radius: 3px;
   width: fit-content;
@@ -379,7 +403,7 @@
 .serene-typing-dot {
   width: 6px;
   height: 6px;
-  background-color: #075b49;
+  background-color: var(--chatbot-emerald-dark);
   border-radius: 50%;
   opacity: 0.5;
   animation: sereneDotPulse 1.4s infinite ease-in-out;
@@ -401,7 +425,7 @@
   40% {
     transform: scale(1.15);
     opacity: 1;
-    background-color: #f59e0b;
+    background-color: var(--chatbot-terracotta);
   }
 }
 
@@ -410,8 +434,8 @@
    ======================================================== */
 .serene-chatbot-footer {
   padding: 10px 12px;
-  background-color: #ffffff;
-  border-top: 1px solid #e2e8f0;
+  background-color: var(--chatbot-surface-warm);
+  border-top: 1px solid var(--chatbot-border-warm);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -426,49 +450,53 @@
 
 .serene-chatbot-input {
   flex: 1;
-  border: 1.5px solid #cbd5e1;
+  border: 1.5px solid var(--chatbot-border-warm);
   border-radius: 22px;
   padding: 9px 15px;
   font-size: 13px;
-  color: #0f172a;
+  color: var(--chatbot-text-main);
   outline: none;
   transition: all 0.2s ease;
-  background: #f8fafc;
+  background: #ffffff;
+}
+
+.serene-chatbot-input::placeholder {
+  color: #8c877d;
 }
 
 .serene-chatbot-input:focus {
-  border-color: #075b49;
+  border-color: var(--chatbot-emerald-dark);
   background: #ffffff;
-  box-shadow: 0 0 0 3px rgba(7, 91, 73, 0.12);
+  box-shadow: 0 0 0 3px rgba(4, 36, 28, 0.12);
 }
 
 .serene-chatbot-send-btn {
   width: 38px;
   height: 38px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #075b49 0%, #0e3d36 100%);
-  border: 1px solid rgba(245, 158, 11, 0.4);
-  color: #f5c76b;
+  background: linear-gradient(135deg, var(--chatbot-emerald-dark) 0%, var(--chatbot-emerald-light) 100%);
+  border: 1px solid rgba(217, 98, 43, 0.45);
+  color: var(--chatbot-gold);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
   transition: all 0.2s ease;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(7, 91, 73, 0.2);
+  box-shadow: 0 2px 6px rgba(4, 36, 28, 0.2);
 }
 
 .serene-chatbot-send-btn:hover:not(:disabled) {
-  background: #075b49;
+  background: var(--chatbot-emerald-dark);
   color: #ffffff;
-  border-color: #f59e0b;
+  border-color: var(--chatbot-terracotta);
   transform: scale(1.05);
 }
 
 .serene-chatbot-send-btn:disabled {
-  background: #e2e8f0;
+  background: var(--chatbot-border-subtle);
   border-color: transparent;
-  color: #94a3b8;
+  color: #a8a29e;
   cursor: not-allowed;
   opacity: 0.6;
   box-shadow: none;
@@ -476,7 +504,7 @@
 
 .serene-chatbot-footer-caption {
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--chatbot-text-muted);
   text-align: center;
   letter-spacing: 0.15px;
 }

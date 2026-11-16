@@ -8,6 +8,7 @@ import { LoadingView } from '../../components/LoadingView';
 import { Notice } from '../../components/Notice';
 import { Pagination } from '../../components/Pagination';
 import { StatusBadge } from '../../components/StatusBadge';
+import { IconCalendar, IconClipboard } from '../../components/AppIcons';
 import { isTodayVn, isoToVnDateTimeInput, vnDateTimeInputToIso } from '../../lib/dateUtils';
 import { maskPassport, escapeCsvCell } from '../../lib/formatters';
 import { createFlightManagementApi } from './flightManagementApi';
@@ -512,7 +513,7 @@ export function FlightListPage() {
                   aria-selected={viewMode !== 'calendar'}
                   onClick={() => update({ view: 'table' })}
                 >
-                  <span aria-hidden="true">☰</span> Danh sách
+                  <IconClipboard size={15} style={{ marginRight: '0.35rem', verticalAlign: '-2px' }} /> Danh sách
                 </button>
                 <button
                   className={`flight-view-tab ${viewMode === 'calendar' ? 'is-active' : ''}`}
@@ -521,7 +522,7 @@ export function FlightListPage() {
                   aria-selected={viewMode === 'calendar'}
                   onClick={() => update({ view: 'calendar' })}
                 >
-                  <span aria-hidden="true">📅</span> Lịch Calendar (Tuần/Tháng)
+                  <IconCalendar size={15} style={{ marginRight: '0.35rem', verticalAlign: '-2px' }} /> Lịch Calendar (Tuần/Tháng)
                 </button>
               </div>
 
@@ -994,7 +995,8 @@ export function FareClassDetailPage() {
   const flight = fare.flight || {};
   return <ManagementShell><PageFrame eyebrow={`CHUYẾN BAY #${fare.flight_id}`} title="Chi tiết hạng vé" description="Thông tin giá và sức chứa của hạng vé." actions={<><Link className="button button-outline" to={`/admin/flights/${fare.flight_id}/fare-classes`}>Danh sách hạng vé</Link><Link className="button button-secondary" to={`/admin/fare-classes/${fare.id}/edit`}>Chỉnh sửa hạng vé</Link></>}>
     <section className="surface-card admin-card fare-detail-card"><div className="flight-section-heading"><div><span className="eyebrow">HẠNG VÉ #{fare.id}</span><h2>{fare.class_name}</h2></div><strong className="fare-price">{money(fare.price)}</strong></div><dl className="detail-list flight-facts"><div><dt>Chuyến bay</dt><dd><Link to={`/admin/flights/${fare.flight_id}`}>#{fare.flight_id} · {flight.departureAirport?.iata_code || '—'} → {flight.arrivalAirport?.iata_code || '—'}</Link></dd></div><div><dt>Hãng hàng không</dt><dd>{carrierName(flight)}</dd></div><div><dt>Ghế phân bổ</dt><dd>{fare.seat_quota ?? '—'}</dd></div></dl>
-      {action.error ? <Notice type="error">{action.error}</Notice> : null}{admin ? <button className="button button-danger" type="button" onClick={() => setDialog(true)}>Xóa hạng vé</button> : null}
+      {action.error ? <Notice type="error">{action.error}</Notice> : null}
+      {admin ? <div className="flight-detail-actions"><button className="button button-danger" type="button" onClick={() => setDialog(true)}>Xóa hạng vé</button></div> : null}
     </section>
     <ConfirmDialog open={dialog} title="Xác nhận xóa hạng vé" description="Hạng vé có lịch sử đặt chỗ không thể xóa. Thao tác này không xóa chuyến bay." confirmLabel="Xóa hạng vé" danger pending={action.pending} onConfirm={() => void remove()} onCancel={() => setDialog(false)} />
   </PageFrame></ManagementShell>;

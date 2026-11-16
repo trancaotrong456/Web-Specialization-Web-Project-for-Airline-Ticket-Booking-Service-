@@ -10,7 +10,21 @@ import { createFlightDiscoveryApi } from './flightDiscoveryApi';
 import { AdvancedFlightFilters } from './AdvancedFlightFilters';
 import { formatCurrency } from '../../lib/formatters';
 import { formatVnDayOfWeek, getNearbyDates, toVnDateString } from '../../lib/dateUtils';
-import { ArrowLeft, ArrowRightLeft, Calendar, CreditCard, MapPin, Plane, ShoppingBag, User, Users } from 'lucide-react';
+import {
+  AlertTriangle,
+  ArrowLeft,
+  ArrowRight,
+  ArrowRightLeft,
+  Calendar,
+  Check,
+  CreditCard,
+  MapPin,
+  Pencil,
+  Plane,
+  ShoppingBag,
+  User,
+  Users,
+} from 'lucide-react';
 
 const pageSize = 20;
 const EMPTY_FILTER_VALUES = Object.freeze({});
@@ -69,14 +83,14 @@ export function SearchSummaryBanner({
 
             <div className="search-summary-direction" aria-hidden="true">
               {isRoundTrip ? (
-                <span className="direction-icon-wrap" title="Khứ hồi">⇄</span>
+                <span className="direction-icon-wrap" title="Khứ hồi"><ArrowRightLeft size={16} /></span>
               ) : (
-                <span className="direction-icon-wrap" title="Một chiều">➔</span>
+                <span className="direction-icon-wrap" title="Một chiều"><ArrowRight size={16} /></span>
               )}
             </div>
 
             <div className="search-summary-endpoint arrival">
-              <span className="summary-point-dot destination" aria-hidden="true">📍</span>
+              <span className="summary-point-dot destination" aria-hidden="true"><MapPin size={14} /></span>
               <span className="summary-point-label">Điểm đến</span>
               <strong className="summary-point-value">
                 {destName} {destCode ? <span className="summary-iata-tag">( {destCode} )</span> : null}
@@ -209,7 +223,8 @@ export function BookingSummaryWidget({
                         title="Sửa chặng này"
                         onClick={() => onEditLeg(index)}
                       >
-                        ✎ Sửa
+                        <Pencil size={12} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} />
+                        Sửa
                       </button>
                     ) : null}
                   </div>
@@ -218,7 +233,7 @@ export function BookingSummaryWidget({
 
               <div className="summary-leg-route">
                 <span className="summary-leg-city">{fromCity} ({fromCode})</span>
-                <span className="summary-leg-arrow" aria-hidden="true">✈</span>
+                <span className="summary-leg-arrow" aria-hidden="true"><Plane size={14} style={{ display: 'inline-block', transform: 'rotate(90deg)' }} /></span>
                 <span className="summary-leg-city">{toCity} ({toCode})</span>
               </div>
 
@@ -283,6 +298,78 @@ export function BookingSummaryWidget({
         </div>
       </div>
     </aside>
+  );
+}
+
+function AirlineBrandBadge({ airline }) {
+  const code = (airline?.iata_code || '').toUpperCase();
+  const name = airline?.name || '';
+
+  if (code === 'QH' || /bamboo/i.test(name)) {
+    return (
+      <span className="carrier-brand-mark is-bamboo" title={`${name} · Mã IATA: QH`}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 21C12 21 7 16 6 10C5 5 10 3 13 8C14 10 13.5 14 12 21Z" fill="#15803d" />
+          <path d="M12 21C12 21 16 15 18 9C20 3 14 3 12 7C11 9 11.5 13 12 21Z" fill="#84cc16" opacity="0.95" />
+        </svg>
+        <span className="carrier-iata-sub">QH</span>
+      </span>
+    );
+  }
+
+  if (code === 'VU' || /vietravel/i.test(name)) {
+    return (
+      <span className="carrier-brand-mark is-vietravel" title={`${name} · Mã IATA: VU`}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M3 18C8 17 13 14 17 8C19 5 22 4 22 4C22 4 20 8 17 11C13 15 8 18 4 19L3 18Z" fill="#f59e0b" />
+          <path d="M5 20C9 19 13 17 16 13C18 10 20 8 20 8C18 11 15 15 11 17C8 19 5 20 5 20Z" fill="#0284c7" />
+        </svg>
+        <span className="carrier-iata-sub">VU</span>
+      </span>
+    );
+  }
+
+  if (code === 'VN' || /vietnam airlines/i.test(name)) {
+    return (
+      <span className="carrier-brand-mark is-vna" title={`${name} · Mã IATA: VN`}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 4C10.5 8.5 10.5 13 12 18C13.5 13 13.5 8.5 12 4Z" fill="#f59e0b" />
+          <path d="M11 8.5C8 10 5 13 6 17C8 17 10 15.5 11.5 14C11 12 11 10 11 8.5Z" fill="#fbbf24" />
+          <path d="M13 8.5C16 10 19 13 18 17C16 17 14 15.5 12.5 14C13 12 13 10 13 8.5Z" fill="#fbbf24" />
+        </svg>
+        <span className="carrier-iata-sub">VN</span>
+      </span>
+    );
+  }
+
+  if (code === 'VJ' || /vietjet/i.test(name)) {
+    return (
+      <span className="carrier-brand-mark is-vietjet" title={`${name} · Mã IATA: VJ`}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M4 19L13 5C14 3.5 16 4 16 6.5L14 19L20 16.5L21 19L13 22L5 20.5L4 19Z" fill="#dc2626" />
+          <circle cx="12" cy="12" r="2.5" fill="#facc15" />
+        </svg>
+        <span className="carrier-iata-sub">VJ</span>
+      </span>
+    );
+  }
+
+  if (code === 'BL' || /pacific/i.test(name)) {
+    return (
+      <span className="carrier-brand-mark is-pacific" title={`${name} · Mã IATA: BL`}>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <path d="M12 3L15 10L22 12L15 14L12 21L9 14L2 12L9 10L12 3Z" fill="#ea580c" />
+        </svg>
+        <span className="carrier-iata-sub">BL</span>
+      </span>
+    );
+  }
+
+  return (
+    <span className="carrier-brand-mark is-generic" title={`${name} · Mã IATA: ${code}`}>
+      <Plane size={14} style={{ display: 'inline-block' }} />
+      <span className="carrier-iata-sub">{code || '✈'}</span>
+    </span>
   );
 }
 
@@ -359,6 +446,30 @@ function FlightCard({
     || fareClasses.find((f) => f.id !== economyFare?.id);
   const hasValidLogo = Boolean(flight.airline?.logo_url && !flight.airline.logo_url.includes('images.unsplash.com'));
 
+  const isEconomySelected = Boolean(
+    isSelected && selectedFare && (
+      (economyFare?.id && Number(selectedFare.id) === Number(economyFare.id)) ||
+      (economyFare?.class_name && selectedFare.class_name && selectedFare.class_name.toLowerCase() === economyFare.class_name.toLowerCase())
+    )
+  );
+
+  const isBusinessSelected = Boolean(
+    isSelected && selectedFare && (
+      (businessFare?.id && Number(selectedFare.id) === Number(businessFare.id)) ||
+      (businessFare?.class_name && selectedFare.class_name && selectedFare.class_name.toLowerCase() === businessFare.class_name.toLowerCase())
+    )
+  );
+
+  const handleSelectFare = (fare) => {
+    if (!bookable || !fare) return;
+    if (onSelectFlight) {
+      onSelectFlight(flight, fare);
+    }
+  };
+
+  const activeTargetFare = selectedFare || economyFare;
+  const bookingLinkTarget = `/bookings/new?flight_id=${encodeURIComponent(flight.id)}${selectedFare?.id ? `&fare_class_id=${encodeURIComponent(selectedFare.id)}` : ''}&passengers=${encodeURIComponent(passengerCount)}`;
+
   return (
     <article className={`flight-result-card ${isSelected ? 'is-selected' : ''}`}>
       <div className="flight-carrier">
@@ -376,14 +487,26 @@ function FlightCard({
                 }}
               />
               <span className="carrier-mark" style={{ display: 'none' }}>
-                {flight.airline?.iata_code || '✈'}
+                <AirlineBrandBadge airline={flight.airline} />
               </span>
             </>
           ) : (
-            <span className="carrier-mark">{flight.airline?.iata_code || '✈'}</span>
+            <span className="carrier-mark">
+              <AirlineBrandBadge airline={flight.airline} />
+            </span>
           )}
         </span>
-        <div><strong>{flight.airline?.name || 'Hãng hàng không'}</strong><small>{flightStatusLabel(flight.status)}</small></div>
+        <div>
+          <strong>{flight.airline?.name || 'Hãng hàng không'}</strong>
+          <small>
+            {flightStatusLabel(flight.status)}
+            {flight.airline?.iata_code ? (
+              <span className="carrier-iata-badge" title={`Mã IATA quốc tế: ${flight.airline.iata_code}`}>
+                Mã IATA: {flight.airline.iata_code}
+              </span>
+            ) : null}
+          </small>
+        </div>
       </div>
       <div className="flight-itinerary">
         <div><time className="table-mono-cell">{formatTime(departureTime)}</time><strong className="table-mono-cell">{from.iata_code || from.city || from.name || '—'}</strong><small>{from.city || from.name || ''}</small></div>
@@ -392,55 +515,68 @@ function FlightCard({
       </div>
       <div className="flight-availability">
         <strong className="table-mono-cell">{flight.available_seats ?? '—'}</strong><span>chỗ còn trống</span>
-        {seatWarning ? <span className="seat-warning-tag" role="alert">⚠ {seatWarning.message || `Chỉ còn ${seatWarning.availableSeats} ghế`}</span> : null}
+        {seatWarning ? <span className="seat-warning-tag" role="alert"><AlertTriangle size={12} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} />{seatWarning.message || `Chỉ còn ${seatWarning.availableSeats} ghế`}</span> : null}
       </div>
-      <div className="flight-fare">{shownFare !== undefined ? <><small>{sortBy === 'price_high' ? 'Mức giá cao nhất' : 'Giá từ'}</small><strong className="table-mono-cell">{formatCurrency(shownFare)}</strong></> : <span>Chưa có thông tin giá</span>}</div>
-      {flight.status_reason ? <p className="flight-status-reason">Lý do cập nhật: {flight.status_reason}</p> : null}
-      {asLink ? (
-        bookable ? (
-          <a
-            href={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}
-            role="link"
+      <div className="flight-action-cell">
+        <div className="flight-fare">{shownFare !== undefined ? <><small>{sortBy === 'price_high' ? 'Mức giá cao nhất' : 'Giá từ'}</small><strong className="table-mono-cell">{formatCurrency(shownFare)}</strong></> : <span>Chưa có thông tin giá</span>}</div>
+        {asLink ? (
+          bookable ? (
+            <a
+              href={bookingLinkTarget}
+              role="link"
+              className={`button button-primary flight-book-link ${isSelected ? 'is-selected' : ''}`}
+              onClick={(e) => {
+                e.preventDefault();
+                if (onSelectFlight) onSelectFlight(flight, activeTargetFare);
+              }}
+              aria-label="Chọn chuyến bay"
+            >
+              {isSelected ? (
+                <>
+                  <Check size={14} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} />
+                  Đã chọn {selectedFare?.class_name ? `(${selectedFare.class_name})` : ''}
+                </>
+              ) : 'Chọn chuyến bay'}
+            </a>
+          ) : (
+            <button className="button button-secondary flight-book-link" type="button" disabled>
+              {flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}
+            </button>
+          )
+        ) : onSelectFlight ? (
+          <button
             className={`button button-primary flight-book-link ${isSelected ? 'is-selected' : ''}`}
-            onClick={(e) => {
-              e.preventDefault();
-              if (onSelectFlight) onSelectFlight(flight);
-            }}
+            type="button"
+            disabled={!bookable}
+            onClick={() => onSelectFlight(flight, activeTargetFare)}
             aria-label="Chọn chuyến bay"
           >
-            {isSelected ? '✔ Đã chọn' : 'Chọn chuyến bay'}
-          </a>
+            {isSelected ? (
+              <>
+                <Check size={14} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} />
+                Đã chọn {selectedFare?.class_name ? `(${selectedFare.class_name})` : ''}
+              </>
+            ) : (bookable ? 'Chọn chuyến bay' : 'Không thể đặt chuyến này')}
+          </button>
+        ) : bookable ? (
+          <Link
+            className="button button-primary flight-book-link"
+            to={bookingLinkTarget}
+          >
+            Chọn chuyến bay
+          </Link>
         ) : (
           <button className="button button-secondary flight-book-link" type="button" disabled>
             {flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}
           </button>
-        )
-      ) : onSelectFlight ? (
-        <button
-          className={`button button-primary flight-book-link ${isSelected ? 'is-selected' : ''}`}
-          type="button"
-          disabled={!bookable}
-          onClick={() => onSelectFlight(flight)}
-          aria-label="Chọn chuyến bay"
-        >
-          {isSelected ? '✔ Đã chọn' : (bookable ? 'Chọn chuyến bay' : 'Không thể đặt chuyến này')}
-        </button>
-      ) : bookable ? (
-        <Link
-          className="button button-primary flight-book-link"
-          to={`/bookings/new?flight_id=${encodeURIComponent(flight.id)}&passengers=${encodeURIComponent(passengerCount)}`}
-        >
-          Chọn chuyến bay
-        </Link>
-      ) : (
-        <button className="button button-secondary flight-book-link" type="button" disabled>
-          {flight.status === 'cancelled' ? 'Chuyến bay đã hủy' : 'Không còn nhận đặt chỗ'}
-        </button>
-      )}
+        )}
+      </div>
+
+      {flight.status_reason ? <p className="flight-status-reason">Lý do cập nhật: {flight.status_reason}</p> : null}
 
       {isSelected ? (
         <div className="flight-selected-banner" role="status">
-          <span className="selected-check-badge">✔ Đã chọn chuyến bay</span>
+          <span className="selected-check-badge"><Check size={13} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} /> Đã chọn chuyến bay</span>
           {selectedFare?.class_name ? (
             <span className="selected-fare-note">
               · Hạng vé: <strong>{selectedFare.class_name}</strong> ({formatCurrency(selectedFare.price)})
@@ -461,17 +597,73 @@ function FlightCard({
         </button>
         {showCompare ? (
           <div className="flight-compare-drawer" aria-label="So sánh chi tiết Phổ thông và Thương gia">
-            <div className="fare-compare-card is-economy">
-              <span className="fare-compare-badge">{economyFare?.class_name || 'Phổ thông'}</span>
+            <div
+              className={`fare-compare-card is-economy ${isEconomySelected ? 'is-selected' : ''}`}
+              role="button"
+              tabIndex={bookable && economyFare ? 0 : -1}
+              onClick={() => handleSelectFare(economyFare)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleSelectFare(economyFare);
+                }
+              }}
+              aria-pressed={isEconomySelected}
+            >
+              <div className="fare-compare-top">
+                <span className="fare-compare-badge">{economyFare?.class_name || 'Phổ thông'}</span>
+                {isEconomySelected ? (
+                  <span className="fare-compare-selected-tag">
+                    <Check size={12} style={{ display: 'inline-block', marginRight: '3px', verticalAlign: '-1px' }} />
+                    Đang chọn
+                  </span>
+                ) : null}
+              </div>
               <strong className="fare-compare-price table-mono-cell tabular-nums">
                 {economyFare?.price ? formatCurrency(economyFare.price) : 'Chưa có giá'}
               </strong>
               <small className="fare-compare-quota">
                 {economyFare?.seat_quota != null ? `Còn ${economyFare.seat_quota} ghế phân bổ` : 'Chưa phân bổ ghế'}
               </small>
+              <button
+                type="button"
+                className={`button button-sm fare-select-btn ${isEconomySelected ? 'is-selected' : ''}`}
+                disabled={!bookable || !economyFare}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleSelectFare(economyFare);
+                }}
+              >
+                {isEconomySelected ? (
+                  <>
+                    <Check size={13} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} />
+                    Đã chọn hạng này
+                  </>
+                ) : 'Chọn hạng này →'}
+              </button>
             </div>
-            <div className="fare-compare-card is-business">
-              <span className="fare-compare-badge">{businessFare?.class_name || 'Thương gia'}</span>
+            <div
+              className={`fare-compare-card is-business ${isBusinessSelected ? 'is-selected' : ''}`}
+              role="button"
+              tabIndex={bookable && businessFare ? 0 : -1}
+              onClick={() => businessFare && handleSelectFare(businessFare)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  businessFare && handleSelectFare(businessFare);
+                }
+              }}
+              aria-pressed={isBusinessSelected}
+            >
+              <div className="fare-compare-top">
+                <span className="fare-compare-badge">{businessFare?.class_name || 'Thương gia'}</span>
+                {isBusinessSelected ? (
+                  <span className="fare-compare-selected-tag is-business">
+                    <Check size={12} style={{ display: 'inline-block', marginRight: '3px', verticalAlign: '-1px' }} />
+                    Đang chọn
+                  </span>
+                ) : null}
+              </div>
               {businessFare ? (
                 <>
                   <strong className="fare-compare-price table-mono-cell tabular-nums">
@@ -480,6 +672,22 @@ function FlightCard({
                   <small className="fare-compare-quota">
                     {businessFare.seat_quota != null ? `Còn ${businessFare.seat_quota} ghế phân bổ` : 'Chưa phân bổ ghế'}
                   </small>
+                  <button
+                    type="button"
+                    className={`button button-sm fare-select-btn is-business ${isBusinessSelected ? 'is-selected' : ''}`}
+                    disabled={!bookable}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleSelectFare(businessFare);
+                    }}
+                  >
+                    {isBusinessSelected ? (
+                      <>
+                        <Check size={13} style={{ display: 'inline-block', marginRight: '4px', verticalAlign: '-1px' }} />
+                        Đã chọn hạng này
+                      </>
+                    ) : 'Chọn hạng này →'}
+                  </button>
                 </>
               ) : (
                 <div className="fare-compare-empty">
@@ -732,7 +940,7 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
     return () => { searchRequest.current += 1; };
   }, [load]);
 
-  const chooseFlight = async (flight) => {
+  const chooseFlight = async (flight, chosenFare = null) => {
     setSelectionError('');
     if (Number(flight.departure_airport_id) !== Number(leg.departure_airport_id)
       || Number(flight.arrival_airport_id) !== Number(leg.arrival_airport_id)) {
@@ -752,6 +960,12 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
         return;
       }
     }
+
+    if (selectedFlight?.id === flight.id && chosenFare) {
+      setSelectedFare(chosenFare);
+      return;
+    }
+
     const requestId = ++fareRequest.current;
     setSelectedFlight(flight);
     setLoadingFares(true);
@@ -762,7 +976,7 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
     const existingFares = Array.isArray(flight.fareClasses) && flight.fareClasses.some((f) => f.class_name)
       ? flight.fareClasses
       : [];
-    const defaultInitialFare = existingFares.find((f) => /eco|phổ thông/i.test(f.class_name)) || existingFares[0] || null;
+    const defaultInitialFare = chosenFare || existingFares.find((f) => /eco|phổ thông/i.test(f.class_name)) || existingFares[0] || null;
     setSelectedFare(defaultInitialFare);
 
     try {
@@ -772,6 +986,10 @@ export function TripFlightResults({ api, tripType, legs, passengerCount, airline
       setFares(loadedFares);
       if (loadedFares.length > 0) {
         setSelectedFare((prev) => {
+          if (chosenFare) {
+            const matched = loadedFares.find((f) => Number(f.id) === Number(chosenFare.id) || (f.class_name && chosenFare.class_name && f.class_name.toLowerCase() === chosenFare.class_name.toLowerCase()));
+            if (matched) return matched;
+          }
           if (prev && loadedFares.some((f) => f.id === prev.id)) {
             return loadedFares.find((f) => f.id === prev.id) || prev;
           }
@@ -981,10 +1199,10 @@ export function FlightResultsPage() {
     setOneWaySelectedFare(null);
   }, [searchParams]);
 
-  const handleSelectFlightOneWay = (flight) => {
+  const handleSelectFlightOneWay = (flight, chosenFare = null) => {
     setOneWaySelectedFlight(flight);
     const existingFares = Array.isArray(flight.fareClasses) ? flight.fareClasses : [];
-    const preferred = existingFares.find((f) => /eco|phổ thông/i.test(f.class_name)) || existingFares[0] || null;
+    const preferred = chosenFare || existingFares.find((f) => /eco|phổ thông/i.test(f.class_name)) || existingFares[0] || null;
     setOneWaySelectedFare(preferred);
   };
 

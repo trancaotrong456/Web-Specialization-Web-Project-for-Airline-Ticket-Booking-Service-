@@ -3,6 +3,10 @@
 const INDEX_NAMES = {
   AIRPORTS: 'airports',
   FLIGHTS: 'flights',
+  AIRLINES: 'airlines',
+  USERS: 'users',
+  BOOKINGS: 'bookings',
+  PROMOTIONS: 'promotions',
 };
 
 const COMMON_ANALYSIS_SETTINGS = {
@@ -107,6 +111,114 @@ const FLIGHTS_INDEX_CONFIG = {
   },
 };
 
+const AIRLINES_INDEX_CONFIG = {
+  settings: {
+    number_of_shards: 1,
+    number_of_replicas: 0,
+    ...COMMON_ANALYSIS_SETTINGS,
+  },
+  mappings: {
+    properties: {
+      id: { type: 'integer' },
+      name: {
+        type: 'text',
+        analyzer: 'vi_analyzer',
+        fields: {
+          keyword: { type: 'keyword' },
+        },
+      },
+      iata_code: { type: 'keyword' },
+      logo_url: { type: 'keyword' },
+    },
+  },
+};
+
+const USERS_INDEX_CONFIG = {
+  settings: {
+    number_of_shards: 1,
+    number_of_replicas: 0,
+    ...COMMON_ANALYSIS_SETTINGS,
+  },
+  mappings: {
+    properties: {
+      id: { type: 'integer' },
+      full_name: {
+        type: 'text',
+        analyzer: 'vi_analyzer',
+        fields: {
+          keyword: { type: 'keyword' },
+        },
+      },
+      email: {
+        type: 'text',
+        analyzer: 'vi_analyzer',
+        fields: {
+          keyword: { type: 'keyword' },
+        },
+      },
+      role: { type: 'keyword' },
+      phone: { type: 'keyword' },
+      status: { type: 'keyword' },
+    },
+  },
+};
+
+const BOOKINGS_INDEX_CONFIG = {
+  settings: {
+    number_of_shards: 1,
+    number_of_replicas: 0,
+    ...COMMON_ANALYSIS_SETTINGS,
+  },
+  mappings: {
+    properties: {
+      id: { type: 'integer' },
+      booking_code: {
+        type: 'keyword',
+        fields: {
+          text: { type: 'text', analyzer: 'vi_analyzer' },
+        },
+      },
+      customer_name: {
+        type: 'text',
+        analyzer: 'vi_analyzer',
+      },
+      customer_email: {
+        type: 'keyword',
+        fields: {
+          text: { type: 'text', analyzer: 'vi_analyzer' },
+        },
+      },
+      flight_id: { type: 'integer' },
+      flight_number: { type: 'keyword' },
+      status: { type: 'keyword' },
+    },
+  },
+};
+
+const PROMOTIONS_INDEX_CONFIG = {
+  settings: {
+    number_of_shards: 1,
+    number_of_replicas: 0,
+    ...COMMON_ANALYSIS_SETTINGS,
+  },
+  mappings: {
+    properties: {
+      id: { type: 'integer' },
+      code: {
+        type: 'keyword',
+        fields: {
+          text: { type: 'text', analyzer: 'vi_analyzer' },
+        },
+      },
+      description: {
+        type: 'text',
+        analyzer: 'vi_analyzer',
+      },
+      discount_type: { type: 'keyword' },
+    },
+  },
+};
+
 /**
  * Đảm bảo các index cần thiết đã tồn tại trong Elasticsearch.
  * Không xóa index cũ để tránh mất dữ liệu (idempotent).
@@ -121,6 +233,10 @@ async function ensureIndicesExist(client) {
   const indices = [
     { name: INDEX_NAMES.AIRPORTS, config: AIRPORTS_INDEX_CONFIG },
     { name: INDEX_NAMES.FLIGHTS, config: FLIGHTS_INDEX_CONFIG },
+    { name: INDEX_NAMES.AIRLINES, config: AIRLINES_INDEX_CONFIG },
+    { name: INDEX_NAMES.USERS, config: USERS_INDEX_CONFIG },
+    { name: INDEX_NAMES.BOOKINGS, config: BOOKINGS_INDEX_CONFIG },
+    { name: INDEX_NAMES.PROMOTIONS, config: PROMOTIONS_INDEX_CONFIG },
   ];
 
   for (const { name, config } of indices) {
@@ -155,6 +271,9 @@ module.exports = {
   COMMON_ANALYSIS_SETTINGS,
   AIRPORTS_INDEX_CONFIG,
   FLIGHTS_INDEX_CONFIG,
+  AIRLINES_INDEX_CONFIG,
+  USERS_INDEX_CONFIG,
+  BOOKINGS_INDEX_CONFIG,
+  PROMOTIONS_INDEX_CONFIG,
   ensureIndicesExist,
 };
-

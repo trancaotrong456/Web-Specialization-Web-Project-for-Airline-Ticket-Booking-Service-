@@ -476,43 +476,13 @@ input::-ms-clear {
 .notice {
   display: flex;
   align-items: flex-start;
-  gap: var(--space-3);
+  gap: 0.9rem;
   margin-bottom: var(--space-4);
-  padding: 0.85rem 1rem;
-  border-radius: var(--radius-sm);
-  font-size: 0.875rem;
-}
-
-.notice > span {
-  width: 1.35rem;
-  height: 1.35rem;
-  flex: 0 0 auto;
-  display: grid;
-  place-items: center;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  font-weight: 700;
-}
-
-.notice-error {
-  color: #8f1d1d;
-  background: #fff0ef;
-}
-
-.notice-success {
-  color: #075c57;
-  background: #e4f5f2;
-}
-
-.notice-info {
-  color: #36516b;
-  background: #edf4fb;
-}
-
-.notice-warning {
-  color: #8c5b00;
-  background: #fff8e6;
-  border-left: 4px solid #e5a000;
+  padding: 0.95rem 1.25rem;
+  border-radius: 0.75rem;
+  font-size: 0.88rem;
+  line-height: 1.55;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.04);
 }
 
 .seat-warning-tag {
@@ -1640,6 +1610,23 @@ input::-ms-clear {
   width: 100%;
   border: 0;
   border-top: 1px solid var(--color-border);
+  margin: var(--space-2) 0;
+}
+
+.access-role-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.access-danger-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.access-danger-group .button {
+  width: 100%;
 }
 
 .button-outline {
@@ -3849,8 +3836,8 @@ input::-ms-clear {
 .home-page .app-nav a:hover, .home-page .app-nav a.active { color: #075c57; background: #e8f2f0; }
 .home-page .header-login { color: #0a4946; font-weight: 700; text-decoration: none; }
 .home-page .header-register { border-radius: .55rem; }
-.home-hero { min-height: 0; overflow: visible; isolation: isolate; background-color: #082d3a; background-image: linear-gradient(90deg, rgb(4 28 42 / 87%) 0%, rgb(7 40 53 / 70%) 47%, rgb(7 40 53 / 32%) 100%), linear-gradient(180deg, rgb(4 27 39 / 6%) 48%, rgb(4 27 39 / 38%) 100%), url('/images/auth-aircraft-window.png'); background-position: center 48%; background-size: cover; }
-.home-hero::before { z-index: -1; background: linear-gradient(90deg, rgb(3 24 35 / 22%), transparent 78%), linear-gradient(180deg, transparent 59%, rgb(5 30 39 / 42%)); }
+.home-hero { min-height: 0; overflow: visible; isolation: isolate; background: transparent; }
+.home-hero::before { display: none; }
 .home-hero-inner { display: flex; align-items: center; min-height: clamp(27rem, 52vw, 39rem); padding: 4.5rem 0 8rem; }
 .home-copy { max-width: 48rem; }
 .home-copy h1 { max-width: 46rem; font-size: clamp(3rem, 6.1vw, 5.15rem); line-height: 1.04; letter-spacing: -.055em; text-wrap: balance; }
@@ -4007,16 +3994,16 @@ input::-ms-clear {
 .passenger-route-summary { border-radius: .5rem; background: #00514d; }
 .passenger-route-summary span { color: #ffddb0; }
 
-.admin-page, .promotion-page, .catalog-page, .flight-management-page, .booking-page { color: #121c28; }
+.admin-page, .promotion-page, .catalog-page, .flight-management-page, .booking-page { color: var(--color-text, #1A1A17); }
 .admin-main, .catalog-main, .promotion-main, .flight-management-main, .booking-admin-main { max-width: 82rem; }
-.admin-heading h1, .catalog-heading h1, .promotion-heading h1, .flight-management-heading h1, .booking-heading h1 { color: #00514d; }
-.admin-page .surface-card, .catalog-main .surface-card, .promotion-main .surface-card, .flight-management-main .surface-card, .booking-admin-main .surface-card { border-color: #d9e3f4; border-radius: .65rem; box-shadow: 0 1px 8px rgb(9 45 61 / 5%); }
-.admin-page table th, .catalog-main table th, .promotion-main table th, .flight-management-main table th, .booking-admin-main table th { color: #436274; background: #eef4ff; }
+.admin-heading h1, .catalog-heading h1, .promotion-heading h1, .flight-management-heading h1, .booking-heading h1 { color: var(--color-primary, #16382C); font-family: var(--font-display); }
+.admin-page .surface-card, .catalog-main .surface-card, .promotion-main .surface-card, .flight-management-main .surface-card, .booking-admin-main .surface-card { border-color: var(--color-border, #D8D2C6); border-radius: .65rem; background: #fff; box-shadow: var(--shadow-card); }
+.admin-page table th, .catalog-main table th, .promotion-main table th, .flight-management-main table th, .booking-admin-main table th { color: var(--color-primary, #16382C); background: var(--color-surface-be, #EFEBE2); font-weight: 700; }
 .admin-page .button, .catalog-main .button, .promotion-main .button, .flight-management-main .button, .booking-admin-main .button { border-radius: .45rem; }
 
-/* Admin workspace treatment based on the approved operations-dashboard reference. */
-body:has(.app-admin-sidebar) { color: #172d3b; background: #f5f8fc; }
-body:has(.app-admin-sidebar) .app-header-admin-area { background: #003d32; }
+/* Admin workspace treatment aligned strictly with Serene Flightways Homepage palette. */
+body:has(.app-admin-sidebar) { color: var(--color-text, #1A1A17); background: var(--color-background, #F4F1EA); }
+body:has(.app-admin-sidebar) .app-header-admin-area { background: #0e241c; }
 @media (max-width: 48rem) {
   body:has(.app-admin-sidebar) .app-header-admin-area { align-items: center; flex-wrap: nowrap; min-height: 4.5rem; }
 }
@@ -4025,42 +4012,42 @@ body:has(.app-admin-sidebar) .promotion-page,
 body:has(.app-admin-sidebar) .catalog-page,
 body:has(.app-admin-sidebar) .flight-management-page,
 body:has(.app-admin-sidebar) .booking-page,
-body:has(.app-admin-sidebar) .admin-dashboard-page { color: #172d3b; background: #f5f8fc; }
+body:has(.app-admin-sidebar) .admin-dashboard-page { color: var(--color-text, #1A1A17); background: var(--color-background, #F4F1EA); }
 body:has(.app-admin-sidebar) .admin-heading h1,
 body:has(.app-admin-sidebar) .catalog-heading h1,
 body:has(.app-admin-sidebar) .promotion-heading h1,
 body:has(.app-admin-sidebar) .flight-management-heading h1,
-body:has(.app-admin-sidebar) .booking-heading h1 { color: #0b2e28; letter-spacing: -.04em; }
+body:has(.app-admin-sidebar) .booking-heading h1 { color: var(--color-primary, #16382C); letter-spacing: -.03em; font-family: var(--font-display); }
 body:has(.app-admin-sidebar) .admin-heading p,
 body:has(.app-admin-sidebar) .catalog-heading p,
 body:has(.app-admin-sidebar) .promotion-heading p,
 body:has(.app-admin-sidebar) .flight-management-heading p,
-body:has(.app-admin-sidebar) .booking-heading p { color: #5d7185; }
+body:has(.app-admin-sidebar) .booking-heading p { color: var(--color-text-muted, #595750); }
 body:has(.app-admin-sidebar) .admin-page .surface-card,
 body:has(.app-admin-sidebar) .catalog-main .surface-card,
 body:has(.app-admin-sidebar) .promotion-main .surface-card,
 body:has(.app-admin-sidebar) .flight-management-main .surface-card,
-body:has(.app-admin-sidebar) .booking-admin-main .surface-card { border-color: #e0e7ee; border-radius: .8rem; background: #fff; box-shadow: 0 2px 9px rgb(24 50 68 / 4%); }
+body:has(.app-admin-sidebar) .booking-admin-main .surface-card { border-color: var(--color-border, #D8D2C6); border-radius: .8rem; background: #fff; box-shadow: var(--shadow-card); }
 body:has(.app-admin-sidebar) .admin-page table th,
 body:has(.app-admin-sidebar) .catalog-main table th,
 body:has(.app-admin-sidebar) .promotion-main table th,
 body:has(.app-admin-sidebar) .flight-management-main table th,
-body:has(.app-admin-sidebar) .booking-admin-main table th { color: #29465d; background: #f4f8fb; }
+body:has(.app-admin-sidebar) .booking-admin-main table th { color: var(--color-primary, #16382C); background: var(--color-surface-be, #EFEBE2); font-weight: 700; border-bottom: 1px solid var(--color-border, #D8D2C6); }
 body:has(.app-admin-sidebar) .admin-page table td,
 body:has(.app-admin-sidebar) .catalog-main table td,
 body:has(.app-admin-sidebar) .promotion-main table td,
 body:has(.app-admin-sidebar) .flight-management-main table td,
-body:has(.app-admin-sidebar) .booking-admin-main table td { border-color: #e7edf2; }
+body:has(.app-admin-sidebar) .booking-admin-main table td { border-color: var(--color-border-subtle, #E5E0D6); }
 body:has(.app-admin-sidebar) .admin-page .button-primary,
 body:has(.app-admin-sidebar) .catalog-main .button-primary,
 body:has(.app-admin-sidebar) .promotion-main .button-primary,
 body:has(.app-admin-sidebar) .flight-management-main .button-primary,
-body:has(.app-admin-sidebar) .booking-admin-main .button-primary { color: #fff; background: #075744; }
+body:has(.app-admin-sidebar) .booking-admin-main .button-primary { color: #fff; background: var(--color-primary, #16382C); }
 body:has(.app-admin-sidebar) .admin-page .button-secondary,
 body:has(.app-admin-sidebar) .catalog-main .button-secondary,
 body:has(.app-admin-sidebar) .promotion-main .button-secondary,
 body:has(.app-admin-sidebar) .flight-management-main .button-secondary,
-body:has(.app-admin-sidebar) .booking-admin-main .button-secondary { color: #392000; background: #ffbd66; }
+body:has(.app-admin-sidebar) .booking-admin-main .button-secondary { color: var(--color-primary, #16382C); background: var(--color-surface-be, #EFEBE2); border: 1px solid var(--color-border, #D8D2C6); }
 
 @media (max-width: 58rem) {
   .flight-result-card { grid-template-columns: minmax(8rem, .8fr) minmax(14rem, 1.5fr) minmax(5rem, .6fr); }
@@ -6062,14 +6049,9 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 /* 3. Hero Section & Booking Widget (Floating Card) */
 .home-hero {
   position: relative !important;
-  min-height: 46rem !important;
-  padding-top: 5.5rem !important;
-  background-color: #04241c !important;
-  background-image:
-    linear-gradient(180deg, rgba(4, 36, 28, 0.50) 0%, rgba(4, 36, 28, 0.85) 100%),
-    url('/images/auth-aircraft-window.png') !important;
-  background-size: cover !important;
-  background-position: center 40% !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
 }
 
 .home-hero-headline .headline-lead {
@@ -6898,19 +6880,152 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
   overflow: hidden;
 }
 
+.home-hero-header-container .hero-bg-slider {
+  display: flex !important;
+  width: 100% !important;
+  height: 100% !important;
+  transition: transform 0.75s cubic-bezier(0.25, 1, 0.5, 1) !important;
+  will-change: transform !important;
+}
+
+.home-hero-header-container .hero-bg-slide {
+  flex: 0 0 100% !important;
+  width: 100% !important;
+  height: 100% !important;
+  position: relative !important;
+  overflow: hidden !important;
+}
+
 .home-hero-header-container .hero-bg-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center 36%;
-  filter: saturate(0.85) contrast(1.05);
+  filter: saturate(0.92) contrast(1.05);
 }
 
 .home-hero-header-container .hero-bg-overlay {
   position: absolute;
   inset: 0;
-  /* Lớp phủ phẳng độ mờ thấp, không dùng gradient dày */
-  background: rgba(14, 36, 28, 0.58);
+  z-index: 1;
+  /* Lớp phủ mềm mại bảo đảm độ tương phản chữ & form */
+  background: linear-gradient(180deg, rgba(14, 36, 28, 0.48) 0%, rgba(10, 30, 24, 0.55) 75%, rgba(6, 20, 15, 0.75) 100%);
+}
+
+/* Hero Image Carousel Dots Bar - Nằm ngay dưới bảng tìm kiếm */
+.hero-carousel-bottom-bar {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  width: 100% !important;
+  margin: 1.5rem auto 1.75rem !important;
+  position: relative !important;
+  z-index: 30 !important;
+}
+
+.hero-carousel-controls {
+  position: relative !important;
+  z-index: 30 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  background: rgba(4, 24, 18, 0.82) !important;
+  backdrop-filter: blur(14px) !important;
+  -webkit-backdrop-filter: blur(14px) !important;
+  padding: 8px 22px !important;
+  border-radius: 9999px !important;
+  border: 1px solid rgba(255, 255, 255, 0.22) !important;
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.45) !important;
+  pointer-events: auto !important;
+  user-select: none !important;
+}
+
+.hero-carousel-caption {
+  font-size: 13.5px !important;
+  font-weight: 600 !important;
+  color: #F4F1EA !important;
+  margin-left: 8px !important;
+  padding-left: 12px !important;
+  border-left: 1px solid rgba(255, 255, 255, 0.25) !important;
+  white-space: nowrap !important;
+  letter-spacing: 0.25px !important;
+}
+
+.hero-carousel-arrow {
+  background: rgba(255, 255, 255, 0.12) !important;
+  border: 1px solid rgba(255, 255, 255, 0.2) !important;
+  color: #F4F1EA !important;
+  font-size: 17px !important;
+  line-height: 1 !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  opacity: 0.85 !important;
+  padding: 0 !important;
+}
+
+.hero-carousel-arrow:hover {
+  opacity: 1 !important;
+  background: rgba(255, 255, 255, 0.25) !important;
+  color: #f5c76b !important;
+  border-color: #f5c76b !important;
+  transform: scale(1.08) !important;
+}
+
+.hero-carousel-dots {
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+}
+
+.hero-carousel-dot {
+  background: transparent !important;
+  border: none !important;
+  padding: 6px !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+}
+
+.hero-carousel-dot-indicator {
+  display: block !important;
+  width: 10px !important;
+  height: 10px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.45) !important;
+  transition: all 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.hero-carousel-dot:hover .hero-carousel-dot-indicator {
+  background: rgba(255, 255, 255, 0.9) !important;
+  transform: scale(1.3) !important;
+}
+
+.hero-carousel-dot.is-active .hero-carousel-dot-indicator {
+  width: 26px !important;
+  border-radius: 6px !important;
+  background: #f5c76b !important; /* Vàng gold Serene */
+  box-shadow: 0 0 12px rgba(245, 199, 107, 0.75) !important;
+}
+
+@media (max-width: 639px) {
+  .hero-carousel-controls {
+    padding: 6px 14px !important;
+    gap: 8px !important;
+  }
+  .hero-carousel-caption {
+    font-size: 12px !important;
+    padding-left: 8px !important;
+  }
+  .hero-carousel-bottom-bar {
+    margin: 1rem auto 1.25rem !important;
+  }
 }
 
 /* Header inside Hero */
@@ -8295,17 +8410,20 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 /* 3. Luxury Flight Result Card (Stitch Spec) */
 .flight-result-card {
   display: grid !important;
-  grid-template-columns: 140px minmax(210px, 1.4fr) minmax(90px, 0.7fr) minmax(130px, 1fr) auto !important;
+  grid-template-columns: minmax(110px, 1.15fr) minmax(170px, 1.55fr) minmax(75px, 0.65fr) minmax(105px, 0.95fr) auto !important;
   align-items: center !important;
-  gap: 1rem !important;
-  padding: 1.15rem 1.35rem !important;
+  gap: 0.85rem 1rem !important;
+  padding: 1.05rem 1.15rem !important;
   border-radius: var(--surface-radius, 6px) !important;
   background: var(--color-surface, #FFFFFF) !important;
   border: 1px solid var(--color-border, #D8D2C6) !important;
   border-left: 4px solid #0f6b66 !important;
   box-shadow: 0 2px 10px rgba(10, 73, 70, 0.05) !important;
   transition: border-color var(--transition-fast), box-shadow var(--transition-fast), transform var(--transition-fast) !important;
-  overflow: visible !important;
+  box-sizing: border-box !important;
+  width: 100% !important;
+  max-width: 100% !important;
+  overflow: hidden !important;
 }
 
 .flight-result-card:hover {
@@ -8315,47 +8433,61 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 }
 
 .flight-result-card .flight-carrier {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  min-width: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  min-width: 0 !important;
+}
+
+.flight-result-card .flight-carrier > div {
+  min-width: 0 !important;
+  flex: 1 !important;
+  overflow: hidden !important;
 }
 
 .flight-result-card .carrier-logo {
-  width: 2.5rem;
-  height: 2.5rem;
-  border-radius: var(--radius-xs, 2px);
-  background: var(--color-surface-be, #EFEBE2);
-  border: 1px solid var(--color-border, #D8D2C6);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--color-primary, #16382C);
-  font-size: 1.1rem;
-  flex-shrink: 0;
+  width: 2.5rem !important;
+  height: 2.5rem !important;
+  border-radius: var(--radius-xs, 2px) !important;
+  background: var(--color-surface-be, #EFEBE2) !important;
+  border: 1px solid var(--color-border, #D8D2C6) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: var(--color-primary, #16382C) !important;
+  font-size: 1.1rem !important;
+  flex-shrink: 0 !important;
 }
 
 .flight-result-card .flight-carrier strong {
-  font-size: 0.95rem;
-  color: var(--color-text, #1A1A17);
-  display: block;
-  font-weight: 600;
+  font-size: 0.95rem !important;
+  color: var(--color-text, #1A1A17) !important;
+  display: block !important;
+  font-weight: 600 !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .flight-result-card .flight-carrier small {
-  font-size: 0.75rem;
-  color: var(--color-text-muted, #595750);
-  font-weight: 500;
-  display: block;
-  margin-top: 0.15rem;
+  font-size: 0.75rem !important;
+  color: var(--color-text-muted, #595750) !important;
+  font-weight: 500 !important;
+  display: block !important;
+  margin-top: 0.15rem !important;
 }
 
 /* Flight Itinerary Path */
 .flight-result-card .flight-itinerary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
+  display: grid !important;
+  grid-template-columns: minmax(70px, 1fr) minmax(65px, 0.8fr) minmax(70px, 1fr) !important;
+  align-items: center !important;
+  gap: 0.65rem !important;
+  min-width: 0 !important;
+}
+
+.flight-result-card .flight-itinerary > div:last-child {
+  text-align: right !important;
 }
 
 .flight-result-card .flight-itinerary time {
@@ -8465,12 +8597,12 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 }
 
 .flight-result-card .flight-book-link {
-  padding: 0.65rem 1.25rem !important;
+  padding: 0.6rem 1rem !important;
   border-radius: 0.5rem !important;
   background: #0f6b66 !important;
   color: #FFFFFF !important;
   font-weight: 700 !important;
-  font-size: 0.88rem !important;
+  font-size: 0.85rem !important;
   text-decoration: none !important;
   white-space: nowrap !important;
   border: none !important;
@@ -8479,6 +8611,8 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
   cursor: pointer !important;
   justify-self: end !important;
   flex-shrink: 0 !important;
+  min-width: unset !important;
+  box-sizing: border-box !important;
 }
 
 .flight-result-card .flight-book-link:hover {
@@ -8516,6 +8650,94 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
   color: #0a4946 !important;
 }
 
+/* Airline Carrier Brand Marks & IATA identification */
+.carrier-brand-mark {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: 0.5rem !important;
+  line-height: 1 !important;
+  gap: 2px !important;
+  padding: 2px !important;
+  box-sizing: border-box !important;
+}
+
+.carrier-brand-mark.is-bamboo {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%) !important;
+  border: 1.5px solid #86efac !important;
+}
+
+.carrier-brand-mark.is-bamboo .carrier-iata-sub {
+  color: #166534 !important;
+}
+
+.carrier-brand-mark.is-vietravel {
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%) !important;
+  border: 1.5px solid #fde68a !important;
+}
+
+.carrier-brand-mark.is-vietravel .carrier-iata-sub {
+  color: #b45309 !important;
+}
+
+.carrier-brand-mark.is-vna {
+  background: linear-gradient(135deg, #ecfeff 0%, #cffafe 100%) !important;
+  border: 1.5px solid #a5f3fc !important;
+}
+
+.carrier-brand-mark.is-vna .carrier-iata-sub {
+  color: #0e7490 !important;
+}
+
+.carrier-brand-mark.is-vietjet {
+  background: linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%) !important;
+  border: 1.5px solid #fecaca !important;
+}
+
+.carrier-brand-mark.is-vietjet .carrier-iata-sub {
+  color: #b91c1c !important;
+}
+
+.carrier-brand-mark.is-pacific {
+  background: linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%) !important;
+  border: 1.5px solid #fed7aa !important;
+}
+
+.carrier-brand-mark.is-pacific .carrier-iata-sub {
+  color: #c2410c !important;
+}
+
+.carrier-brand-mark.is-generic {
+  background: #f8fafc !important;
+  border: 1px solid #e2e8f0 !important;
+  color: #0f766e !important;
+}
+
+.carrier-iata-sub {
+  font-size: 0.65rem !important;
+  font-weight: 800 !important;
+  letter-spacing: 0.05em !important;
+  text-transform: uppercase !important;
+}
+
+.carrier-iata-badge {
+  display: inline-flex !important;
+  align-items: center !important;
+  margin-left: 6px !important;
+  padding: 1px 6px !important;
+  background: #f1f5f9 !important;
+  color: #334155 !important;
+  font-size: 0.68rem !important;
+  font-weight: 700 !important;
+  border-radius: 4px !important;
+  border: 1px solid #e2e8f0 !important;
+  letter-spacing: 0.02em !important;
+  vertical-align: middle !important;
+}
+
 .flight-compare-drawer {
   display: grid !important;
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)) !important;
@@ -8526,20 +8748,113 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
 .fare-compare-card {
   padding: 0.85rem 1rem !important;
   border-radius: 0.5rem !important;
-  border: 1px solid #e2e8f0 !important;
-  background: #f8fafc !important;
+  border: 1.5px solid #e2e8f0 !important;
+  background: #ffffff !important;
   display: flex !important;
   flex-direction: column !important;
-  gap: 0.25rem !important;
+  gap: 0.35rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  position: relative !important;
+}
+
+.fare-compare-card:hover {
+  transform: translateY(-2px) !important;
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.08) !important;
 }
 
 .fare-compare-card.is-economy {
-  border-left: 3.5px solid #0f6b66 !important;
+  border-left: 4px solid #0f6b66 !important;
+}
+
+.fare-compare-card.is-economy:hover {
+  border-color: #0f6b66 !important;
+}
+
+.fare-compare-card.is-economy.is-selected {
+  border-color: #0f6b66 !important;
+  background: #f0fdf4 !important;
+  box-shadow: 0 0 0 2px rgba(15, 107, 102, 0.25), 0 6px 16px rgba(15, 107, 102, 0.1) !important;
 }
 
 .fare-compare-card.is-business {
-  border-left: 3.5px solid #e8a33d !important;
+  border-left: 4px solid #e8a33d !important;
   background: #fffdfa !important;
+}
+
+.fare-compare-card.is-business:hover {
+  border-color: #e8a33d !important;
+}
+
+.fare-compare-card.is-business.is-selected {
+  border-color: #e8a33d !important;
+  background: #fffbeb !important;
+  box-shadow: 0 0 0 2px rgba(232, 163, 61, 0.25), 0 6px 16px rgba(232, 163, 61, 0.1) !important;
+}
+
+.fare-compare-top {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  width: 100% !important;
+}
+
+.fare-compare-selected-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  font-size: 0.72rem !important;
+  font-weight: 700 !important;
+  padding: 2px 8px !important;
+  border-radius: 999px !important;
+  background: #dcfce7 !important;
+  color: #15803d !important;
+}
+
+.fare-compare-selected-tag.is-business {
+  background: #fef3c7 !important;
+  color: #b45309 !important;
+}
+
+.fare-select-btn {
+  margin-top: 0.45rem !important;
+  width: 100% !important;
+  font-size: 0.8rem !important;
+  font-weight: 700 !important;
+  padding: 0.45rem 0.75rem !important;
+  border-radius: 0.375rem !important;
+  display: inline-flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  transition: all 0.15s ease !important;
+  cursor: pointer !important;
+  border: 1px solid #0f6b66 !important;
+  background: #ffffff !important;
+  color: #0f6b66 !important;
+}
+
+.fare-select-btn:hover {
+  background: #0f6b66 !important;
+  color: #ffffff !important;
+}
+
+.fare-select-btn.is-selected {
+  background: #0f6b66 !important;
+  color: #ffffff !important;
+}
+
+.fare-select-btn.is-business {
+  border-color: #d97706 !important;
+  color: #d97706 !important;
+}
+
+.fare-select-btn.is-business:hover {
+  background: #d97706 !important;
+  color: #ffffff !important;
+}
+
+.fare-select-btn.is-business.is-selected {
+  background: #d97706 !important;
+  color: #ffffff !important;
 }
 
 .fare-compare-badge {
@@ -9497,14 +9812,407 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
   border-bottom: 1px solid rgba(255, 255, 255, 0.12) !important;
 }
 
-.home-hero {
-  min-height: 520px !important; /* Yêu cầu 4: Dùng min-height 520px thay vì chiều cao cố định */
-  margin-top: -4.5rem !important; /* Phủ lên đỉnh dưới header sticky */
-  padding-top: calc(4.5rem + 48px) !important; /* Yêu cầu 1: padding-top = header (72px) + 48px = 120px */
+/* ── 2. Hero Split View Layout & Perks ────────────────────────────── */
+.home-hero--split-view {
+  min-height: 600px !important;
+  margin-top: -4.5rem !important;
+  padding-top: calc(4.5rem + 40px) !important;
   padding-bottom: 2.5rem !important;
   display: flex !important;
   flex-direction: column !important;
-  justify-content: flex-start !important;
+  justify-content: center !important;
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+.home-hero-split-container {
+  width: min(100% - 2.5rem, 80rem) !important;
+  margin: 0 auto !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  gap: 3rem !important;
+  position: relative !important;
+  z-index: 25 !important;
+}
+
+.hero-search-col {
+  width: 520px !important;
+  max-width: 100% !important;
+  flex-shrink: 0 !important;
+}
+
+.hero-search-col .search-card-wrap {
+  width: 100% !important;
+  margin: 0 !important;
+}
+
+.hero-search-col .flight-search-card {
+  padding: 1.5rem !important;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.3) !important;
+  border: 1px solid rgba(255, 255, 255, 0.35) !important;
+}
+
+.hero-search-col .search-route-row {
+  display: grid !important;
+  grid-template-columns: 1fr auto 1fr !important;
+  gap: 0.5rem !important;
+  align-items: end !important;
+}
+
+.hero-search-col .search-details-row {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 0.85rem !important;
+  align-items: end !important;
+  margin-top: 1rem !important;
+}
+
+.hero-search-col .search-details-row .airline-field {
+  grid-column: span 1 !important;
+}
+
+.hero-search-col .search-details-row .date-picker-field {
+  grid-column: span 1 !important;
+}
+
+.hero-search-col .search-details-row .passenger-field {
+  grid-column: span 2 !important;
+}
+
+.hero-search-col .search-details-row--round_trip .passenger-field {
+  grid-column: span 1 !important;
+}
+
+.hero-search-col .search-details-row > .search-submit {
+  grid-column: 1 / -1 !important;
+  width: 100% !important;
+  height: 3.25rem !important;
+  min-height: 3.25rem !important;
+  margin-top: 0.4rem !important;
+  font-size: 1.05rem !important;
+  font-weight: 700 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  border-radius: var(--radius-sm) !important;
+  box-shadow: 0 4px 14px rgba(11, 77, 69, 0.35) !important;
+}
+
+.hero-copy-col {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-start !important;
+  gap: 1.5rem !important;
+  padding-left: 1.5rem !important;
+}
+
+.hero-brand-tag {
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  background: rgba(255, 255, 255, 0.14) !important;
+  backdrop-filter: blur(8px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.25) !important;
+  border-radius: 9999px !important;
+  padding: 0.35rem 0.85rem !important;
+  color: #f5c76b !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.3px !important;
+  margin-bottom: 0.75rem !important;
+}
+
+.hero-brand-tag-icon {
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #f5c76b !important;
+}
+
+.hero-brand-tag-icon svg {
+  display: block !important;
+}
+
+.hero-perks-list {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.75rem !important;
+  margin-top: 1.25rem !important;
+  width: 100% !important;
+  max-width: 32rem !important;
+}
+
+.hero-perk-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.85rem !important;
+  background: rgba(6, 26, 20, 0.6) !important;
+  backdrop-filter: blur(10px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.18) !important;
+  border-radius: 10px !important;
+  padding: 0.65rem 1rem !important;
+  transition: all 0.2s ease !important;
+}
+
+.hero-perk-item:hover {
+  background: rgba(6, 26, 20, 0.8) !important;
+  border-color: rgba(245, 199, 107, 0.5) !important;
+  transform: translateX(4px) !important;
+}
+
+.hero-perk-icon {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.35rem !important;
+  height: 2.35rem !important;
+  flex-shrink: 0 !important;
+  border-radius: 8px !important;
+  background: rgba(245, 199, 107, 0.14) !important;
+  border: 1px solid rgba(245, 199, 107, 0.3) !important;
+  color: #f5c76b !important;
+  line-height: 1 !important;
+}
+
+.hero-perk-icon svg {
+  display: block !important;
+}
+
+.hero-perk-text {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.1rem !important;
+}
+
+.hero-perk-text strong {
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  color: #FFFFFF !important;
+}
+
+.hero-perk-text small {
+  font-size: 0.78rem !important;
+  color: rgba(255, 255, 255, 0.8) !important;
+}
+
+/* ── 3. Quick Booking Bar (Đồng bộ 100% Style với Bảng Tìm Kiếm Trên) ────────── */
+.quick-booking-bar-section {
+  width: 100% !important;
+  background: #f7f6f2 !important;
+  padding: 1.5rem 0 1.75rem !important;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.03) !important;
+  position: relative !important;
+  z-index: 20 !important;
+}
+
+.quick-booking-bar-inner {
+  width: min(100% - 2.5rem, 80rem) !important;
+  margin: 0 auto !important;
+  background: #FFFFFF !important;
+  border: 1px solid #dce5ed !important;
+  border-radius: 14px !important;
+  padding: 1.25rem 1.65rem 1.45rem !important;
+  box-shadow: 0 8px 30px rgba(7, 43, 38, 0.06) !important;
+}
+
+.quick-booking-bar-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding-bottom: 0.85rem !important;
+  margin-bottom: 0.95rem !important;
+  border-bottom: 1px solid #eef2f5 !important;
+}
+
+.quick-bar-title {
+  font-size: 0.92rem !important;
+  font-weight: 800 !important;
+  color: #0b4d45 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.5px !important;
+}
+
+.quick-bar-links {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1.25rem !important;
+}
+
+.quick-bar-link {
+  font-size: 0.85rem !important;
+  font-weight: 600 !important;
+  color: #2D5A4C !important;
+  text-decoration: none !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.4rem !important;
+  transition: all 0.15s ease !important;
+  padding: 0.3rem 0.55rem !important;
+  border-radius: 6px !important;
+}
+
+.quick-bar-link:hover {
+  color: #0b4d45 !important;
+  background: #f0fdf4 !important;
+}
+
+.quick-link-icon-svg {
+  color: #0b4d45 !important;
+  flex-shrink: 0 !important;
+}
+
+.quick-strip-fields-row {
+  display: flex !important;
+  align-items: flex-end !important;
+  gap: 0.85rem !important;
+  flex-wrap: nowrap !important;
+}
+
+.quick-strip-field {
+  flex: 1 !important;
+  min-width: 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.quick-field-label {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  font-size: 0.82rem !important;
+  font-weight: 700 !important;
+  color: #16382C !important;
+  margin-bottom: 0.45rem !important;
+}
+
+.quick-strip-field .field-input-wrap {
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  max-height: 3.4rem !important;
+  position: relative !important;
+  display: flex !important;
+  align-items: center !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.quick-strip-select,
+.quick-strip-date-input {
+  width: 100% !important;
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  max-height: 3.4rem !important;
+  padding: 0.75rem 1rem 0.75rem 2.75rem !important;
+  font-size: 0.95rem !important;
+  font-weight: 600 !important;
+  border-radius: 0.65rem !important;
+  border: 1.5px solid #dce5ed !important;
+  background: #f8fafc !important;
+  color: #0f172a !important;
+  box-sizing: border-box !important;
+  transition: all 0.2s ease !important;
+  outline: none !important;
+  cursor: pointer !important;
+}
+
+.quick-strip-select:focus,
+.quick-strip-date-input:focus {
+  border-color: #0b4d45 !important;
+  background: #ffffff !important;
+  box-shadow: 0 0 0 3px rgba(11, 77, 69, 0.15) !important;
+}
+
+.quick-strip-swap-btn {
+  display: grid !important;
+  place-items: center !important;
+  width: 3.2rem !important;
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  border: 1.5px solid #dce5ed !important;
+  border-radius: 0.65rem !important;
+  background: #f8fafc !important;
+  color: #0b4d45 !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
+  margin-bottom: 0 !important;
+  transition: all 0.2s ease !important;
+}
+
+.quick-strip-swap-btn:hover {
+  background: #0b4d45 !important;
+  color: #ffffff !important;
+  border-color: #0b4d45 !important;
+  transform: rotate(180deg) !important;
+}
+
+.quick-strip-submit-btn {
+  height: 3.4rem !important;
+  min-height: 3.4rem !important;
+  padding: 0 1.75rem !important;
+  background: #0b4d45 !important;
+  border: none !important;
+  border-radius: 0.65rem !important;
+  color: #ffffff !important;
+  font-size: 1rem !important;
+  font-weight: 700 !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  gap: 0.5rem !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  flex-shrink: 0 !important;
+  white-space: nowrap !important;
+  box-shadow: 0 4px 14px rgba(11, 77, 69, 0.3) !important;
+}
+
+.quick-strip-submit-btn:hover {
+  background: #073530 !important;
+  box-shadow: 0 6px 18px rgba(11, 77, 69, 0.45) !important;
+  transform: translateY(-1px) !important;
+}
+
+@media (max-width: 1024px) {
+  .home-hero-split-container {
+    flex-direction: column !important;
+    gap: 2rem !important;
+  }
+  .hero-search-col {
+    width: 100% !important;
+  }
+  .hero-copy-col {
+    padding-left: 0 !important;
+    width: 100% !important;
+  }
+  .quick-strip-fields-row {
+    flex-wrap: wrap !important;
+  }
+  .quick-strip-field {
+    flex: 1 1 calc(50% - 0.5rem) !important;
+  }
+  .quick-strip-submit-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@media (max-width: 639px) {
+  .quick-strip-field {
+    flex: 1 1 100% !important;
+  }
+  .quick-bar-links {
+    display: none !important;
+  }
+}
+
+.home-hero::before {
+  display: none !important;
 }
 
 .home-hero-inner {
@@ -9535,16 +10243,14 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
    - Form KHÔNG che chữ hay dòng phụ ở bất kỳ kích thước nào */
 .search-card-wrap {
   width: min(100% - 2.5rem, 78rem) !important;
-  margin: 40px auto -48px !important; /* top: 40px, bottom: -48px */
+  margin: 36px auto 0 !important;
   position: relative !important;
   z-index: 25 !important;
 }
 
-/* Yêu cầu 4: Giảm khoảng trắng giữa hero và mục "Quy trình đặt vé" xuống còn khoảng 48px:
-   Form đè đáy 48px + khoảng cách 48px = padding-top 96px */
 .workflow-section {
   margin: 0 auto 1.5rem !important;
-  padding-top: calc(48px + 48px) !important;
+  padding-top: 2rem !important;
 }
 
 /* Responsive Tablet (640px - 1023px) */
@@ -9552,7 +10258,7 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
   .home-hero {
     min-height: 500px !important;
     padding-top: calc(4.5rem + 48px) !important;
-    padding-bottom: 2.5rem !important;
+    padding-bottom: 2rem !important;
   }
 
   .home-hero-headline {
@@ -9560,12 +10266,12 @@ h1, h2, h3, .home-hero-headline, .section-heading h2, .cabins-heading-center h2 
   }
 
   .search-card-wrap {
-    margin: 40px auto -48px !important;
+    margin: 32px auto 0 !important;
   }
 
   .workflow-section {
     margin: 0 auto 1.5rem !important;
-    padding-top: calc(48px + 48px) !important;
+    padding-top: 2rem !important;
   }
 }
 
@@ -9903,9 +10609,22 @@ textarea:focus {
 }
 
 .field-error {
-  font-size: 0.76rem;
-  color: var(--color-danger, #842029);
-  font-weight: 500;
+  display: inline-flex !important;
+  align-items: center !important;
+  gap: 0.3rem !important;
+  font-size: 0.8rem !important;
+  color: #dc2626 !important;
+  font-weight: 600 !important;
+  margin-top: 0.35rem !important;
+  line-height: 1.3 !important;
+}
+
+.field-error::before {
+  content: '•';
+  display: inline-block;
+  font-size: 1.1rem;
+  line-height: 1;
+  color: #ef4444;
 }
 
 /* 7. Status Badges & Pills */
@@ -10045,41 +10764,138 @@ code,
   font-variant-numeric: tabular-nums;
 }
 
-/* 10. Notices & Alerts */
+/* 10. Notices & Alerts - Nâng cấp phong cách hàng không sang trọng */
 .notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.75rem;
-  padding: 0.85rem 1.15rem;
-  border-radius: var(--control-radius, 4px);
-  font-size: 0.85rem;
-  line-height: 1.5;
-  border: 1px solid transparent;
-  margin-bottom: 1.25rem;
+  display: flex !important;
+  align-items: flex-start !important;
+  gap: 0.9rem !important;
+  padding: 0.95rem 1.25rem !important;
+  border-radius: 0.75rem !important;
+  font-size: 0.88rem !important;
+  line-height: 1.55 !important;
+  border: 1px solid transparent !important;
+  margin-bottom: 1.25rem !important;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.04) !important;
+  transition: all 0.2s ease !important;
 }
 
-.notice-info {
-  background: var(--color-info-bg, #CFE2FF);
-  color: var(--color-info, #084298);
-  border-color: var(--color-info-border, #B6D4FE);
+.notice-icon-badge {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 2.25rem !important;
+  height: 2.25rem !important;
+  flex: 0 0 2.25rem !important;
+  border-radius: 0.5rem !important;
+  margin-top: 0.05rem !important;
+  transition: transform 0.2s ease !important;
 }
 
-.notice-success {
-  background: var(--color-success-bg, #D1E7DD);
-  color: var(--color-success, #0F5132);
-  border-color: var(--color-success-border, #BADBCC);
+.notice-icon-svg {
+  display: block !important;
 }
 
-.notice-warning {
-  background: var(--color-warning-bg, #FFF3CD);
-  color: var(--color-warning, #664D03);
-  border-color: var(--color-warning-border, #FFECB5);
+.notice-content {
+  flex: 1 1 auto !important;
+  min-width: 0 !important;
 }
 
+.notice-title {
+  margin: 0 0 0.25rem 0 !important;
+  font-size: 0.95rem !important;
+  font-weight: 750 !important;
+  letter-spacing: -0.01em !important;
+  line-height: 1.35 !important;
+}
+
+.notice-message {
+  font-weight: 500 !important;
+}
+
+.notice-message a,
+.notice-message .button {
+  margin-left: 0.35rem !important;
+}
+
+/* Error: Đỏ thắm sang trọng, nền hồng sữa dịu mắt */
 .notice-error {
-  background: var(--color-danger-bg, #F8D7DA);
-  color: var(--color-danger, #842029);
-  border-color: var(--color-danger-border, #F5C2C7);
+  background: linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%) !important;
+  color: #991b1b !important;
+  border-color: #fecaca !important;
+  border-left: 4px solid #ef4444 !important;
+}
+.notice-error .notice-icon-badge {
+  background: #fee2e2 !important;
+  color: #dc2626 !important;
+  border: 1px solid #fca5a5 !important;
+}
+.notice-error .notice-title {
+  color: #7f1d1d !important;
+}
+
+/* Success: Xanh ngọc lục bảo Emerald sang trọng */
+.notice-success {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 100%) !important;
+  color: #166534 !important;
+  border-color: #bbf7d0 !important;
+  border-left: 4px solid #10b981 !important;
+}
+.notice-success .notice-icon-badge {
+  background: #dcfce7 !important;
+  color: #059669 !important;
+  border: 1px solid #86efac !important;
+}
+.notice-success .notice-title {
+  color: #14532d !important;
+}
+
+/* Warning: Hổ phách hoàng gia Amber */
+.notice-warning {
+  background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%) !important;
+  color: #92400e !important;
+  border-color: #fde68a !important;
+  border-left: 4px solid #f59e0b !important;
+}
+.notice-warning .notice-icon-badge {
+  background: #fef3c7 !important;
+  color: #d97706 !important;
+  border: 1px solid #fcd34d !important;
+}
+.notice-warning .notice-title {
+  color: #78350f !important;
+}
+
+/* Info: Xanh Teal chuẩn bộ nhận diện Serene Flightways */
+.notice-info {
+  background: linear-gradient(135deg, #f0fdfa 0%, #e6f6f4 100%) !important;
+  color: #115e59 !important;
+  border-color: #ccfbf1 !important;
+  border-left: 4px solid #0f6b66 !important;
+}
+.notice-info .notice-icon-badge {
+  background: #ccfbf1 !important;
+  color: #0f6b66 !important;
+  border: 1px solid #99f6e4 !important;
+}
+.notice-info .notice-title {
+  color: #042f2e !important;
+}
+
+/* Danh sách lỗi chi tiết */
+.notice-error-list {
+  margin: 0.5rem 0 0 !important;
+  padding-left: 1.25rem !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+}
+
+.notice-error-list li {
+  line-height: 1.45 !important;
+}
+
+.notice-error-list li strong {
+  color: inherit !important;
 }
 
 /* 11. Empty State */
@@ -10246,7 +11062,7 @@ code,
    SERENE FLIGHTWAYS — DESIGN SYSTEM PHASE 2: CUSTOMER BOOKING FLOW
    ========================================================================== */
 
-/* 1. Hold Countdown Clock (15-Minute Booking Reservation) */
+/* 1. Hold Countdown Clock (15-Minute Booking Reservation) - Nâng cấp phong cách hàng không cao cấp */
 .hold-countdown-banner {
   display: flex;
   align-items: center;
@@ -10254,67 +11070,85 @@ code,
   gap: 1.25rem;
   padding: 1.15rem 1.5rem;
   margin-bottom: 1.5rem;
-  background: var(--color-surface, #FFFFFF);
-  border: 1px solid var(--color-border, #D8D2C6);
-  border-left: 4px solid var(--color-primary, #16382C);
-  border-radius: var(--surface-radius, 4px);
-  box-shadow: 0 2px 8px rgba(26, 26, 23, 0.04);
+  background: linear-gradient(135deg, #ffffff 0%, #f8faf9 100%);
+  border: 1px solid #dbe7e5;
+  border-left: 4px solid #0f6b66;
+  border-radius: 0.75rem;
+  box-shadow: 0 4px 16px rgba(15, 107, 102, 0.05);
   transition: all var(--transition-normal);
 }
 
 .hold-countdown-banner .hold-countdown-info {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: 0.25rem;
 }
 
 .hold-countdown-banner .hold-countdown-info .eyebrow {
   font-family: var(--font-ui);
   font-size: 0.72rem;
-  font-weight: 700;
-  letter-spacing: 0.06em;
-  color: var(--color-accent, #D9622B);
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  color: #0f6b66;
   text-transform: uppercase;
 }
 
 .hold-countdown-banner .hold-countdown-info p {
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--color-text, #1A1A17);
+  font-size: 0.88rem;
+  color: #334155;
+  font-weight: 500;
 }
 
 .hold-countdown-digits {
   font-family: var(--font-mono, monospace);
   font-variant-numeric: tabular-nums;
-  font-size: 2.25rem;
-  font-weight: 700;
-  color: var(--color-primary, #16382C);
+  font-size: 2rem;
+  font-weight: 750;
+  color: #0a4946;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.02em;
   flex-shrink: 0;
+  background: #eef7f5;
+  padding: 0.45rem 1rem;
+  border-radius: 0.5rem;
+  border: 1px solid #cce5e1;
+  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 /* Urgent state: < 3 minutes remaining */
 .hold-countdown-banner.is-urgent {
-  background: #FFF9F5;
-  border-color: var(--color-accent, #D9622B);
-  border-left-color: var(--color-accent, #D9622B);
+  background: linear-gradient(135deg, #fffbeb 0%, #fff7ed 100%);
+  border-color: #fde68a;
+  border-left-color: #f59e0b;
+}
+
+.hold-countdown-banner.is-urgent .eyebrow {
+  color: #d97706;
 }
 
 .hold-countdown-banner.is-urgent .hold-countdown-digits {
-  color: var(--color-accent, #D9622B);
+  color: #b45309;
+  background: #fef3c7;
+  border-color: #fde68a;
   animation: pulse-countdown 1.5s infinite ease-in-out;
 }
 
 /* Expired state: 0 minutes remaining */
 .hold-countdown-banner.is-expired {
-  background: var(--color-danger-bg, #F8D7DA);
-  border-color: var(--color-danger-border, #F5C2C7);
-  border-left-color: var(--color-danger, #842029);
+  background: linear-gradient(135deg, #fff5f5 0%, #fef2f2 100%);
+  border-color: #fecaca;
+  border-left-color: #ef4444;
+}
+
+.hold-countdown-banner.is-expired .eyebrow {
+  color: #dc2626;
 }
 
 .hold-countdown-banner.is-expired .hold-countdown-digits {
-  color: var(--color-danger, #842029);
+  color: #b91c1c;
+  background: #fee2e2;
+  border-color: #fca5a5;
 }
 
 @keyframes pulse-countdown {
@@ -10576,10 +11410,12 @@ code,
 .search-reminder-modal-backdrop {
   position: fixed !important;
   inset: 0 !important;
-  z-index: 99999 !important;
-  background: rgba(14, 36, 28, 0.45) !important;
-  backdrop-filter: blur(4px) !important;
-  -webkit-backdrop-filter: blur(4px) !important;
+  width: 100vw !important;
+  height: 100vh !important;
+  z-index: 999999 !important;
+  background: rgba(8, 28, 22, 0.6) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
   display: flex !important;
   align-items: center !important;
   justify-content: center !important;
@@ -10589,11 +11425,12 @@ code,
 
 .search-reminder-modal {
   position: relative !important;
+  z-index: 1000000 !important;
   width: 100% !important;
   max-width: 25rem !important;
   background: #FFFFFF !important;
-  border-radius: 14px !important;
-  box-shadow: 0 24px 48px -10px rgba(0, 0, 0, 0.28), 0 0 0 1px rgba(0, 0, 0, 0.06) !important;
+  border-radius: 16px !important;
+  box-shadow: 0 24px 56px -10px rgba(0, 0, 0, 0.35), 0 0 0 1px rgba(0, 0, 0, 0.08) !important;
   padding: 2.25rem 2rem 2.25rem !important;
   text-align: center !important;
   animation: reminderScaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) !important;
@@ -12093,13 +12930,152 @@ code,
 
 @media (max-width: 1200px) {
   .results-layout-grid {
-    grid-template-columns: minmax(0, 1fr) 310px !important;
-    gap: 1.15rem !important;
+    grid-template-columns: minmax(0, 1fr) 300px !important;
+    gap: 1rem !important;
   }
 
   .flight-result-card {
-    grid-template-columns: 120px minmax(180px, 1.2fr) minmax(75px, 0.6fr) minmax(110px, 0.9fr) auto !important;
-    gap: 0.75rem !important;
-    padding: 1rem !important;
+    grid-template-columns: minmax(95px, 1fr) minmax(150px, 1.4fr) minmax(65px, 0.6fr) minmax(95px, 0.9fr) auto !important;
+    gap: 0.65rem 0.85rem !important;
+    padding: 0.85rem 1rem !important;
+  }
+
+  .flight-result-card .flight-itinerary time {
+    font-size: 1.25rem !important;
+  }
+
+  .flight-result-card .flight-fare strong {
+    font-size: 1.25rem !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .results-layout-grid {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .booking-summary-widget {
+    position: static !important;
+    margin-top: 1.5rem !important;
+  }
+}
+
+/* ── Nâng cấp triệt để bố cục Thẻ chuyến bay: chống đè nút Chọn lên Giá vé ── */
+.flight-result-card {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  flex-wrap: wrap !important;
+  gap: 1rem 1.25rem !important;
+  padding: 1.15rem 1.35rem !important;
+  border: 1px solid #d9e3f4 !important;
+  border-left: 4px solid #00514d !important;
+  border-radius: 0.75rem !important;
+  background: #ffffff !important;
+  box-shadow: 0 2px 10px rgba(9, 45, 61, 0.05) !important;
+  transition: all 0.2s ease !important;
+}
+
+.flight-result-card:hover {
+  border-color: #bec9c7 !important;
+  border-left-color: #8a5200 !important;
+  box-shadow: 0 8px 24px rgba(9, 45, 61, 0.1) !important;
+  transform: translateY(-1px) !important;
+}
+
+.flight-result-card .flight-carrier {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.75rem !important;
+  min-width: 9.5rem !important;
+  flex-shrink: 0 !important;
+}
+
+.flight-result-card .flight-itinerary {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1.25rem !important;
+  flex: 1 1 14rem !important;
+  justify-content: center !important;
+}
+
+.flight-result-card .flight-availability {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-width: 5.5rem !important;
+  flex-shrink: 0 !important;
+  text-align: center !important;
+}
+
+.flight-action-cell {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: flex-end !important;
+  gap: 1.25rem !important;
+  margin-left: auto !important;
+  flex-shrink: 0 !important;
+}
+
+.flight-action-cell .flight-fare {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: flex-end !important;
+  text-align: right !important;
+  white-space: nowrap !important;
+}
+
+.flight-action-cell .flight-fare small {
+  font-size: 0.75rem !important;
+  color: #64748b !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.03em !important;
+}
+
+.flight-action-cell .flight-fare strong {
+  font-size: 1.3rem !important;
+  font-weight: 800 !important;
+  color: #9a5900 !important;
+  line-height: 1.2 !important;
+}
+
+.flight-action-cell .flight-book-link {
+  min-width: 9.25rem !important;
+  padding: 0.65rem 1.25rem !important;
+  font-size: 0.92rem !important;
+  font-weight: 700 !important;
+  border-radius: 0.5rem !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  text-align: center !important;
+  white-space: nowrap !important;
+  cursor: pointer !important;
+}
+
+.flight-result-card .flight-selected-banner,
+.flight-result-card .flight-fare-compare-wrap,
+.flight-result-card .flight-status-reason {
+  width: 100% !important;
+  flex-basis: 100% !important;
+}
+
+@media (max-width: 768px) {
+  .flight-result-card {
+    gap: 0.85rem !important;
+    padding: 0.95rem 1rem !important;
+  }
+
+  .flight-action-cell {
+    width: 100% !important;
+    justify-content: space-between !important;
+    padding-top: 0.65rem !important;
+    border-top: 1px dashed #e2e8f0 !important;
+  }
+
+  .flight-action-cell .flight-fare {
+    align-items: flex-start !important;
+    text-align: left !important;
   }
 }

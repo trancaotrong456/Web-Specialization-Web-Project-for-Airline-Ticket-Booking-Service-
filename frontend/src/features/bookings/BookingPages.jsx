@@ -16,8 +16,38 @@ import { getServerTimeOffset } from '../../lib/apiClient';
 import { BoardingPassCard } from './BoardingPassCard';
 import { FlightPicker } from '../../components/FlightPicker';
 import { SearchSummaryBanner } from '../flights/FlightResultsPage';
+import {
+  IconCheckSquare,
+  IconShieldCheck,
+  IconSparkles,
+  IconUser,
+  IconAlertTriangle,
+  IconArrowRight,
+  IconPlane,
+  IconSearch,
+  IconMail,
+  IconPhone,
+  IconTicket,
+  IconCreditCard,
+  IconChevronRight,
+  IconClock,
+} from '../../components/AppIcons';
 import './seatSelection.css';
 import './passengerDetails.css';
+import './myBookings.css';
+
+export const toIataPassengerName = (name) => {
+  if (!name) return '';
+  return String(name)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/Đ/g, 'D')
+    .replace(/[^a-zA-Z\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .toUpperCase()
+    .trim();
+};
 
 export const bookingStatusSourceLabels = {
   booking_created: 'Tạo đặt chỗ ban đầu',
@@ -47,6 +77,8 @@ export function getStatusSourceLabel(source) {
 const bookingStatuses = ['holding', 'pending_payment', 'confirmed', 'cancelled', 'expired'];
 const emailKey = (id) => `booking_guest_email_${id}`;
 const dateTime = (value) => value ? new Intl.DateTimeFormat('vi-VN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '—';
+const timeOnly = (value) => value ? new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date(value)) : '—';
+const dateOnly = (value) => value ? new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(value)) : '—';
 const rowsOf = (result) => Array.isArray(result) ? result : result?.data || [];
 const pageOf = (result, page, limit) => result?.pagination || { page, limit, total: result?.total || result?.data?.length || 0, totalPages: 1 };
 const errText = (error, fallback) => error?.message || fallback;
@@ -74,8 +106,15 @@ const countFromSearchParams = (params) => {
     : '1';
 };
 
-function BookingShell({ children, admin = false }) {
-  return <div className="public-page booking-page"><AppHeader /><main className={`booking-main ${admin ? 'booking-admin-main' : ''}`}>{children}</main><AppFooter note="Thông tin đặt chỗ được xử lý theo trạng thái từ hệ thống." /></div>;
+function BookingShell({ children, admin = false, bottomBar = null }) {
+  return (
+    <div className="public-page booking-page">
+      <AppHeader />
+      <main className={`booking-main ${admin ? 'booking-admin-main' : ''}`}>{children}</main>
+      {bottomBar}
+      <AppFooter note="Thông tin đặt chỗ được xử lý theo trạng thái từ hệ thống." />
+    </div>
+  );
 }
 
 function PageHeading({ eyebrow = 'ĐẶT VÉ MÁY BAY', title, description, actions }) {
@@ -113,6 +152,11 @@ export function BookingCreatePage() {
   const [activeSeatPassenger, setActiveSeatPassenger] = useState(0);
   const [guestEmail, setGuestEmail] = useState('');
   const [formErrors, setFormErrors] = useState({});
+  const [isSelfBooking, setIsSelfBooking] = useState(false);
+  const [policyPromo, setPolicyPromo] = useState(true);
+  const [policySurvey, setPolicySurvey] = useState(true);
+  const [policySaveInfo, setPolicySaveInfo] = useState(true);
+  const [policyAgreed, setPolicyAgreed] = useState(true);
   const [state, setState] = useState({ loadingAirports: true, searching: false, loadingFares: false, submitting: false, error: '', stage: 'flight' });
   const searchRequest = useRef(0);
   const fareRequest = useRef(0);
@@ -307,9 +351,19 @@ export function BookingCreatePage() {
     const fields = {};
     if (!user && !isValidEmail(guestEmail)) fields.guest_email = 'Vui lòng nhập email hợp lệ để tra cứu và quản lý đặt chỗ.';
     passengers.forEach((passenger, index) => {
-      if (passenger.passenger_name && passenger.passenger_name.trim().length > 150) fields[`passengers.${index}.passenger_name`] = 'Họ tên không vượt quá 150 ký tự.';
-      if (passenger.passport_no && passenger.passport_no.trim().length > 30) fields[`passengers.${index}.passport_no`] = 'Số hộ chiếu không vượt quá 30 ký tự.';
+      const pName = passenger.passenger_name ? passenger.passenger_name.trim() : '';
+      if (!pName) {
+        fields[`passengers.${index}.passenger_name`] = 'Vui lòng nhập họ và tên hành khách.';
+      } else if (pName.length > 150) {
+        fields[`passengers.${index}.passenger_name`] = 'Họ tên không vượt quá 150 ký tự.';
+      }
+      if (passenger.passport_no && passenger.passport_no.trim().length > 30) {
+        fields[`passengers.${index}.passport_no`] = 'Số hộ chiếu không vượt quá 30 ký tự.';
+      }
     });
+    if (!policyAgreed) {
+      fields.policy_agreed = 'Vui lòng xác nhận đồng ý với Chính sách & Điều lệ vận chuyển của Serene Flightways.';
+    }
     setFormErrors(fields);
     if (Object.keys(fields).length) {
       const firstKey = Object.keys(fields)[0];
@@ -356,46 +410,107 @@ export function BookingCreatePage() {
       const booking = await api.createBooking(payload);
       const bookingId = booking?.id || booking?.booking?.id;
       if (!bookingId) throw new Error('Máy chủ không trả về mã đặt chỗ.');
-      if (!user) sessionStorage.setItem(emailKey(bookingId), guestEmail.trim().toLowerCase());
+      if (!user) {
+        sessionStorage.setItem(emailKey(bookingId), guestEmail.trim().toLowerCase());
+        try {
+          const bookingData = booking?.booking || booking;
+          sessionStorage.setItem('airline_guest_holding_booking', JSON.stringify({
+            id: bookingId,
+            booking_code: bookingData?.booking_code,
+            hold_expires_at: bookingData?.hold_expires_at,
+            guestEmail: guestEmail.trim().toLowerCase(),
+          }));
+        } catch {}
+      }
       navigate(`/bookings/${bookingId}/services`, { state: { booking, guestEmail: !user ? guestEmail.trim().toLowerCase() : '' } });
     } catch (error) { setState((current) => ({ ...current, submitting: false, error: errText(error, 'Không thể tạo yêu cầu đặt chỗ.'), fields: errorFields(error) })); }
   };
 
   const itineraryReferenceTotal = itineraryFlights.reduce((sum, item) => sum + Number(item.fare?.price || 0), 0) * passengers.length;
 
-  return <BookingShell><PageHeading title="Tạo đặt chỗ" description="Chọn chuyến bay và hạng vé, sau đó nhập thông tin hành khách." actions={<Link className="button button-outline" to="/bookings/lookup">Đã có mã đặt chỗ?</Link>} />
-    {state.error ? <Notice type="error">{state.error}</Notice> : null}
-    {lastWarning ? <Notice type="warning">{lastWarning.message || `Chỉ còn ${lastWarning.availableSeats} ghế!`} <button type="button" style={{ marginLeft: 8, fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={clearWarning}>Bỏ qua</button></Notice> : null}
-    <div className="booking-steps" aria-label="Các bước đặt vé"><span className={state.stage === 'flight' ? 'is-current' : 'is-done'}>1 <b>Chuyến bay</b></span><span className={state.stage === 'fare' ? 'is-current' : state.stage === 'passenger' ? 'is-done' : ''}>2 <b>Hạng vé</b></span><span className={state.stage === 'passenger' ? 'is-current' : ''}>3 <b>Hành khách</b></span></div>
-    <section className="surface-card booking-panel">
-      {state.loadingFares && requestedItinerary.length > 1 ? <LoadingView label="Đang xác minh các chuyến bay và hạng vé đã chọn…" /> : null}
-      {state.stage === 'flight' && !expectsItinerary ? <>
-        <h2>Tìm chuyến bay</h2>
-        <form className="booking-search-form" onSubmit={search}>
-          <label className="field"><span>Sân bay đi</span><select required value={criteria.departure_airport_id} onChange={(event) => setCriteria((current) => ({ ...current, departure_airport_id: event.target.value }))}><option value="">Chọn sân bay</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.iata_code} · {item.city || item.name}</option>)}</select></label>
-          <label className="field"><span>Sân bay đến</span><select required value={criteria.arrival_airport_id} onChange={(event) => setCriteria((current) => ({ ...current, arrival_airport_id: event.target.value }))}><option value="">Chọn sân bay</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.iata_code} · {item.city || item.name}</option>)}</select></label>
-          <label className="field"><span>Ngày khởi hành</span><input type="date" required value={criteria.departure_date} onChange={(event) => setCriteria((current) => ({ ...current, departure_date: event.target.value }))} /></label>
-          <label className="field"><span>Số hành khách</span><input type="number" min="1" required value={criteria.passengers} onChange={(event) => setCriteria((current) => ({ ...current, passengers: event.target.value }))} /></label>
-          <button className="button button-primary" type="submit" disabled={state.searching || state.loadingAirports}>{state.searching ? 'Đang tìm…' : 'Tìm chuyến bay'}</button>
-        </form>
-        {results.length ? <div className="booking-flight-list">{results.map((item) => <FlightChoice key={item.id} flight={item} onSelect={selectFlight} />)}</div> : null}
-        {results.length === 0 && !state.searching && criteria.departure_date ? <p className="empty-state">Chưa có kết quả. Hãy thử tìm chuyến bay phù hợp với tiêu chí khác.</p> : null}
-      </> : null}
-      {state.stage === 'fare' || state.loadingFares && flight ? <><div className="booking-section-heading"><div><h2>Chọn hạng vé</h2><p>{flightCarrier(flight)} · {airportsOf(flight)} · {dateTime(flight.departure_time)}</p></div><button className="button button-outline" type="button" onClick={() => { setFlight(null); setFare(null); setState((current) => ({ ...current, stage: 'flight' })); }}>Đổi chuyến bay</button></div>{state.loadingFares ? <LoadingView label="Đang tải hạng vé…" /> : fares.length ? <><div className="booking-fare-list">{fares.map((item) => <label className={`booking-fare-option ${fare?.id === item.id ? 'is-selected' : ''}`} key={item.id}><input type="radio" name="fare" checked={fare?.id === item.id} onChange={() => setFare(item)} /><span><strong>{item.class_name}</strong><small>{item.seat_quota ?? '—'} ghế phân bổ</small></span><strong>{money(item.price)} / khách</strong></label>)}</div><button className="button button-primary" type="button" onClick={continueToPassenger}>Tiếp tục</button></> : <div className="empty-state"><h3>Chưa có hạng vé cho chuyến bay này</h3><p>Hãy chọn chuyến bay khác hoặc quay lại sau.</p></div>}</> : null}
-      {state.stage === 'passenger' ? <>
-        <SearchSummaryBanner
-          tripType={tripType}
-          passengerCount={passengers.length}
-          departureAirport={flight?.departureAirport}
-          arrivalAirport={flight?.arrivalAirport}
-          departureDate={flight?.departure_time}
-          returnDate={itineraryFlights[1]?.flight?.departure_time}
-          currentStep={2}
-          editUrl={expectsItinerary ? '/flights/search' : '/'}
-          editText="Chỉnh sửa tìm kiếm"
-        />
+  return (
+    <BookingShell
+      bottomBar={state.stage === 'passenger' ? (
+        <div className="passenger-bottom-actions">
+          <div className="passenger-bottom-actions-container">
+            <button
+              type="button"
+              className="button-back"
+              onClick={() => {
+                if (itineraryFlights.length > 1) {
+                  navigate(-1);
+                } else {
+                  setState((curr) => ({ ...curr, stage: 'fare' }));
+                }
+              }}
+            >
+              ‹ Quay lại
+            </button>
+            <div className="passenger-bottom-submit-group">
+              {Object.keys(formErrors).length > 0 ? (
+                <div style={{ color: '#ef4444', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.45rem 0.85rem', borderRadius: '0.375rem' }} role="alert">
+                  <span style={{ display: 'inline-flex', alignItems: 'center' }}><IconAlertTriangle size={15} /></span>
+                  <span>Vui lòng kiểm tra và điền đầy đủ các thông tin bắt buộc ở trên</span>
+                </div>
+              ) : null}
+              <div className="passenger-bottom-total-display">
+                <span className="total-caption">TỔNG TIỀN THANH TOÁN</span>
+                <span className="total-val">
+                  {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
+                </span>
+              </div>
+              <button
+                form="passenger-checkout-form"
+                className="button-continue button-submit-order"
+                type="submit"
+                disabled={state.submitting}
+                aria-label={state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp (Tạo đặt chỗ)'}
+              >
+                <span>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp'}</span>
+                <span aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center' }}><IconArrowRight size={16} /></span>
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    >
+      <PageHeading title="Tạo đặt chỗ" description="Chọn chuyến bay và hạng vé, sau đó nhập thông tin hành khách." actions={<Link className="button button-outline" to="/bookings/lookup">Đã có mã đặt chỗ?</Link>} />
+      {state.error ? <Notice type="error">{state.error}</Notice> : null}
+      {lastWarning ? <Notice type="warning">{lastWarning.message || `Chỉ còn ${lastWarning.availableSeats} ghế!`} <button type="button" style={{ marginLeft: 8, fontSize: '0.75rem', background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }} onClick={clearWarning}>Bỏ qua</button></Notice> : null}
+      <div className="booking-steps" aria-label="Các bước đặt vé"><span className={state.stage === 'flight' ? 'is-current' : 'is-done'}>1 <b>Chuyến bay</b></span><span className={state.stage === 'fare' ? 'is-current' : state.stage === 'passenger' ? 'is-done' : ''}>2 <b>Hạng vé</b></span><span className={state.stage === 'passenger' ? 'is-current' : ''}>3 <b>Hành khách</b></span></div>
 
-        <form className="passenger-checkout-layout" onSubmit={submit} noValidate>
+      {state.stage !== 'passenger' ? (
+        <section className="surface-card booking-panel">
+          {state.loadingFares && requestedItinerary.length > 1 ? <LoadingView label="Đang xác minh các chuyến bay và hạng vé đã chọn…" /> : null}
+          {state.stage === 'flight' && !expectsItinerary ? <>
+            <h2>Tìm chuyến bay</h2>
+            <form className="booking-search-form" onSubmit={search}>
+              <label className="field"><span>Sân bay đi</span><select required value={criteria.departure_airport_id} onChange={(event) => setCriteria((current) => ({ ...current, departure_airport_id: event.target.value }))}><option value="">Chọn sân bay</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.iata_code} · {item.city || item.name}</option>)}</select></label>
+              <label className="field"><span>Sân bay đến</span><select required value={criteria.arrival_airport_id} onChange={(event) => setCriteria((current) => ({ ...current, arrival_airport_id: event.target.value }))}><option value="">Chọn sân bay</option>{airports.map((item) => <option key={item.id} value={item.id}>{item.iata_code} · {item.city || item.name}</option>)}</select></label>
+              <label className="field"><span>Ngày khởi hành</span><input type="date" required value={criteria.departure_date} onChange={(event) => setCriteria((current) => ({ ...current, departure_date: event.target.value }))} /></label>
+              <label className="field"><span>Số hành khách</span><input type="number" min="1" required value={criteria.passengers} onChange={(event) => setCriteria((current) => ({ ...current, passengers: event.target.value }))} /></label>
+              <button className="button button-primary" type="submit" disabled={state.searching || state.loadingAirports}>{state.searching ? 'Đang tìm…' : 'Tìm chuyến bay'}</button>
+            </form>
+            {results.length ? <div className="booking-flight-list">{results.map((item) => <FlightChoice key={item.id} flight={item} onSelect={selectFlight} />)}</div> : null}
+            {results.length === 0 && !state.searching && criteria.departure_date ? <p className="empty-state">Chưa có kết quả. Hãy thử tìm chuyến bay phù hợp với tiêu chí khác.</p> : null}
+          </> : null}
+          {state.stage === 'fare' || state.loadingFares && flight ? <><div className="booking-section-heading"><div><h2>Chọn hạng vé</h2><p>{flightCarrier(flight)} · {airportsOf(flight)} · {dateTime(flight.departure_time)}</p></div><button className="button button-outline" type="button" onClick={() => { setFlight(null); setFare(null); setState((current) => ({ ...current, stage: 'flight' })); }}>Đổi chuyến bay</button></div>{state.loadingFares ? <LoadingView label="Đang tải hạng vé…" /> : fares.length ? <><div className="booking-fare-list">{fares.map((item) => <label className={`booking-fare-option ${fare?.id === item.id ? 'is-selected' : ''}`} key={item.id}><input type="radio" name="fare" checked={fare?.id === item.id} onChange={() => setFare(item)} /><span><strong>{item.class_name}</strong><small>{item.seat_quota ?? '—'} ghế phân bổ</small></span><strong>{money(item.price)} / khách</strong></label>)}</div><button className="button button-primary" type="button" onClick={continueToPassenger}>Tiếp tục</button></> : <div className="empty-state"><h3>Chưa có hạng vé cho chuyến bay này</h3><p>Hãy chọn chuyến bay khác hoặc quay lại sau.</p></div>}</> : null}
+        </section>
+      ) : (
+        <>
+          <SearchSummaryBanner
+            tripType={tripType}
+            passengerCount={passengers.length}
+            departureAirport={flight?.departureAirport}
+            arrivalAirport={flight?.arrivalAirport}
+            departureDate={flight?.departure_time}
+            returnDate={itineraryFlights[1]?.flight?.departure_time}
+            currentStep={2}
+            editUrl={expectsItinerary ? '/flights/search' : '/'}
+            editText="Chỉnh sửa tìm kiếm"
+          />
+
+          <form id="passenger-checkout-form" className="passenger-checkout-layout" onSubmit={submit} noValidate>
           <div className="passenger-main-form-col">
             <h2 className="passenger-page-title" id="passenger-form-title">
               Thông tin hành khách
@@ -409,21 +524,26 @@ export function BookingCreatePage() {
                     Người lớn {passengers.length > 1 ? index + 1 : ''}
                   </h3>
                   {index === 0 && user ? (
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked="false"
+                    <label
                       className="passenger-self-booking-toggle"
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
-                      onClick={() => {
-                        if (user?.full_name) {
-                          setPassengers((curr) => curr.map((p, at) => at === 0 ? { ...p, passenger_name: user.full_name } : p));
-                        }
-                      }}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', userSelect: 'none' }}
+                      title="Tự động điền họ tên của bạn vào thông tin hành khách"
                     >
-                      <span style={{ display: 'inline-block', width: '1.2rem', height: '1.2rem', borderRadius: '4px', border: '1.5px solid #0d9488', textAlign: 'center', lineHeight: '1.1rem', fontSize: '0.8rem', color: '#0d9488' }}>✓</span>
+                      <input
+                        type="checkbox"
+                        role="presentation"
+                        checked={isSelfBooking}
+                        onChange={(e) => {
+                          const checked = e.target.checked;
+                          setIsSelfBooking(checked);
+                          if (checked && user?.full_name) {
+                            setPassengers((curr) => curr.map((p, at) => at === 0 ? { ...p, passenger_name: toIataPassengerName(user.full_name) || user.full_name } : p));
+                          }
+                        }}
+                        className="custom-teal-checkbox"
+                      />
                       <span>Mua vé cho tôi</span>
-                    </button>
+                    </label>
                   ) : null}
                 </div>
                 <div className="passenger-vj-card-body">
@@ -443,17 +563,46 @@ export function BookingCreatePage() {
                   </div>
 
                   <div className="passenger-input-grid-2">
-                    <Field
-                      id={`passenger-name-${index}`}
-                      label="Họ tên"
-                      autoComplete="name"
-                      required
-                      placeholder="Ví dụ: NGUYEN VAN A"
-                      value={passenger.passenger_name}
-                      onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))}
-                      error={formErrors[`passengers.${index}.passenger_name`]}
-                      hint="Vui lòng nhập tên đệm và tên theo đúng thứ tự giấy tờ tùy thân"
-                    />
+                    <div>
+                      <Field
+                        id={`passenger-name-${index}`}
+                        label="Họ tên"
+                        autoComplete="name"
+                        required
+                        placeholder="Ví dụ: NGUYEN VAN A"
+                        value={passenger.passenger_name}
+                        onChange={(event) => setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: event.target.value } : item))}
+                        error={formErrors[`passengers.${index}.passenger_name`]}
+                        hint="Vui lòng nhập tên đệm và tên theo đúng thứ tự giấy tờ tùy thân"
+                      />
+                      {passenger.passenger_name && toIataPassengerName(passenger.passenger_name) && toIataPassengerName(passenger.passenger_name) !== passenger.passenger_name ? (
+                        <div style={{ marginTop: '-0.35rem', marginBottom: '0.5rem', fontSize: '0.82rem' }}>
+                          <button
+                            type="button"
+                            style={{
+                              color: '#0f766e',
+                              background: '#f0fdfa',
+                              border: '1px solid #99f6e4',
+                              borderRadius: '4px',
+                              padding: '0.2rem 0.55rem',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '0.35rem',
+                              cursor: 'pointer',
+                              fontSize: '0.82rem',
+                            }}
+                            title="Chuyển thành chữ in hoa không dấu chuẩn hàng không IATA"
+                            onClick={() => {
+                              const normalized = toIataPassengerName(passenger.passenger_name);
+                              setPassengers((current) => current.map((item, at) => at === index ? { ...item, passenger_name: normalized } : item));
+                            }}
+                          >
+                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}><IconSparkles size={13} /> Chuẩn hóa IATA:</span>
+                            <strong>{toIataPassengerName(passenger.passenger_name)}</strong>
+                          </button>
+                        </div>
+                      ) : null}
+                    </div>
                     <Field
                       id={`passenger-passport-${index}`}
                       label="Số hộ chiếu (không bắt buộc)"
@@ -466,7 +615,7 @@ export function BookingCreatePage() {
 
                     <div className="passenger-vj-field">
                       <label htmlFor={`passenger-dob-${index}`}>
-                        Ngày sinh*(DD/MM/YYYY) <span className="req-star">*</span>
+                        Ngày sinh (DD/MM/YYYY) <span className="req-star">*</span>
                       </label>
                       <input
                         id={`passenger-dob-${index}`}
@@ -479,7 +628,7 @@ export function BookingCreatePage() {
 
                     <div className="passenger-vj-field">
                       <label htmlFor={`passenger-country-${index}`}>
-                        Quốc gia* <span className="req-star">*</span>
+                        Quốc gia <span className="req-star">*</span>
                       </label>
                       <select id={`passenger-country-${index}`} defaultValue="VN">
                         <option value="VN">Việt Nam</option>
@@ -495,7 +644,7 @@ export function BookingCreatePage() {
                       <>
                         <div className="passenger-vj-field">
                           <label htmlFor="passenger-phone-input">
-                            Số điện thoại* <span className="req-star">*</span>
+                            Số điện thoại <span className="req-star">*</span>
                           </label>
                           <div className="passenger-phone-wrap">
                             <span className="passenger-phone-prefix">🇻🇳 +84</span>
@@ -524,7 +673,7 @@ export function BookingCreatePage() {
                           />
                         ) : (
                           <div className="passenger-vj-field">
-                            <label>Email tài khoản* <span className="req-star">*</span></label>
+                            <label>Email tài khoản <span className="req-star">*</span></label>
                             <input type="email" value={user.email} disabled />
                             <p className="passenger-field-hint">Vé điện tử sẽ gửi về email tài khoản đã đăng nhập</p>
                           </div>
@@ -666,28 +815,63 @@ export function BookingCreatePage() {
             ) : null}
 
             <div className="passenger-policies-card">
-              <p className="policy-privacy-note">
-                ℹ️ Dữ liệu cá nhân của Quý khách sẽ được Serene Flightways bảo mật và xử lý theo <strong>Chính sách quyền riêng tư</strong>. Quý khách có thể lựa chọn cho phép sử dụng dữ liệu cho các mục đích sau:
+              <p className="policy-privacy-note" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.45rem' }}>
+                <span style={{ color: '#0d9488', marginTop: '2px', flexShrink: 0 }}><IconShieldCheck size={16} /></span>
+                <span>Dữ liệu cá nhân của Quý khách sẽ được Serene Flightways bảo mật và xử lý theo <strong>Chính sách quyền riêng tư</strong>. Quý khách có thể lựa chọn cho phép sử dụng dữ liệu cho các mục đích sau:</span>
               </p>
-              <div className="policy-checkbox-item">
-                <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+              <label className="policy-checkbox-item is-interactive">
+                <input
+                  type="checkbox"
+                  role="presentation"
+                  checked={policyPromo}
+                  onChange={(e) => setPolicyPromo(e.target.checked)}
+                  className="custom-teal-checkbox"
+                />
                 <span>Gửi thông tin khuyến mãi, ưu đãi đặc quyền hành trình</span>
-              </div>
-              <div className="policy-checkbox-item">
-                <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+              </label>
+              <label className="policy-checkbox-item is-interactive">
+                <input
+                  type="checkbox"
+                  role="presentation"
+                  checked={policySurvey}
+                  onChange={(e) => setPolicySurvey(e.target.checked)}
+                  className="custom-teal-checkbox"
+                />
                 <span>Thực hiện khảo sát và nâng cao chất lượng dịch vụ</span>
-              </div>
-              <div className="policy-checkbox-item">
-                <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+              </label>
+              <label className="policy-checkbox-item is-interactive">
+                <input
+                  type="checkbox"
+                  role="presentation"
+                  checked={policySaveInfo}
+                  onChange={(e) => setPolicySaveInfo(e.target.checked)}
+                  className="custom-teal-checkbox"
+                />
                 <span>Lưu thông tin hành khách cho các lần đặt vé sau</span>
-              </div>
+              </label>
               <div style={{ marginTop: '0.4rem', paddingTop: '0.65rem', borderTop: '1px dashed #cbd5e1' }}>
-                <div className="policy-checkbox-item" style={{ fontWeight: 600 }}>
-                  <span style={{ color: '#0d9488', fontSize: '1.1rem', lineHeight: 1 }}>☑</span>
+                <label className="policy-checkbox-item is-interactive" style={{ fontWeight: 600 }}>
+                  <input
+                    type="checkbox"
+                    role="presentation"
+                    checked={policyAgreed}
+                    onChange={(e) => {
+                      setPolicyAgreed(e.target.checked);
+                      if (e.target.checked) {
+                        setFormErrors((curr) => { const copy = { ...curr }; delete copy.policy_agreed; return copy; });
+                      }
+                    }}
+                    className="custom-teal-checkbox"
+                  />
                   <span>
                     Tôi đã đọc, hiểu và đồng ý với <a>Chính sách quyền riêng tư</a>, <a>Điều lệ vận chuyển</a>, Điều kiện vé và Quy định vật dụng hạn chế mang lên tàu bay của Serene Flightways.
                   </span>
-                </div>
+                </label>
+                {formErrors.policy_agreed ? (
+                  <p style={{ color: '#ef4444', fontSize: '0.8rem', fontWeight: 600, margin: '0.35rem 0 0 1.8rem' }} role="alert">
+                    {formErrors.policy_agreed}
+                  </p>
+                ) : null}
               </div>
             </div>
 
@@ -701,7 +885,7 @@ export function BookingCreatePage() {
             </h3>
             <div className="passenger-vj-summary-content">
               <div className="summary-passenger-badge">
-                <span>👤 Thông tin hành khách</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}><IconUser size={15} /> Thông tin hành khách</span>
                 <strong className="table-mono-cell">{passengers.length} Người lớn</strong>
               </div>
 
@@ -718,7 +902,7 @@ export function BookingCreatePage() {
                     <div className="summary-leg-route-details">
                       <div className="route-airports">
                         <span>{legFlight?.departureAirport?.city || legFlight?.departureAirport?.iata_code || 'SGN'}</span>
-                        <span style={{ color: '#0d9488' }}>✈</span>
+                        <span style={{ color: '#0d9488', display: 'inline-flex' }}><IconPlane size={13} style={{ transform: 'rotate(90deg)' }} /></span>
                         <span>{legFlight?.arrivalAirport?.city || legFlight?.arrivalAirport?.iata_code || 'HAN'}</span>
                       </div>
                       <div className="route-timing">
@@ -760,64 +944,11 @@ export function BookingCreatePage() {
             </div>
           </aside>
 
-          <div className="passenger-bottom-actions">
-            <div className="passenger-bottom-actions-container">
-              <button
-                type="button"
-                className="button-back"
-                onClick={() => {
-                  if (itineraryFlights.length > 1) {
-                    navigate(-1);
-                  } else {
-                    setState((curr) => ({ ...curr, stage: 'fare' }));
-                  }
-                }}
-              >
-                ‹ Quay lại
-              </button>
-              <div className="passenger-bottom-submit-group">
-                {Object.keys(formErrors).length > 0 ? (
-                  <div style={{ color: '#ef4444', fontSize: '0.84rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#fef2f2', border: '1px solid #fecaca', padding: '0.45rem 0.85rem', borderRadius: '0.375rem' }} role="alert">
-                    <span>⚠️</span>
-                    <span>Vui lòng kiểm tra và điền đầy đủ các thông tin bắt buộc ở trên</span>
-                  </div>
-                ) : null}
-                <div className="passenger-bottom-total-display">
-                  <span className="total-caption">Tổng tiền thanh toán</span>
-                  <span className="total-val">
-                    {money(itineraryFlights.length > 1 ? itineraryReferenceTotal : Number(fare?.price || 0) * passengers.length)}
-                  </span>
-                </div>
-                <button
-                  className="button button-primary"
-                  type="submit"
-                  disabled={state.submitting}
-                  aria-label={state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp (Tạo đặt chỗ)'}
-                  style={{
-                    background: 'linear-gradient(135deg, #0a4946 0%, #073533 100%)',
-                    color: '#ffffff',
-                    fontWeight: 800,
-                    fontSize: '1.05rem',
-                    padding: '0.85rem 2.25rem',
-                    border: 'none',
-                    borderRadius: '0.5rem',
-                    boxShadow: '0 4px 14px rgba(10, 73, 70, 0.35)',
-                    cursor: 'pointer',
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: '0.5rem'
-                  }}
-                >
-                  <span>{state.submitting ? 'Đang tạo đặt chỗ…' : 'Đi tiếp'}</span>
-                  <span aria-hidden="true">➔</span>
-                </button>
-              </div>
-            </div>
-          </div>
         </form>
-      </> : null}
-    </section>
-  </BookingShell>;
+      </>
+    )}
+    </BookingShell>
+  );
 }
 
 export function BookingLookupPage() {
@@ -826,16 +957,213 @@ export function BookingLookupPage() {
   const [code, setCode] = useState('');
   const [email, setEmail] = useState('');
   const [state, setState] = useState({ submitting: false, error: '', booking: null });
+
   const submit = async (event) => {
-    event.preventDefault(); setState({ submitting: true, error: '', booking: null });
-    if (!isValidEmail(email)) return setState({ submitting: false, error: 'Vui lòng nhập email hợp lệ.', booking: null });
+    event.preventDefault();
+    setState({ submitting: true, error: '', booking: null });
+    if (!isValidEmail(email)) {
+      return setState({ submitting: false, error: 'Vui lòng nhập email hợp lệ.', booking: null });
+    }
     try {
       const booking = await api.lookupBooking(code.trim(), email.trim().toLowerCase());
       sessionStorage.setItem(emailKey(booking.id), email.trim().toLowerCase());
       setState({ submitting: false, error: '', booking });
-    } catch (error) { setState({ submitting: false, error: errText(error, 'Không tìm thấy đặt chỗ hoặc thông tin xác thực không khớp.'), booking: null }); }
+    } catch (error) {
+      setState({
+        submitting: false,
+        error: errText(error, 'Không tìm thấy đặt chỗ hoặc thông tin xác thực không khớp.'),
+        booking: null,
+      });
+    }
   };
-  return <BookingShell><PageHeading eyebrow="TRA CỨU ĐẶT CHỖ" title="Tìm đặt chỗ của bạn" description="Nhập mã đặt chỗ và email liên hệ đã dùng khi tạo đặt chỗ." /><section className="surface-card booking-panel lookup-panel"><form className="booking-form-grid" onSubmit={submit} noValidate><Field id="lookup-code" label="Mã đặt chỗ" required autoComplete="off" value={code} onChange={(event) => setCode(event.target.value)} /><Field id="lookup-email" label="Email liên hệ" type="email" required autoComplete="email" value={email} onChange={(event) => setEmail(event.target.value)} /><button className="button button-primary" type="submit" disabled={state.submitting}>{state.submitting ? 'Đang tra cứu…' : 'Tra cứu đặt chỗ'}</button></form>{state.error ? <Notice type="error">{state.error}</Notice> : null}{state.booking ? <article className="lookup-result"><div><span className="eyebrow">ĐẶT CHỖ ĐÃ TÌM THẤY</span><h2>{state.booking.booking_code}</h2><p>{airportsOf(state.booking.flight)} · {dateTime(state.booking.flight?.departure_time)}</p></div><StatusBadge status={state.booking.status} /><button className="button button-secondary" type="button" onClick={() => navigate(`/bookings/${state.booking.id}`, { state: { guestEmail: email.trim().toLowerCase() } })}>Xem chi tiết</button></article> : null}</section></BookingShell>;
+
+  const flight = state.booking?.flight;
+  const depCode = flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || 'SGN';
+  const arrCode = flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || 'HAN';
+  const depCity = flight?.departureAirport?.city || flight?.departure_airport?.city || 'Khởi hành';
+  const arrCity = flight?.arrivalAirport?.city || flight?.arrival_airport?.city || 'Điểm đến';
+  const depTime = flight?.departure_time ? timeOnly(flight.departure_time) : '—';
+  const arrTime = flight?.arrival_time ? timeOnly(flight.arrival_time) : '—';
+
+  return (
+    <BookingShell>
+      <div className="lookup-page-wrapper">
+        <div className="lookup-hero-header">
+          <div className="lookup-security-badge">
+            <IconShieldCheck size={14} />
+            <span>Xác thực bảo mật IATA · TLS 1.3</span>
+          </div>
+          <h1>Tra cứu đặt chỗ của bạn</h1>
+          <p>
+            Nhập mã đặt chỗ (PNR) và email liên hệ đã dùng khi tạo đặt chỗ để kiểm tra trạng thái vé và thông tin chuyến bay.
+          </p>
+        </div>
+
+        <section className="surface-card booking-panel lookup-panel lookup-form-card">
+          <div className="lookup-card-title-row">
+            <div className="title-left">
+              <IconTicket size={20} />
+              <span>Xác thực quyền sở hữu vé</span>
+            </div>
+            <span className="guest-badge">Hệ thống vé trực tuyến</span>
+          </div>
+
+          <form className="booking-form-grid lookup-form-fields" onSubmit={submit} noValidate>
+            <div className="lookup-input-block">
+              <div className="lookup-input-label-row">
+                <label htmlFor="lookup-code">Mã đặt chỗ</label>
+                <span className="hint-badge">Định dạng 6-8 ký tự viết hoa</span>
+              </div>
+              <div className="lookup-input-wrapper">
+                <span className="lookup-input-icon"><IconTicket size={18} /></span>
+                <input
+                  id="lookup-code"
+                  className="pnr-input"
+                  required
+                  autoComplete="off"
+                  placeholder="Ví dụ: VN-792841 hoặc 792841"
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                />
+              </div>
+              <p className="lookup-input-hint">Tìm mã PNR trong thư xác nhận đặt vé hoặc tin nhắn SMS gửi từ Serene Flightways.</p>
+            </div>
+
+            <div className="lookup-input-block">
+              <div className="lookup-input-label-row">
+                <label htmlFor="lookup-email">Email liên hệ</label>
+                <span className="hint-badge">Bắt buộc khớp chính xác</span>
+              </div>
+              <div className="lookup-input-wrapper">
+                <span className="lookup-input-icon"><IconMail size={18} /></span>
+                <input
+                  id="lookup-email"
+                  type="email"
+                  required
+                  autoComplete="email"
+                  placeholder="Ví dụ: nguyen.van.an@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                />
+              </div>
+              <p className="lookup-input-hint">Hộp thư điện tử nhận hóa đơn và thông báo hành trình bay.</p>
+            </div>
+
+            <button
+              className="button button-primary lookup-submit-button"
+              type="submit"
+              disabled={state.submitting}
+            >
+              <IconSearch size={18} />
+              <span>{state.submitting ? 'Đang tra cứu…' : 'Tra cứu đặt chỗ'}</span>
+            </button>
+          </form>
+
+          {state.error ? (
+            <div style={{ marginTop: '1.25rem' }}>
+              <Notice type="error">{state.error}</Notice>
+            </div>
+          ) : null}
+
+          <div className="lookup-help-grid">
+            <div className="lookup-help-card">
+              <div className="lookup-help-icon">
+                <IconPhone size={18} />
+              </div>
+              <div className="lookup-help-text">
+                <strong>Không nhớ email đặt vé?</strong>
+                <p>Vui lòng gọi tổng đài 1900 6868 cung cấp CCCD/Hộ chiếu để chuyên viên tra cứu đối soát.</p>
+              </div>
+            </div>
+            <div className="lookup-help-card">
+              <div className="lookup-help-icon accent-icon">
+                <IconShieldCheck size={18} />
+              </div>
+              <div className="lookup-help-text">
+                <strong>Hóa đơn điện tử VAT</strong>
+                <p>Sau khi tra cứu thành công, bạn có thể xuất hóa đơn VAT điện tử trong vòng 72 giờ.</p>
+              </div>
+            </div>
+          </div>
+
+          {state.booking ? (
+            <article className="lookup-result lookup-ticket-card">
+              <div className="lookup-ticket-header">
+                <div className="lookup-ticket-brand">
+                  <div className="ticket-icon-box">
+                    <IconPlane size={20} />
+                  </div>
+                  <div className="lookup-ticket-brand-text">
+                    <span className="eyebrow">ĐẶT CHỖ ĐÃ TÌM THẤY</span>
+                    <h3>Chuyến bay {flightCarrier(state.booking.flight)}</h3>
+                  </div>
+                </div>
+                <div className="lookup-ticket-pnr-box">
+                  <div className="pnr-code">{state.booking.booking_code || `#${state.booking.id}`}</div>
+                  <StatusBadge status={state.booking.status} />
+                </div>
+              </div>
+
+              <div className="lookup-ticket-body">
+                <div className="flight-route-strip">
+                  <div className="flight-endpoint">
+                    <span className="iata-code">{depCode}</span>
+                    <span className="city-name">{depCity}</span>
+                    <span className="flight-time">{depTime}</span>
+                  </div>
+
+                  <div className="flight-mid-line">
+                    <span className="flight-type-label">Hành trình bay</span>
+                    <div className="flight-track-bar">
+                      <span className="flight-track-dot" />
+                      <div className="flight-track-line" />
+                      <span className="flight-track-icon"><IconPlane size={16} /></span>
+                      <div className="flight-track-line" />
+                      <span className="flight-track-dot" />
+                    </div>
+                  </div>
+
+                  <div className="flight-endpoint align-right">
+                    <span className="iata-code">{arrCode}</span>
+                    <span className="city-name">{arrCity}</span>
+                    <span className="flight-time">{arrTime}</span>
+                  </div>
+                </div>
+
+                <div className="lookup-ticket-info-bar">
+                  <span className="lookup-ticket-info-item">
+                    <IconPlane size={15} style={{ color: '#0f6b66' }} />
+                    <span>Hãng: <strong>{flightCarrier(state.booking.flight)}</strong></span>
+                  </span>
+                  <span className="lookup-ticket-info-item">
+                    <span>Khởi hành: <strong>{dateTime(flight?.departure_time)}</strong></span>
+                  </span>
+                  <span className="lookup-ticket-info-item">
+                    <span>Hành khách: <strong>{passengerList(state.booking).length || 1} khách</strong></span>
+                  </span>
+                </div>
+
+                <div className="lookup-ticket-footer">
+                  <div className="lookup-ticket-total">
+                    <span className="label">Tổng cước thanh toán:</span>
+                    <span className="amount">{money(state.booking.total_amount)}</span>
+                  </div>
+                  <button
+                    className="button button-secondary lookup-detail-button"
+                    type="button"
+                    onClick={() => navigate(`/bookings/${state.booking.id}`, { state: { guestEmail: email.trim().toLowerCase() } })}
+                  >
+                    <span>Xem chi tiết</span>
+                    <IconArrowRight size={16} />
+                  </button>
+                </div>
+              </div>
+            </article>
+          ) : null}
+        </section>
+      </div>
+    </BookingShell>
+  );
 }
 
 function HoldRemainingTimer({ expiresAt, serverNow }) {
@@ -872,27 +1200,105 @@ function HoldRemainingTimer({ expiresAt, serverNow }) {
 
 function BookingCard({ booking, to, guestEmail, serverNow }) {
   const flight = booking.flight || {};
+  const depCode = flight?.departureAirport?.iata_code || flight?.departure_airport?.iata_code || 'SGN';
+  const arrCode = flight?.arrivalAirport?.iata_code || flight?.arrival_airport?.iata_code || 'HAN';
+  const depCity = flight?.departureAirport?.city || flight?.departure_airport?.city || 'Khởi hành';
+  const arrCity = flight?.arrivalAirport?.city || flight?.arrival_airport?.city || 'Điểm đến';
+  const carrierName = flightCarrier(flight);
+  const carrierCode = flight?.airline?.iata_code || (carrierName.length > 2 ? carrierName.substring(0, 2).toUpperCase() : 'VN');
+
+  const depTime = flight.departure_time ? timeOnly(flight.departure_time) : '—';
+  const arrTime = flight.arrival_time ? timeOnly(flight.arrival_time) : '—';
+  const isHolding = booking.status === 'holding';
+
   return (
-    <article className="booking-card">
-      <div className="booking-card-top">
-        <div>
-          <span className="eyebrow">MÃ ĐẶT CHỖ</span>
-          <h2 className="table-mono-cell">{booking.booking_code || `#${booking.id}`}</h2>
+    <article className="booking-card booking-card-modern">
+      <div className="booking-card-top booking-card-top-bar">
+        <div className="booking-card-id-group">
+          <span className="pnr-badge">
+            <IconTicket size={16} />
+            <h2 className="table-mono-cell" style={{ margin: 0, fontSize: '1.05rem', display: 'inline' }}>
+              {booking.booking_code || `#${booking.id}`}
+            </h2>
+          </span>
+          <span className="created-date">
+            · {booking.created_at ? dateTime(booking.created_at) : '—'}
+          </span>
         </div>
-        <div className="booking-status-cell">
+        <div className="booking-status-cell booking-card-status-group">
           <StatusBadge status={booking.status} />
-          {booking.status === 'holding' && booking.hold_expires_at ? (
+          {isHolding && booking.hold_expires_at ? (
             <HoldRemainingTimer expiresAt={booking.hold_expires_at} serverNow={serverNow} />
           ) : null}
         </div>
       </div>
-      <p className="booking-card-route">
-        <strong>{airportsOf(flight)}</strong>
-        <span className="table-mono-cell">{dateTime(flight.departure_time)}</span>
-      </p>
-      <div className="booking-card-bottom">
-        <strong className="table-mono-cell" style={{ color: 'var(--color-accent)' }}>{money(booking.total_amount)}</strong>
-        {to ? <Link className="button button-outline" to={to} state={{ guestEmail }}>Chi tiết</Link> : null}
+
+      <div className="booking-card-main-body">
+        <div className="booking-card-flight-row">
+          <div className="airline-avatar-box" title={carrierName}>
+            <span>{carrierCode}</span>
+            <small>{flight.flight_number || ''}</small>
+          </div>
+
+          <div className="booking-card-route-segment">
+            <div className="route-point">
+              <span className="time tabular-nums">{depTime}</span>
+              <span className="code">{depCode}</span>
+              <span className="city">{depCity}</span>
+            </div>
+
+            <div className="route-connector">
+              <span className="route-badge">{carrierName}</span>
+              <div className="connector-line">
+                <span className="flight-track-dot" />
+                <div className="line" />
+                <span className="plane-icon"><IconPlane size={15} /></span>
+                <div className="line" />
+                <span className="flight-track-dot" />
+              </div>
+              <span className="route-badge" style={{ fontSize: '0.68rem', color: '#0f6b66' }}>
+                {flight.departure_time ? dateOnly(flight.departure_time) : ''}
+              </span>
+            </div>
+
+            <div className="route-point text-right">
+              <span className="time tabular-nums">{arrTime}</span>
+              <span className="code">{arrCode}</span>
+              <span className="city">{arrCity}</span>
+            </div>
+          </div>
+        </div>
+
+        <div className="booking-card-side-actions">
+          <div className="booking-card-price-box">
+            <span className="passenger-count">
+              {passengerList(booking).length || 1} hành khách
+            </span>
+            <strong className="total-amount table-mono-cell" style={{ color: 'var(--color-accent)' }}>
+              {money(booking.total_amount)}
+            </strong>
+          </div>
+
+          <div className="booking-card-bottom booking-card-btn-group" style={{ padding: 0, border: 'none' }}>
+            {isHolding ? (
+              <Link
+                className="btn-card-pay"
+                to={`/bookings/${booking.id}/payment`}
+                state={{ guestEmail }}
+              >
+                <IconCreditCard size={15} />
+                <span>Thanh toán</span>
+              </Link>
+            ) : null}
+
+            {to ? (
+              <Link className="button button-outline btn-card-detail" to={to} state={{ guestEmail }}>
+                <span>Chi tiết</span>
+                <IconChevronRight size={15} />
+              </Link>
+            ) : null}
+          </div>
+        </div>
       </div>
     </article>
   );
@@ -980,137 +1386,150 @@ export function MyBookingsPage() {
 
   return (
     <BookingShell>
-      <PageHeading
-        eyebrow="VÉ CỦA TÔI"
-        title="Đặt chỗ của tôi"
-        description="Theo dõi trạng thái và thông tin các đặt chỗ của bạn."
-        actions={<Link className="button button-primary" to="/bookings/new">Đặt vé</Link>}
-      />
+      <div className="my-bookings-container">
+        <PageHeading
+          eyebrow="VÉ CỦA TÔI"
+          title="Đặt chỗ của tôi"
+          description="Theo dõi trạng thái và thông tin các đặt chỗ của bạn."
+          actions={<Link className="button button-primary" to="/bookings/new">Đặt vé</Link>}
+        />
 
-      {/* Tách 3 tab: Sắp bay / Đã bay / Đã hủy hoặc hết hạn */}
-      <div className="booking-status-chips booking-tabs" role="tablist" aria-label="Phân loại đặt chỗ">
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'upcoming'}
-          className={`booking-status-chip ${activeTab === 'upcoming' ? 'is-active' : ''}`}
-          onClick={() => update({ tab: 'upcoming', status: '', page: 1 })}
-        >
-          Sắp bay
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'past'}
-          className={`booking-status-chip ${activeTab === 'past' ? 'is-active' : ''}`}
-          onClick={() => update({ tab: 'past', status: '', page: 1 })}
-        >
-          Đã bay
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === 'cancelled_expired'}
-          className={`booking-status-chip ${activeTab === 'cancelled_expired' ? 'is-active' : ''}`}
-          onClick={() => update({ tab: 'cancelled_expired', status: '', page: 1 })}
-        >
-          Đã hủy hoặc hết hạn
-        </button>
-        {status ? (
-          <button
-            type="button"
-            role="tab"
-            aria-selected={activeTab === 'all'}
-            className={`booking-status-chip ${activeTab === 'all' ? 'is-active' : ''}`}
-            onClick={() => update({ tab: 'all', page: 1 })}
-          >
-            Lọc theo: {statusLabel(status)}
-          </button>
-        ) : null}
-      </div>
-
-      {state.loading ? (
-        <LoadingView label="Đang tải đặt chỗ…" />
-      ) : state.error ? (
-        <Notice type="error">{state.error}</Notice>
-      ) : (
-        <section className="surface-card booking-panel">
-          <div className="booking-list-toolbar">
-            <form
-              className="booking-admin-filter"
-              onSubmit={(event) => {
-                event.preventDefault();
-                update({ search: draftSearch.trim(), page: 1 });
-              }}
+        {/* Tách 3 tab: Sắp bay / Đã bay / Đã hủy hoặc hết hạn */}
+        <div className="my-bookings-tabs-wrapper">
+          <div className="my-bookings-segmented-tabs booking-status-chips booking-tabs" role="tablist" aria-label="Phân loại đặt chỗ">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'upcoming'}
+              className={`booking-status-chip my-bookings-tab-button ${activeTab === 'upcoming' ? 'is-active' : ''}`}
+              onClick={() => update({ tab: 'upcoming', status: '', page: 1 })}
             >
-              <Field
-                id="my-booking-search"
-                label="Tìm mã đặt chỗ"
-                value={draftSearch}
-                onChange={(event) => setDraftSearch(event.target.value)}
-              />
-              <button className="button button-secondary" type="submit">Tìm</button>
-            </form>
-            <label className="field">
-              <span>Lọc trạng thái</span>
-              <select
-                aria-label="Lọc trạng thái"
-                value={status}
-                onChange={(event) => update({ status: event.target.value, page: 1 })}
+              Sắp bay
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'past'}
+              className={`booking-status-chip my-bookings-tab-button ${activeTab === 'past' ? 'is-active' : ''}`}
+              onClick={() => update({ tab: 'past', status: '', page: 1 })}
+            >
+              Đã bay
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeTab === 'cancelled_expired'}
+              className={`booking-status-chip my-bookings-tab-button ${activeTab === 'cancelled_expired' ? 'is-active' : ''}`}
+              onClick={() => update({ tab: 'cancelled_expired', status: '', page: 1 })}
+            >
+              Đã hủy hoặc hết hạn
+            </button>
+            {status ? (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'all'}
+                className={`booking-status-chip my-bookings-tab-button ${activeTab === 'all' ? 'is-active' : ''}`}
+                onClick={() => update({ tab: 'all', page: 1 })}
               >
-                <option value="">Tất cả trạng thái</option>
-                {bookingStatuses.map((item) => (
-                  <option key={item} value={item}>{statusLabel(item)}</option>
+                Lọc theo: {statusLabel(status)}
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        {state.loading ? (
+          <LoadingView label="Đang tải đặt chỗ…" />
+        ) : state.error ? (
+          <Notice type="error">{state.error}</Notice>
+        ) : (
+          <section className="surface-card booking-panel" style={{ padding: 'clamp(1rem, 2.5vw, 1.75rem)' }}>
+            <div className="my-bookings-toolbar booking-list-toolbar">
+              <form
+                className="my-bookings-search-form booking-admin-filter"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  update({ search: draftSearch.trim(), page: 1 });
+                }}
+              >
+                <div className="my-bookings-search-input-box">
+                  <span className="search-icon"><IconSearch size={16} /></span>
+                  <input
+                    id="my-booking-search"
+                    aria-label="Tìm mã đặt chỗ"
+                    placeholder="Tìm theo mã đặt chỗ (PNR)..."
+                    value={draftSearch}
+                    onChange={(event) => setDraftSearch(event.target.value)}
+                  />
+                </div>
+                <button className="button button-secondary" type="submit" style={{ height: '2.6rem', paddingInline: '1.2rem', borderRadius: '9px' }}>Tìm</button>
+              </form>
+              <div className="my-bookings-filter-group">
+                <label className="field my-bookings-select-wrapper" style={{ margin: 0 }}>
+                  <span className="sr-only">Lọc trạng thái</span>
+                  <select
+                    aria-label="Lọc trạng thái"
+                    value={status}
+                    onChange={(event) => update({ status: event.target.value, page: 1 })}
+                  >
+                    <option value="">Tất cả trạng thái</option>
+                    {bookingStatuses.map((item) => (
+                      <option key={item} value={item}>{statusLabel(item)}</option>
+                    ))}
+                  </select>
+                </label>
+                <span className="my-bookings-count-chip table-mono-cell">{state.pagination?.total ?? state.rows.length} đặt chỗ</span>
+              </div>
+            </div>
+
+            <div style={{ marginBottom: '12px' }}>
+              <small className="booking-pagination-note" style={{ color: 'var(--color-muted, #64748b)', fontSize: '0.85rem' }}>
+                Hiển thị theo phân trang máy chủ (tối đa {limit} đơn/trang) · Tổng {state.pagination?.total ?? state.rows.length} đơn trên hệ thống.
+                {!status && activeTab !== 'all' ? (
+                  <span> (Phân loại theo tab “{activeTab === 'upcoming' ? 'Sắp bay' : activeTab === 'past' ? 'Đã bay' : 'Đã hủy hoặc hết hạn'}” được lọc trên {state.rows.length} đơn của trang hiện tại; để lọc toàn bộ hệ thống, vui lòng chọn menu “Lọc trạng thái”).</span>
+                ) : null}
+              </small>
+            </div>
+
+            {displayedRows.length ? (
+              <div className="booking-card-list">
+                {displayedRows.map((booking) => (
+                  <BookingCard
+                    key={booking.id}
+                    booking={booking}
+                    to={`/bookings/${booking.id}`}
+                    serverNow={serverNow}
+                  />
                 ))}
-              </select>
-            </label>
-            <span className="table-mono-cell">{state.pagination?.total ?? state.rows.length} đặt chỗ</span>
-          </div>
-
-          <div style={{ marginBottom: '12px' }}>
-            <small className="booking-pagination-note" style={{ color: 'var(--color-muted, #64748b)', fontSize: '0.85rem' }}>
-              Hiển thị theo phân trang máy chủ (tối đa {limit} đơn/trang) · Tổng {state.pagination?.total ?? state.rows.length} đơn trên hệ thống.
-              {!status && activeTab !== 'all' ? (
-                <span> (Phân loại theo tab “{activeTab === 'upcoming' ? 'Sắp bay' : activeTab === 'past' ? 'Đã bay' : 'Đã hủy hoặc hết hạn'}” được lọc trên {state.rows.length} đơn của trang hiện tại; để lọc toàn bộ hệ thống, vui lòng chọn menu “Lọc trạng thái”).</span>
-              ) : null}
-            </small>
-          </div>
-
-          {displayedRows.length ? (
-            <div className="booking-card-list">
-              {displayedRows.map((booking) => (
-                <BookingCard
-                  key={booking.id}
-                  booking={booking}
-                  to={`/bookings/${booking.id}`}
-                  serverNow={serverNow}
-                />
-              ))}
-            </div>
-          ) : (
-            <div className="empty-state">
-              <h2>{search ? 'Không tìm thấy đặt chỗ phù hợp' : 'Chưa có đặt chỗ trong mục này'}</h2>
-              <p>
-                {search
-                  ? 'Hãy kiểm tra mã đặt chỗ hoặc thử bộ lọc khác.'
-                  : activeTab === 'upcoming'
-                  ? 'Bạn không có chuyến bay sắp khởi hành nào.'
-                  : activeTab === 'past'
-                  ? 'Bạn chưa có chuyến bay nào đã hoàn thành.'
-                  : activeTab === 'cancelled_expired'
-                  ? 'Không có đơn đặt chỗ nào bị hủy hoặc hết hạn.'
-                  : 'Khi tạo đặt chỗ, thông tin sẽ xuất hiện tại đây.'}
-              </p>
-              <Link className="button button-primary" to="/bookings/new">Tìm chuyến bay</Link>
-            </div>
-          )}
-          <Pagination
-            page={Number(state.pagination?.page || page)}
-            totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))}
-            onPageChange={(next) => update({ page: next })}
-          />
-        </section>
-      )}
+              </div>
+            ) : (
+              <div className="empty-state" style={{ padding: '3rem 1.5rem', textAlign: 'center' }}>
+                <div style={{ width: '3.5rem', height: '3.5rem', borderRadius: '50%', background: '#f0f7f5', color: '#0f6b66', display: 'grid', placeItems: 'center', margin: '0 auto 1rem' }}>
+                  <IconPlane size={24} />
+                </div>
+                <h2>{search ? 'Không tìm thấy đặt chỗ phù hợp' : 'Chưa có đặt chỗ trong mục này'}</h2>
+                <p style={{ maxWidth: '30rem', margin: '0 auto 1.5rem', color: '#64748b' }}>
+                  {search
+                    ? 'Hãy kiểm tra mã đặt chỗ hoặc thử bộ lọc khác.'
+                    : activeTab === 'upcoming'
+                      ? 'Bạn không có chuyến bay sắp khởi hành nào.'
+                      : activeTab === 'past'
+                        ? 'Bạn chưa có chuyến bay nào đã hoàn thành.'
+                        : activeTab === 'cancelled_expired'
+                          ? 'Không có đơn đặt chỗ nào bị hủy hoặc hết hạn.'
+                          : 'Khi tạo đặt chỗ, thông tin sẽ xuất hiện tại đây.'}
+                </p>
+                <Link className="button button-primary" to="/bookings/new">Tìm chuyến bay</Link>
+              </div>
+            )}
+            <Pagination
+              page={Number(state.pagination?.page || page)}
+              totalPages={Math.max(1, Number(state.pagination?.totalPages || 1))}
+              onPageChange={(next) => update({ page: next })}
+            />
+          </section>
+        )}
+      </div>
     </BookingShell>
   );
 }

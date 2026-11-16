@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { Field } from '../../components/Field';
 import { Notice } from '../../components/Notice';
+import { IconClipboard, IconCrown, IconEdit, IconSettings, IconCheck } from '../../components/AppIcons';
 import { mapApiFieldErrors } from '../../lib/validation';
 import { ProfileLayout } from './ProfileLayout';
 import { createProfileApi } from './profileApi';
@@ -104,7 +105,7 @@ export function ProfilePage() {
           className={`subtab-btn ${activeTab === 'personal' ? 'active' : ''}`}
           onClick={() => setActiveTab('personal')}
         >
-          <span>📋</span>
+          <span className="subtab-icon"><IconClipboard size={16} /></span>
           <span>Thông tin cá nhân</span>
         </button>
         <button
@@ -114,7 +115,7 @@ export function ProfilePage() {
           className={`subtab-btn ${activeTab === 'account' ? 'active' : ''}`}
           onClick={() => setActiveTab('account')}
         >
-          <span>👑</span>
+          <span className="subtab-icon"><IconCrown size={16} /></span>
           <span>Thông tin tài khoản</span>
         </button>
       </div>
@@ -125,7 +126,7 @@ export function ProfilePage() {
           <section className="vj-card">
             <div className="vj-card-header">
               <h2 className="vj-card-title">
-                <span>📋</span>
+                <span className="card-title-icon"><IconClipboard size={18} /></span>
                 <span>Thông tin cá nhân</span>
               </h2>
               <span className="vj-info-label">Dữ liệu định danh hành khách</span>
@@ -162,7 +163,7 @@ export function ProfilePage() {
           <section className="surface-card account-card vj-card">
             <div className="vj-card-header">
               <h2 className="vj-card-title">
-                <span>✏️</span>
+                <span className="card-title-icon"><IconEdit size={18} /></span>
                 <span>Thông tin liên hệ & Cập nhật</span>
               </h2>
             </div>
@@ -218,7 +219,7 @@ export function ProfilePage() {
           <section className="vj-card">
             <div className="vj-card-header">
               <h2 className="vj-card-title">
-                <span>👑</span>
+                <span className="card-title-icon"><IconCrown size={18} /></span>
                 <span>Thông tin tài khoản</span>
               </h2>
             </div>
@@ -233,7 +234,7 @@ export function ProfilePage() {
                     onClick={handleCopyCode}
                     title="Sao chép mã hội viên"
                   >
-                    {copied ? '✓ Đã chép' : '📋 Chép'}
+                    {copied ? <><IconCheck size={14} /> Đã chép</> : <><IconClipboard size={14} /> Chép</>}
                   </button>
                 </span>
               </div>
@@ -247,7 +248,7 @@ export function ProfilePage() {
               </div>
               <div className="vj-info-item">
                 <span className="vj-info-label">Quốc tịch</span>
-                <span className="vj-info-value">Việt Nam 🇻🇳</span>
+                <span className="vj-info-value">Việt Nam</span>
               </div>
             </div>
           </section>
@@ -256,7 +257,7 @@ export function ProfilePage() {
           <section className="vj-card">
             <div className="vj-card-header">
               <h2 className="vj-card-title">
-                <span>⚙️</span>
+                <span className="card-title-icon"><IconSettings size={18} /></span>
                 <span>Cài đặt tài khoản</span>
               </h2>
             </div>
@@ -268,7 +269,7 @@ export function ProfilePage() {
                 </div>
                 <Link to="/profile/security" className="vj-action-link">
                   <span>Đổi mật khẩu</span>
-                  <span>✏️</span>
+                  <IconEdit size={14} />
                 </Link>
               </div>
               <div className="vj-settings-row">

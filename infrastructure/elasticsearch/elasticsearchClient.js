@@ -9,7 +9,6 @@ let lastKnownStatus = {
   clusterInfo: null,
   lastError: null,
 };
-
 /**
  * Lấy cấu hình node Elasticsearch từ biến môi trường.
  */
@@ -128,4 +127,3 @@ module.exports = {
   checkElasticsearchHealth,
   isElasticsearchOnline,
 };
-

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { NavLink, useNavigate, useSearchParams } from 'react-router-dom';
-import { ArrowRightLeft, Search, Info, AlertCircle, X, PlaneTakeoff, MapPin, Calendar, Plane, Plus } from 'lucide-react';
+import { ArrowRightLeft, Search, Info, AlertCircle, X, PlaneTakeoff, MapPin, Calendar, Plane, Plus, FileText, CheckCircle2, Briefcase } from 'lucide-react';
+import { IconPlane, IconSparkles, IconTimer, IconShieldCheck } from '../../components/AppIcons';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
 import { AirportCombobox } from './AirportCombobox';
@@ -30,6 +32,39 @@ const tripModeOptions = [
   ['round_trip', 'Khứ hồi'],
   ['one_way', 'Một chiều'],
   ['multi_city', 'Nhiều chặng'],
+];
+
+const HERO_SLIDES = [
+  {
+    id: 'sky-airplane',
+    src: '/images/hero-airplane-sky.jpg',
+    alt: 'Máy bay sải cánh giữa bầu trời mây trắng',
+    label: 'Bầu trời',
+  },
+  {
+    id: 'phu-quoc',
+    src: '/images/destinations/phu-quoc.jpg',
+    alt: 'Bãi biển thiên đường ngọc bích Phú Quốc',
+    label: 'Đảo ngọc Phú Quốc',
+  },
+  {
+    id: 'da-nang',
+    src: '/images/destinations/da-nang.jpg',
+    alt: 'Vịnh biển và cầu Rồng lung linh Đà Nẵng',
+    label: 'Thành phố Đà Nẵng',
+  },
+  {
+    id: 'nha-trang',
+    src: '/images/destinations/nha-trang.jpg',
+    alt: 'Biển xanh cát trắng vịnh Nha Trang',
+    label: 'Vịnh biển Nha Trang',
+  },
+  {
+    id: 'hanoi',
+    src: '/images/destinations/hanoi.jpg',
+    alt: 'Hồ Gươm và Tháp Rùa cổ kính Hà Nội lung linh',
+    label: 'Thủ đô Hà Nội',
+  },
 ];
 
 const getCurrentPosition = (geolocation) => new Promise((resolve, reject) => {
@@ -87,6 +122,15 @@ export function HomePage({ forcedTripType }) {
   const departureDateRef = useRef(departureDate);
   const passengersRef = useRef(passengers);
   const nextLegId = useRef(3);
+  const [currentSlide, setCurrentSlide] = useState(0);
+
+  // Tự động chuyển slide sau mỗi 5 giây
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, []);
 
   const cancelDestinationSuggestion = () => {
     destinationLookupRequest.current += 1;
@@ -111,7 +155,7 @@ export function HomePage({ forcedTripType }) {
 
   useEffect(() => {
     let active = true;
-    api.searchAirports({ page: 1, limit: 20 }).then((result) => {
+    api.searchAirports({ page: 1, limit: 100 }).then((result) => {
       if (active) setAirports(result?.data || []);
     }).catch(() => {
       if (active) setAirportError('Chưa tải được danh sách sân bay. Bạn vẫn có thể nhập để tìm.');
@@ -378,14 +422,23 @@ export function HomePage({ forcedTripType }) {
       {/* 1 & 2. Main Hero & Header Container */}
       <div className="home-hero-header-container">
         <div className="hero-bg-media" aria-hidden="true">
-          <img
-            alt="Serene Flightways Banner Sky"
-            className="hero-bg-img w-full h-full object-cover"
-            src="https://lh3.googleusercontent.com/aida-public/AB6AXuAd8g66VdNIy9TLJVIxr7zEPjYuoLvOI-S4uLwjOf9iBhCgdJnGZTML4dIMhboXXiAyew0_e7sm7MepyHzYPMiO5xrO98HQhI64BbC_Qj0b8pLOyF9VznRBN3qDeodXC7N45y_nmymBjqHFTibJARHXCCf6RwS9ffK-BKgRtbOj4lwysMr_8tDsNT4NaLS0sJtdGOPzNCQrNKR3cXwEJs9XOFPONpmHhHihF4k5tkvdurAtmmiX03VqIA"
-            width="1920"
-            height="1080"
-            loading="eager"
-          />
+          <div
+            className="hero-bg-slider"
+            style={{ transform: `translateX(-${currentSlide * 100}%)` }}
+          >
+            {HERO_SLIDES.map((slide, index) => (
+              <div key={slide.id} className="hero-bg-slide">
+                <img
+                  alt={slide.alt}
+                  className="hero-bg-img"
+                  src={slide.src}
+                  width="1920"
+                  height="1080"
+                  loading={index === 0 ? 'eager' : 'lazy'}
+                />
+              </div>
+            ))}
+          </div>
           <div className="hero-bg-overlay" />
         </div>
 
@@ -393,25 +446,12 @@ export function HomePage({ forcedTripType }) {
         <AppHeader />
 
         {/* 2. Hero Section */}
-        <section className="home-hero home-hero--full-bleed" aria-label="Tìm kiếm chuyến bay">
-          <div className="home-hero-inner">
-            <div className="home-copy">
-              <h1 className="home-hero-headline">
-                {tripType === 'multi_city'
-                  ? 'Đặt vé máy bay đa chặng từ Serene Flightways'
-                  : 'Đặt vé máy bay nội địa và quốc tế'}
-              </h1>
-              <p className="home-hero-description">
-                {tripType === 'multi_city'
-                  ? 'Từ nay bạn có thể đặt chuyến bay đa chặng đến nhiều thành phố khác nhau với Serene Flightways.'
-                  : 'Tra cứu lịch bay, so sánh giá vé và giữ chỗ trực tuyến.'}
-              </p>
-            </div>
-          </div>
-
-          {/* 3. Search Form Card */}
-          <div className="search-card-wrap">
-            <form id="flight-search-form" className="flight-search-card glass-card" ref={searchFormRef} onSubmit={submit} noValidate>
+        <section className="home-hero home-hero--full-bleed home-hero--split-view" aria-label="Tìm kiếm chuyến bay">
+          <div className="home-hero-split-container">
+            {/* Cột TRÁI: Bảng tìm kiếm chuyến bay dạng thẻ đứng (Vertical Card) */}
+            <div className="hero-search-col">
+              <div className="search-card-wrap">
+                <form id="flight-search-form" className="flight-search-card glass-card" ref={searchFormRef} onSubmit={submit} noValidate>
               <div className="search-card-header-bar">
                 <div className="trip-type-tabs" role="tablist" aria-label="Loại hành trình">
                   {tripModeOptions.map(([type, label], index) => (
@@ -689,40 +729,256 @@ export function HomePage({ forcedTripType }) {
               {airlineLoading ? <p className="search-help" role="status">Đang tải danh sách hãng bay…</p> : null}
               {airlineError ? <p className="search-help" role="status">{airlineError}</p> : null}
               {destinationSuggestionStatus ? <p className="search-help" role="status" aria-live="polite">{destinationSuggestionStatus}</p> : null}
-              {error ? (
-                <div
-                  className="search-reminder-modal-backdrop"
-                  onClick={() => setError('')}
-                  role="presentation"
-                >
+              {error && typeof document !== 'undefined' ? (
+                createPortal(
                   <div
-                    className="search-reminder-modal"
-                    role="alert"
-                    aria-modal="true"
-                    onClick={(e) => e.stopPropagation()}
+                    className="search-reminder-modal-backdrop"
+                    onClick={() => setError('')}
+                    role="presentation"
                   >
-                    <button
-                      type="button"
-                      className="reminder-modal-close"
-                      onClick={() => setError('')}
-                      aria-label="Đóng thông báo"
+                    <div
+                      className="search-reminder-modal"
+                      role="alert"
+                      aria-modal="true"
+                      onClick={(e) => e.stopPropagation()}
                     >
-                      <X size={18} aria-hidden="true" />
-                    </button>
+                      <button
+                        type="button"
+                        className="reminder-modal-close"
+                        onClick={() => setError('')}
+                        aria-label="Đóng thông báo"
+                      >
+                        <X size={18} aria-hidden="true" />
+                      </button>
 
-                    <div className="reminder-modal-icon-badge" aria-hidden="true">
-                      <span className="reminder-exclamation-mark">!</span>
+                      <div className="reminder-modal-icon-badge" aria-hidden="true">
+                        <span className="reminder-exclamation-mark">!</span>
+                      </div>
+
+                      <h3 className="reminder-modal-title">Bạn ơi!</h3>
+                      <p className="reminder-modal-text">{error}</p>
                     </div>
-
-                    <h3 className="reminder-modal-title">Bạn ơi!</h3>
-                    <p className="reminder-modal-text">{error}</p>
-                  </div>
-                </div>
+                  </div>,
+                  document.body
+                )
               ) : null}
             </form>
+              </div>
+            </div>
+
+            {/* Cột PHẢI: Tiêu đề, slogan, ưu đãi & Nút trượt ảnh nền */}
+            <div className="hero-copy-col">
+              <div className="home-copy">
+                <div className="hero-brand-tag">
+                  <span className="hero-brand-tag-icon"><IconPlane size={15} /></span>
+                  <span>Trải nghiệm bay êm ái cùng Serene</span>
+                </div>
+                <h1 className="home-hero-headline">
+                  {tripType === 'multi_city'
+                    ? 'Đặt vé máy bay đa chặng từ Serene Flightways'
+                    : 'Đặt vé máy bay nội địa và quốc tế'}
+                </h1>
+                <p className="home-hero-description">
+                  {tripType === 'multi_city'
+                    ? 'Từ nay bạn có thể đặt chuyến bay đa chặng đến nhiều thành phố khác nhau với Serene Flightways.'
+                    : 'Tra cứu lịch bay, so sánh giá vé và giữ chỗ trực tuyến với mạng lưới đường bay rộng khắp.'}
+                </p>
+
+                {/* Các tiện ích nổi bật */}
+                <div className="hero-perks-list">
+                  <div className="hero-perk-item">
+                    <span className="hero-perk-icon"><IconSparkles size={18} /></span>
+                    <div className="hero-perk-text">
+                      <strong>Giá vé trọn gói minh bạch</strong>
+                      <small>Không phí ẩn, hiển thị thuế &amp; phí rõ ràng</small>
+                    </div>
+                  </div>
+                  <div className="hero-perk-item">
+                    <span className="hero-perk-icon"><IconTimer size={18} /></span>
+                    <div className="hero-perk-text">
+                      <strong>Khóa giá giữ chỗ 15 phút</strong>
+                      <small>Thoải mái hoàn tất thanh toán VNPay / payOS</small>
+                    </div>
+                  </div>
+                  <div className="hero-perk-item">
+                    <span className="hero-perk-icon"><IconShieldCheck size={18} /></span>
+                    <div className="hero-perk-text">
+                      <strong>Chính sách hoàn hủy linh hoạt</strong>
+                      <small>Hỗ trợ đổi chuyến và bảo lưu nhanh chóng</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Nút điều khiển trượt ảnh nền (● ○ ○ ○ ○) */}
+              <div className="hero-carousel-controls" aria-label="Điều khiển trình chiếu ảnh nền">
+                <button
+                  type="button"
+                  className="hero-carousel-arrow hero-carousel-arrow--prev"
+                  aria-label="Ảnh trước đó"
+                  title="Ảnh trước"
+                  onClick={() => setCurrentSlide((prev) => (prev - 1 + HERO_SLIDES.length) % HERO_SLIDES.length)}
+                >
+                  ‹
+                </button>
+                <div className="hero-carousel-dots" role="tablist" aria-label="Chọn ảnh nền">
+                  {HERO_SLIDES.map((slide, index) => {
+                    const isActive = currentSlide === index;
+                    return (
+                      <button
+                        key={slide.id}
+                        type="button"
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-label={`Ảnh ${index + 1}: ${slide.label}`}
+                        title={slide.label}
+                        className={`hero-carousel-dot${isActive ? ' is-active' : ''}`}
+                        onClick={() => setCurrentSlide(index)}
+                      >
+                        <span className="hero-carousel-dot-indicator" />
+                        <span className="sr-only">{slide.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="button"
+                  className="hero-carousel-arrow hero-carousel-arrow--next"
+                  aria-label="Ảnh tiếp theo"
+                  title="Ảnh tiếp"
+                  onClick={() => setCurrentSlide((prev) => (prev + 1) % HERO_SLIDES.length)}
+                >
+                  ›
+                </button>
+                <span className="hero-carousel-caption" aria-live="polite">
+                  {HERO_SLIDES[currentSlide]?.label}
+                </span>
+              </div>
+            </div>
           </div>
         </section>
       </div>
+
+      {/* 3. BẢNG TÌM KIẾM PHÍA DƯỚI: Thanh tìm kiếm & Tiện ích nhanh (Đồng bộ chuẩn phong cách Serene) */}
+      <section className="quick-booking-bar-section" aria-label="Tra cứu chuyến bay và tiện ích nhanh">
+        <div className="quick-booking-bar-inner">
+          <div className="quick-booking-bar-header">
+            <span className="quick-bar-title">Dịch vụ &amp; Tìm vé nhanh</span>
+            <div className="quick-bar-links">
+              <NavLink to="/bookings/lookup" className="quick-bar-link">
+                <FileText size={16} className="quick-link-icon-svg" aria-hidden="true" />
+                <span>Tra cứu đặt chỗ PNR</span>
+              </NavLink>
+              <NavLink to="/bookings/lookup" className="quick-bar-link">
+                <CheckCircle2 size={16} className="quick-link-icon-svg" aria-hidden="true" />
+                <span>Thủ tục trực tuyến</span>
+              </NavLink>
+              <a href="#flight-search-form" className="quick-bar-link">
+                <Briefcase size={16} className="quick-link-icon-svg" aria-hidden="true" />
+                <span>Mua thêm hành lý</span>
+              </a>
+            </div>
+          </div>
+
+          <form className="quick-search-strip-form" onSubmit={submit} noValidate>
+            <div className="quick-strip-fields-row">
+              <div className="quick-strip-field airport-field">
+                <label className="quick-field-label">Điểm đi</label>
+                <div className="field-input-wrap has-prefix-icon">
+                  <span className="field-prefix-icon" aria-hidden="true">
+                    <PlaneTakeoff size={18} className="field-icon-svg" />
+                  </span>
+                  <select
+                    className="quick-strip-select"
+                    value={origin?.id || ''}
+                    onChange={(e) => {
+                      const sel = airports.find((a) => String(a.id) === e.target.value);
+                      if (sel) {
+                        originRef.current = sel;
+                        setOrigin(sel);
+                      }
+                    }}
+                    aria-label="Chọn nhanh điểm đi"
+                  >
+                    <option value="">{origin ? `${origin.city} (${origin.iata_code || origin.code || ''})` : 'Chọn sân bay đi'}</option>
+                    {airports.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.city} ({a.iata_code || a.code || ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <button
+                type="button"
+                className="swap-airports quick-strip-swap-btn"
+                onClick={swapAirports}
+                title="Đổi điểm đi và điểm đến"
+                aria-label="Đổi nhanh điểm đi và điểm đến"
+              >
+                <ArrowRightLeft size={18} className="swap-icon-svg" aria-hidden="true" />
+              </button>
+
+              <div className="quick-strip-field airport-field">
+                <label className="quick-field-label">Điểm đến</label>
+                <div className="field-input-wrap has-prefix-icon">
+                  <span className="field-prefix-icon" aria-hidden="true">
+                    <MapPin size={18} className="field-icon-svg field-icon-svg--destination" />
+                  </span>
+                  <select
+                    className="quick-strip-select"
+                    value={destination?.id || ''}
+                    onChange={(e) => {
+                      const sel = airports.find((a) => String(a.id) === e.target.value);
+                      if (sel) {
+                        setDestination(sel);
+                      }
+                    }}
+                    aria-label="Chọn nhanh điểm đến"
+                  >
+                    <option value="">{destination ? `${destination.city} (${destination.iata_code || destination.code || ''})` : 'Chọn sân bay đến'}</option>
+                    {airports.map((a) => (
+                      <option key={a.id} value={a.id}>
+                        {a.city} ({a.iata_code || a.code || ''})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="quick-strip-field airport-field date-picker-field">
+                <label className="quick-field-label">
+                  <span>Ngày khởi hành</span>
+                  <small className="field-date-hint">{formatWeekday(departureDate) || 'Thứ Năm'}</small>
+                </label>
+                <div className="field-input-wrap has-prefix-icon">
+                  <span className="field-prefix-icon" aria-hidden="true">
+                    <Calendar size={18} className="field-icon-svg" />
+                  </span>
+                  <input
+                    type="date"
+                    className="quick-strip-date-input"
+                    value={departureDate}
+                    min={todayLocal()}
+                    onChange={(e) => setDepartureDate(e.target.value)}
+                    aria-label="Chọn nhanh ngày đi"
+                  />
+                </div>
+              </div>
+
+              <button
+                type="submit"
+                className="button button-primary quick-strip-submit-btn"
+                aria-label="Tìm kiếm nhanh"
+              >
+                <Search size={18} className="search-submit-icon-svg" aria-hidden="true" />
+                <span>Tìm chuyến bay</span>
+              </button>
+            </div>
+          </form>
+        </div>
+      </section>
 
       <main>
         {/* FeatureGrid */}

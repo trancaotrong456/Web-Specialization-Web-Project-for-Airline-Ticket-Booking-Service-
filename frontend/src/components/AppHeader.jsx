@@ -21,6 +21,28 @@ export function HoldingReminderBanner({ request, authenticated, user, currentPat
   }, []);
 
   useEffect(() => {
+    // Với khách vãng lai (chưa đăng nhập), đọc thông tin giữ chỗ gần nhất từ sessionStorage
+    if (!authenticated) {
+      try {
+        const stored = sessionStorage.getItem('airline_guest_holding_booking');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          const now = Date.now() + (getServerTimeOffset() || 0);
+          if (parsed && parsed.hold_expires_at && new Date(parsed.hold_expires_at).getTime() > now) {
+            setHoldingBooking(parsed);
+          } else {
+            sessionStorage.removeItem('airline_guest_holding_booking');
+            setHoldingBooking(null);
+          }
+        } else {
+          setHoldingBooking(null);
+        }
+      } catch {
+        setHoldingBooking(null);
+      }
+      return undefined;
+    }
+
     if (!isCustomer || !request) {
       setHoldingBooking(null);
       return undefined;
@@ -83,6 +105,7 @@ export function HoldingReminderBanner({ request, authenticated, user, currentPat
         <Link
           className="holding-reminder-action"
           to={`/bookings/${holdingBooking.id}/payment`}
+          state={holdingBooking.guestEmail ? { guestEmail: holdingBooking.guestEmail } : undefined}
         >
           Thanh toán ngay →
         </Link>

@@ -4,7 +4,7 @@ import './sereneChatbot.css';
 const INITIAL_GREETING = {
   id: 'msg-welcome',
   sender: 'bot',
-  text: `Xin chào Quý khách! Em là **Trợ Lý Ảo của Serene Flightways** ✈️.
+  text: `Xin chào Quý khách! Em là **Trợ lý AI của Serene Flightways** ✈️.
 
 Em được huấn luyện trực tiếp từ **Sổ tay Quy chế & Chính sách Hành khách 2026**. Quý khách có thể hỏi em về:
 • 🧳 **Hành lý:** Xách tay 7kg, ký gửi, chất lỏng, pin sạc
@@ -71,7 +71,7 @@ function renderMessageContent(rawText) {
     if (isBullet) {
       return (
         <div key={lineIndex} className="serene-chat-bullet-line">
-          <span style={{ color: '#075b49', fontWeight: 'bold' }}>•</span>
+          <span className="serene-chat-bullet-symbol">•</span>
           <span>{segments}</span>
         </div>
       );
@@ -90,13 +90,7 @@ export function SereneChatbot() {
   const [messages, setMessages] = useState(() => {
     try {
       const saved = sessionStorage.getItem('serene_chat_history');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].id === 'msg-welcome') {
-          parsed[0].text = INITIAL_GREETING.text;
-        }
-        return parsed;
-      }
+      if (saved) return JSON.parse(saved);
     } catch {}
     return [INITIAL_GREETING];
   });
@@ -105,11 +99,67 @@ export function SereneChatbot() {
   const [suggestions, setSuggestions] = useState(DEFAULT_SUGGESTIONS);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
+  const quickPromptsRef = useRef(null);
+  const isDraggingRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+
+  useEffect(() => {
+    const el = quickPromptsRef.current;
+    if (!el) return;
+
+    // Chuyển lăn bánh xe chuột thành cuộn ngang mượt mà
+    const handleWheel = (e) => {
+      if (e.deltaY !== 0) {
+        e.preventDefault();
+        el.scrollLeft += e.deltaY * 1.2;
+      }
+    };
+
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', handleWheel);
+    };
+  }, [suggestions, isOpen]);
+
+  const handleMouseDown = (e) => {
+    const el = quickPromptsRef.current;
+    if (!el) return;
+    isDraggingRef.current = true;
+    startXRef.current = e.pageX - el.offsetLeft;
+    scrollLeftRef.current = el.scrollLeft;
+    hasDraggedRef.current = false;
+  };
+
+  const handleMouseMove = (e) => {
+    if (!isDraggingRef.current) return;
+    const el = quickPromptsRef.current;
+    if (!el) return;
+    const x = e.pageX - el.offsetLeft;
+    const walk = (x - startXRef.current) * 1.3;
+    if (Math.abs(walk) > 4) {
+      hasDraggedRef.current = true;
+    }
+    el.scrollLeft = scrollLeftRef.current - walk;
+  };
+
+  const handleMouseUp = () => {
+    isDraggingRef.current = false;
+  };
+
+  const handleChipClick = (prompt) => {
+    if (hasDraggedRef.current) {
+      hasDraggedRef.current = false;
+      return;
+    }
+    handleSendMessage(prompt);
+  };
 
   useEffect(() => {
     try {
       sessionStorage.setItem('serene_chat_history', JSON.stringify(messages));
-    } catch { }
+    } catch {}
   }, [messages]);
 
   useEffect(() => {
@@ -133,9 +183,9 @@ export function SereneChatbot() {
                 setSuggestions(data.data.suggestions);
               }
             })
-            .catch(() => { });
+            .catch(() => {});
         }
-      } catch { }
+      } catch {}
     }
     return () => {
       isMounted = false;
@@ -206,7 +256,7 @@ export function SereneChatbot() {
     setMessages([INITIAL_GREETING]);
     try {
       sessionStorage.removeItem('serene_chat_history');
-    } catch { }
+    } catch {}
   };
 
   return (
@@ -253,21 +303,6 @@ export function SereneChatbot() {
             </div>
           </header>
 
-          {/* Quick Suggestions Chips */}
-          <nav className="serene-chatbot-quick-prompts" aria-label="Gợi ý câu hỏi nhanh">
-            {suggestions.map((prompt) => (
-              <button
-                key={prompt}
-                type="button"
-                className="serene-chatbot-chip"
-                onClick={() => handleSendMessage(prompt)}
-                disabled={loading}
-              >
-                💬 {prompt}
-              </button>
-            ))}
-          </nav>
-
           {/* Messages list with formatted Markdown & Slim Scrollbar */}
           <div className="serene-chatbot-messages" role="log" aria-live="polite">
             {messages.map((msg) => (
@@ -281,8 +316,14 @@ export function SereneChatbot() {
                   {/* Document Citations */}
                   {msg.citations && msg.citations.length > 0 && (
                     <div className="serene-chat-citations">
-                      <div className="serene-chat-citation-title">
-                        <span>📄</span>
+                      <div className="serene-chat-citation-title" style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" style={{ color: '#0d9488' }}>
+                          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                          <polyline points="14 2 14 8 20 8"></polyline>
+                          <line x1="16" y1="13" x2="8" y2="13"></line>
+                          <line x1="16" y1="17" x2="8" y2="17"></line>
+                          <polyline points="10 9 9 9 8 9"></polyline>
+                        </svg>
                         <span>Trích dẫn từ Sổ tay Hành khách:</span>
                       </div>
                       {msg.citations.map((c) => (
@@ -296,6 +337,22 @@ export function SereneChatbot() {
                 <span className="serene-chat-time">{msg.timestamp}</span>
               </div>
             ))}
+
+            {/* Gợi ý câu hỏi nhanh dạng viên thuốc xếp dọc theo mẫu ảnh */}
+            {!loading && suggestions && suggestions.length > 0 && messages[messages.length - 1]?.sender === 'bot' && (
+              <div className="serene-chatbot-suggestions-flow" aria-label="Gợi ý câu hỏi nhanh">
+                {suggestions.map((prompt) => (
+                  <button
+                    key={prompt}
+                    type="button"
+                    className="serene-chatbot-suggestion-pill"
+                    onClick={() => handleSendMessage(prompt)}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            )}
 
             {loading && (
               <div className="serene-chat-row serene-chat-row-bot">

@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../app/AuthProvider';
 import { AppHeader } from '../../components/AppHeader';
+import { IconUser, IconLock, IconCreditCard, IconPlane, IconUsers } from '../../components/AppIcons';
 import './profile.css';
 
 export function ProfileLayout({ title, description, children }) {
@@ -30,30 +31,30 @@ export function ProfileLayout({ title, description, children }) {
                 to="/profile"
                 className={({ isActive }) => `portal-nav-item ${isActive ? 'active' : ''}`}
               >
-                <span className="portal-icon" aria-hidden="true">👤</span>
+                <span className="portal-icon" aria-hidden="true"><IconUser size={16} /></span>
                 <span>Thông tin cá nhân</span>
               </NavLink>
               <NavLink
                 to="/profile/security"
                 className={({ isActive }) => `portal-nav-item ${isActive ? 'active' : ''}`}
               >
-                <span className="portal-icon" aria-hidden="true">🔒</span>
+                <span className="portal-icon" aria-hidden="true"><IconLock size={16} /></span>
                 <span>Bảo mật</span>
               </NavLink>
 
               <div className="nav-group-label">Quản lý tài chính</div>
               <NavLink to="/bookings/my" className="portal-nav-item">
-                <span className="portal-icon" aria-hidden="true">💳</span>
+                <span className="portal-icon" aria-hidden="true"><IconCreditCard size={16} /></span>
                 <span>Lịch sử giao dịch</span>
               </NavLink>
 
               <div className="nav-group-label">Tiện ích</div>
               <NavLink to="/lookup" className="portal-nav-item">
-                <span className="portal-icon" aria-hidden="true">✈️</span>
+                <span className="portal-icon" aria-hidden="true"><IconPlane size={16} /></span>
                 <span>Quản lý chuyến bay</span>
               </NavLink>
               <div className="portal-nav-item portal-nav-disabled" title="Tính năng thành viên đang phát triển">
-                <span className="portal-icon" aria-hidden="true">👥</span>
+                <span className="portal-icon" aria-hidden="true"><IconUsers size={16} /></span>
                 <span>Danh sách người thân</span>
               </div>
             </nav>

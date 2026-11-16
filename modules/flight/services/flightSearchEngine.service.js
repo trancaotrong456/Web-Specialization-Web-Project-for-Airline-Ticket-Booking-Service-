@@ -453,6 +453,184 @@ class FlightSearchEngine {
 
   // ─── AIRLINES ───────────────────────────────────────────────────────────────
 
+  async searchAirlines(query, { limit = 20 } = {}) {
+    if (!query || typeof query !== 'string' || !query.trim()) return [];
+    const keyword = query.trim();
+    try {
+      const exists = await this.esClient.indices.exists({ index: INDEX_NAMES.AIRLINES });
+      if (!exists && !exists?.body) return { fallback: true, source: 'database', items: [] };
+
+      const esResponse = await this.esClient.search({
+        index: INDEX_NAMES.AIRLINES,
+        query: {
+          bool: {
+            should: [
+              { term: { iata_code: { value: keyword.toUpperCase(), boost: 5.0 } } },
+              { match_bool_prefix: { iata_code: { query: keyword.toUpperCase(), boost: 3.0 } } },
+              { match: { name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match: { 'name.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match_bool_prefix: { name: { query: keyword, operator: 'and', boost: 2.0 } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+        size: limit,
+      });
+
+      const hits = esResponse?.hits?.hits || esResponse?.body?.hits?.hits || [];
+      const results = hits.map((hit) => ({
+        id: Number(hit._source?.id || hit._id),
+        name: hit._source?.name,
+        iata_code: hit._source?.iata_code,
+        _score: hit._score,
+        source: 'elasticsearch',
+      }));
+      results.source = 'elasticsearch';
+      results.fallback = false;
+      results.ids = results.map((r) => r.id);
+      results.total = results.length;
+      return results;
+    } catch (error) {
+      console.warn(`[Elasticsearch Fallback] Hãng bay: Chuyển sang tìm kiếm Database LIKE cho từ khóa "${keyword}"`);
+      return { fallback: true, source: 'database', error: error.message, items: [], ids: [] };
+    }
+  }
+
+  // ─── USERS ──────────────────────────────────────────────────────────────────
+
+  async searchUsers(query, { limit = 20 } = {}) {
+    if (!query || typeof query !== 'string' || !query.trim()) return [];
+    const keyword = query.trim();
+    try {
+      const exists = await this.esClient.indices.exists({ index: INDEX_NAMES.USERS });
+      if (!exists && !exists?.body) return { fallback: true, source: 'database', items: [] };
+
+      const esResponse = await this.esClient.search({
+        index: INDEX_NAMES.USERS,
+        query: {
+          bool: {
+            should: [
+              { term: { email: { value: keyword.toLowerCase(), boost: 4.0 } } },
+              { match_bool_prefix: { email: { query: keyword.toLowerCase(), boost: 3.0 } } },
+              { wildcard: { email: { value: `*${keyword.toLowerCase()}*`, boost: 2.0 } } },
+              { match: { full_name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match: { 'full_name.vi': { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match_bool_prefix: { full_name: { query: keyword, operator: 'and', boost: 2.0 } } },
+              { term: { phone: { value: keyword, boost: 2.0 } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+        size: limit,
+      });
+
+      const hits = esResponse?.hits?.hits || esResponse?.body?.hits?.hits || [];
+      const results = hits.map((hit) => ({
+        id: Number(hit._source?.id || hit._id),
+        full_name: hit._source?.full_name,
+        email: hit._source?.email,
+        _score: hit._score,
+        source: 'elasticsearch',
+      }));
+      results.source = 'elasticsearch';
+      results.fallback = false;
+      results.ids = results.map((r) => r.id);
+      results.total = results.length;
+      return results;
+    } catch (error) {
+      console.warn(`[Elasticsearch Fallback] Người dùng: Chuyển sang tìm kiếm Database LIKE cho từ khóa "${keyword}"`);
+      return { fallback: true, source: 'database', error: error.message, items: [], ids: [] };
+    }
+  }
+
+  // ─── BOOKINGS ───────────────────────────────────────────────────────────────
+
+  async searchBookings(query, { limit = 20 } = {}) {
+    if (!query || typeof query !== 'string' || !query.trim()) return [];
+    const keyword = query.trim();
+    try {
+      const exists = await this.esClient.indices.exists({ index: INDEX_NAMES.BOOKINGS });
+      if (!exists && !exists?.body) return { fallback: true, source: 'database', items: [] };
+
+      const esResponse = await this.esClient.search({
+        index: INDEX_NAMES.BOOKINGS,
+        query: {
+          bool: {
+            should: [
+              { term: { booking_code: { value: keyword.toUpperCase(), boost: 5.0 } } },
+              { match_bool_prefix: { booking_code: { query: keyword.toUpperCase(), boost: 3.5 } } },
+              { wildcard: { booking_code: { value: `*${keyword.toUpperCase()}*`, boost: 3.0 } } },
+              { match: { customer_name: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.5 } } },
+              { match: { customer_email: { query: keyword.toLowerCase(), boost: 3.0 } } },
+              { wildcard: { customer_email: { value: `*${keyword.toLowerCase()}*`, boost: 2.5 } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+        size: limit,
+      });
+
+      const hits = esResponse?.hits?.hits || esResponse?.body?.hits?.hits || [];
+      const results = hits.map((hit) => ({
+        id: Number(hit._source?.id || hit._id),
+        booking_code: hit._source?.booking_code,
+        _score: hit._score,
+        source: 'elasticsearch',
+      }));
+      results.source = 'elasticsearch';
+      results.fallback = false;
+      results.ids = results.map((r) => r.id);
+      results.total = results.length;
+      return results;
+    } catch (error) {
+      console.warn(`[Elasticsearch Fallback] Đặt chỗ: Chuyển sang tìm kiếm Database LIKE cho từ khóa "${keyword}"`);
+      return { fallback: true, source: 'database', error: error.message, items: [], ids: [] };
+    }
+  }
+
+  // ─── PROMOTIONS ─────────────────────────────────────────────────────────────
+
+  async searchPromotions(query, { limit = 20 } = {}) {
+    if (!query || typeof query !== 'string' || !query.trim()) return [];
+    const keyword = query.trim();
+    try {
+      const exists = await this.esClient.indices.exists({ index: INDEX_NAMES.PROMOTIONS });
+      if (!exists && !exists?.body) return { fallback: true, source: 'database', items: [] };
+
+      const esResponse = await this.esClient.search({
+        index: INDEX_NAMES.PROMOTIONS,
+        query: {
+          bool: {
+            should: [
+              { term: { code: { value: keyword.toUpperCase(), boost: 5.0 } } },
+              { match_bool_prefix: { code: { query: keyword.toUpperCase(), boost: 3.5 } } },
+              { wildcard: { code: { value: `*${keyword.toUpperCase()}*`, boost: 3.0 } } },
+              { match: { description: { query: keyword, fuzziness: 'AUTO', operator: 'and', boost: 2.0 } } },
+            ],
+            minimum_should_match: 1,
+          },
+        },
+        size: limit,
+      });
+
+      const hits = esResponse?.hits?.hits || esResponse?.body?.hits?.hits || [];
+      const results = hits.map((hit) => ({
+        id: Number(hit._source?.id || hit._id),
+        code: hit._source?.code,
+        _score: hit._score,
+        source: 'elasticsearch',
+      }));
+      results.source = 'elasticsearch';
+      results.fallback = false;
+      results.ids = results.map((r) => r.id);
+      results.total = results.length;
+      return results;
+    } catch (error) {
+      console.warn(`[Elasticsearch Fallback] Khuyến mại: Chuyển sang tìm kiếm Database LIKE cho từ khóa "${keyword}"`);
+      return { fallback: true, source: 'database', error: error.message, items: [], ids: [] };
+    }
+  }
+
   async addAirline(airline) {
     // Để tương thích nếu có gọi
   }
